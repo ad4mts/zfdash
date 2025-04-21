@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;"> <!-- Ensure HTML takes full height -->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZfDash Web UI</title>
+    <!-- Add Bootstrap -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Add Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <!-- Link Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<!-- body is now the main flex container -->
+<body class="auth-loading d-flex flex-column">
+
+    <!-- Navigation Bar (Stays at top) -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark flex-shrink-0"> <!-- flex-shrink-0 -->
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-hdd-stack-fill"></i> ZfDash
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <!-- Wrapper for content visible only when logged in -->
+                <div id="navbar-content-loggedin" class="w-100 d-flex align-items-center" style="display: none;">
+                    <!-- Left side actions -->
+                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                        <li class="nav-item">
+                            <button id="refresh-button" class="btn btn-outline-light btn-sm me-2" title="Refresh All Data"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+                        </li>
+                         <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="poolDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Pool
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="poolDropdown">
+                                <li><button id="create-pool-button" class="dropdown-item" type="button"><i class="bi bi-plus-circle me-2"></i>Create Pool...</button></li>
+                                <li><button id="import-pool-button" class="dropdown-item" type="button"><i class="bi bi-box-arrow-in-down me-2"></i>Import Pool(s)...</button></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><button id="destroy-pool-button" class="dropdown-item disabled" type="button"><i class="bi bi-trash me-2"></i>Destroy Pool...</button></li>
+                                <li><button id="export-pool-button" class="dropdown-item disabled" type="button"><i class="bi bi-box-arrow-up me-2"></i>Export Pool...</button></li>
+                                 <li><hr class="dropdown-divider"></li>
+                                <li><button id="scrub-start-button" class="dropdown-item disabled" type="button"><i class="bi bi-play-circle me-2"></i>Start Scrub</button></li>
+                                <li><button id="scrub-stop-button" class="dropdown-item disabled" type="button"><i class="bi bi-stop-circle me-2"></i>Stop Scrub</button></li>
+                                <li><button id="clear-errors-button" class="dropdown-item disabled" type="button"><i class="bi bi-eraser me-2"></i>Clear Errors</button></li>
+                            </ul>
+                        </li>
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="datasetDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Dataset
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="datasetDropdown">
+                                <li><button id="create-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-folder-plus me-2"></i>Create Dataset/Volume...</button></li>
+                                <li><button id="destroy-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-folder-minus me-2"></i>Destroy Dataset/Volume...</button></li>
+                                <li><button id="rename-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-pencil-square me-2"></i>Rename...</button></li>
+                                 <li><hr class="dropdown-divider"></li>
+                                <li><button id="mount-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-cloud-arrow-up me-2"></i>Mount</button></li>
+                                <li><button id="unmount-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-cloud-arrow-down me-2"></i>Unmount</button></li>
+                                 <li><hr class="dropdown-divider"></li>
+                                 <li><button id="promote-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-arrow-up-circle me-2"></i>Promote Clone</button></li>
+                            </ul>
+                        </li>
+                    </ul>
+                    <!-- Right side of Navbar -->
+                    <div class="d-flex align-items-center ms-auto">
+                         <span class="navbar-text me-3" id="status-indicator">Idle</span>
+                         <!-- User Info / Logout -->
+                         <div class="nav-item dropdown" id="user-menu">
+                            <a class="nav-link dropdown-toggle text-white" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                <i class="bi bi-person-circle"></i> <span id="username-display">User</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="userDropdown">
+                                <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#changePasswordModal"><i class="bi bi-key me-2"></i>Change Password...</button></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><button id="logout-button" class="dropdown-item" type="button"><i class="bi bi-box-arrow-right me-2"></i> Logout</button></li>
+                            </ul>
+                        </div>
+                        <!-- Shutdown Daemon -->
+                        <div class="nav-item" id="shutdown-button-item">
+                             <button id="shutdown-daemon-button" class="btn btn-danger btn-sm ms-2" title="Stop the background ZFS daemon process"><i class="bi bi-power"></i> Shutdown Daemon</button>
+                        </div>
+                    </div>
+                </div> <!-- End #navbar-content-loggedin -->
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hidden Logout Form -->
+    <form id="logout-form" action="{{ url_for('logout') }}" method="POST" style="display: none;"></form>
+
+    <!-- Main Application Area (Below Navbar) -->
+    <main id="app-section" class="flex-grow-1 d-flex flex-column overflow-hidden"> <!-- Takes remaining height -->
+
+        <!-- Tabs Panel -->
+        <div id="tabs-panel" class="bg-light border-bottom px-3 py-1 flex-shrink-0">
+             <!-- Tab Navigation -->
+             <ul class="nav nav-tabs border-0" id="details-tab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="properties-tab-button" data-bs-toggle="tab" data-bs-target="#properties-tab-pane" type="button" role="tab" aria-controls="properties-tab-pane" aria-selected="true">
+                        <i class="bi bi-list-ul me-1"></i>Properties
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="snapshots-tab-button" data-bs-toggle="tab" data-bs-target="#snapshots-tab-pane" type="button" role="tab" aria-controls="snapshots-tab-pane" aria-selected="false" disabled>
+                        <i class="bi bi-camera me-1"></i>Snapshots
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pool-status-tab-button" data-bs-toggle="tab" data-bs-target="#pool-status-tab-pane" type="button" role="tab" aria-controls="pool-status-tab-pane" aria-selected="false" disabled>
+                        <i class="bi bi-heart-pulse me-1"></i>Pool Status
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="pool-edit-tab-button" data-bs-toggle="tab" data-bs-target="#pool-edit-tab-pane" type="button" role="tab" aria-controls="pool-edit-tab-pane" aria-selected="false" disabled>
+                        <i class="bi bi-pencil-fill me-1"></i>Edit Pool
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="encryption-tab-button" data-bs-toggle="tab" data-bs-target="#encryption-tab-pane" type="button" role="tab" aria-controls="encryption-tab-pane" aria-selected="false" disabled>
+                        <i class="bi bi-lock-fill me-1"></i>Encryption
+                    </button>
+                </li>
+             </ul>
+        </div>
+
+        <!-- Content Area (Tree | Tab Content) -->
+        <div id="main-content-area" class="flex-grow-1 overflow-hidden">
+            <div class="row g-0 h-100">
+
+                <!-- Left Pane: ZFS Tree -->
+                <div class="col-lg-4 col-md-5 d-flex flex-column h-100 border-end">
+                    <div class="card flex-grow-1 rounded-0 border-0">
+                        <div class="card-header bg-white">
+                            Pools & Datasets
+                        </div>
+                        <div class="card-body flex-grow-1 overflow-auto p-2" id="zfs-tree-container">
+                            <div id="zfs-tree" class="zfs-tree-view">
+                                <div class="text-center p-3 text-muted"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading...</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Right Pane: Tab Content -->
+                <div class="col-lg-8 col-md-7 d-flex flex-column h-100">
+
+                    <!-- Tab Content Container -->
+                    <!-- *** REMOVED inline style="visibility: hidden;" *** -->
+                    <div class="tab-content flex-grow-1 overflow-hidden" id="details-tab-content">
+
+                        <!-- Properties Tab -->
+                        <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
+                        <div class="tab-pane fade show active d-flex flex-column" id="properties-tab-pane" role="tabpanel" aria-labelledby="properties-tab-button" tabindex="0">
+                            <div class="p-3 pb-0 flex-shrink-0">
+                               <h5 class="mb-0">Properties</h5>
+                            </div>
+                           <div class="table-responsive flex-grow-1 px-3 pb-3">
+                             <table class="table table-sm table-striped table-hover mb-0" id="properties-table">
+                                <thead class="sticky-top bg-white">
+                                    <tr><th>Property</th><th>Value</th><th>Source</th><th class="text-end">Actions</th></tr>
+                                </thead>
+                                <tbody>
+                                    <!-- JS adds content here -->
+                                    <tr><td colspan="4" class="text-center text-muted p-3">Select an item to view properties.</td></tr>
+                                </tbody>
+                             </table>
+                           </div>
+                        </div>
+
+                        <!-- Snapshots Tab -->
+                        <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
+                        <div class="tab-pane fade d-flex flex-column" id="snapshots-tab-pane" role="tabpanel" aria-labelledby="snapshots-tab-button" tabindex="0">
+                           <div class="d-flex justify-content-between align-items-center mb-2 p-3 pb-2 border-bottom flex-shrink-0">
+                               <h5 class="mb-0">Snapshots</h5>
+                               <div>
+                                    <button id="create-snapshot-button" class="btn btn-sm btn-success me-1"><i class="bi bi-camera"></i> Create...</button>
+                                    <button id="delete-snapshot-button" class="btn btn-sm btn-danger me-1" disabled><i class="bi bi-trash"></i> Delete</button>
+                                    <button id="rollback-snapshot-button" class="btn btn-sm btn-warning me-1" disabled><i class="bi bi-arrow-counterclockwise"></i> Rollback</button>
+                                    <button id="clone-snapshot-button" class="btn btn-sm btn-info" disabled><i class="bi bi-copy"></i> Clone...</button>
+                               </div>
+                           </div>
+                            <div class="table-responsive flex-grow-1 overflow-auto p-3">
+                                <table class="table table-sm table-striped table-hover mb-0" id="snapshots-table">
+                                    <thead class="sticky-top bg-white">
+                                        <tr><th>Name</th><th class="text-end">Used</th><th class="text-end">Referenced</th><th>Created</th></tr>
+                                    </thead>
+                                    <tbody>
+                                       <!-- JS adds content here -->
+                                        <tr><td colspan="4" class="text-center text-muted p-3">Snapshots not applicable or none exist.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Pool Status Tab -->
+                        <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto containing the pre tag -->
+                         <div class="tab-pane fade d-flex flex-column" id="pool-status-tab-pane" role="tabpanel" aria-labelledby="pool-status-tab-button" tabindex="0">
+                             <div class="p-3 pb-0 flex-shrink-0">
+                                <h5 class="mb-0">Pool Status Output</h5>
+                             </div>
+                             <div class="flex-grow-1 overflow-auto p-3"> <!-- This div scrolls -->
+                                 <pre id="pool-status-content" class="h-100 border rounded p-2 bg-light mb-0">Pool status not applicable.</pre> <!-- Removed h-100 and overflow from pre -->
+                            </div>
+                         </div>
+
+                         <!-- Pool Edit Tab -->
+                         <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
+                         <div class="tab-pane fade d-flex flex-column" id="pool-edit-tab-pane" role="tabpanel" aria-labelledby="pool-edit-tab-button" tabindex="0">
+                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-2 p-3 pb-2 border-bottom flex-shrink-0">
+                                <h5 class="mb-0">Edit Pool Layout</h5>
+                                <div class="btn-toolbar" role="toolbar">
+                                     <div class="btn-group btn-group-sm me-2" role="group">
+                                        <button id="attach-device-button" class="btn btn-primary" disabled title="Attach device to selected"><i class="bi bi-link-45deg"></i> Attach...</button>
+                                        <button id="detach-device-button" class="btn btn-secondary" disabled title="Detach selected device"><i class="bi bi-scissors"></i> Detach</button>
+                                        <button id="replace-device-button" class="btn btn-info" disabled title="Replace selected device"><i class="bi bi-arrow-repeat"></i> Replace...</button>
+                                        <button id="offline-device-button" class="btn btn-warning" disabled title="Offline selected device"><i class="bi bi-plug"></i> Offline</button>
+                                        <button id="online-device-button" class="btn btn-success" disabled title="Online selected device"><i class="bi bi-power"></i> Online</button>
+                                    </div>
+                                     <div class="btn-group btn-group-sm me-2" role="group">
+                                        <button id="add-pool-vdev-button" class="btn btn-success" title="Add new VDEV(s) to pool"><i class="bi bi-plus-circle"></i> Add VDEV...</button>
+                                        <button id="remove-pool-vdev-button" class="btn btn-danger" disabled title="Remove selected VDEV"><i class="bi bi-dash-circle"></i> Remove VDEV</button>
+                                    </div>
+                                    <div class="btn-group btn-group-sm" role="group">
+                                         <button id="split-pool-button" class="btn btn-dark" disabled title="Split selected pool (mirrors only)"><i class="bi bi-distribute-vertical"></i> Split Pool...</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div id="pool-edit-tree-container" class="flex-grow-1 overflow-auto p-3">
+                                <div class="text-center p-3 text-muted">Pool layout editing not applicable.</div>
+                            </div>
+                         </div>
+
+                         <!-- Encryption Tab -->
+                         <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
+                         <div class="tab-pane fade d-flex flex-column" id="encryption-tab-pane" role="tabpanel" aria-labelledby="encryption-tab-button" tabindex="0">
+                              <div class="d-flex justify-content-between align-items-center gap-1 mb-2 p-3 pb-2 border-bottom flex-shrink-0">
+                                <h5 class="mb-0">Encryption Details</h5>
+                                <div>
+                                     <button id="load-key-button" class="btn btn-sm btn-success" disabled><i class="bi bi-key-fill"></i> Load Key...</button>
+                                     <button id="unload-key-button" class="btn btn-sm btn-warning" disabled><i class="bi bi-unlock-fill"></i> Unload Key</button>
+                                     <button id="change-key-button" class="btn btn-sm btn-info" disabled><i class="bi bi-pencil-square"></i> Change Key/Passphrase...</button>
+                                     <button id="change-key-location-button" class="btn btn-sm btn-secondary" disabled><i class="bi bi-geo-alt-fill"></i> Change Key Location...</button>
+                                </div>
+                             </div>
+                             <div class="enc-info-container flex-grow-1 overflow-auto p-3">
+                                <table class="table table-sm enc-info-table mb-0">
+                                    <tbody>
+                                        <!-- JS updates these rows -->
+                                        <tr><th>Encrypted:</th><td id="enc-status">-</td></tr>
+                                        <tr><th>Algorithm:</th><td id="enc-algorithm">-</td></tr>
+                                        <tr><th>Key Status:</th><td id="enc-key-status">-</td></tr>
+                                        <tr><th>Key Location:</th><td id="enc-key-location">-</td></tr>
+                                        <tr><th>Key Format:</th><td id="enc-key-format">-</td></tr>
+                                        <tr><th>PBKDF2 Iters:</th><td id="enc-pbkdf2iters">-</td></tr>
+                                        <!-- Default message removed - JS will fill the above -->
+                                    </tbody>
+                                </table>
+                             </div>
+                         </div>
+
+                    </div> <!-- End #details-tab-content -->
+                </div> <!-- End Right Pane -->
+            </div> <!-- End row -->
+        </div> <!-- End #main-content-area -->
+
+    </main> <!-- End #app-section -->
+
+    <!-- Modals (Keep existing structures) -->
+    <div class="modal fade" id="actionModal" tabindex="-1" aria-labelledby="actionModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-lg"> <!-- Default size -->
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="actionModalLabel">Action</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body" id="actionModalBody"></div>
+          <div class="modal-footer" id="actionModalFooter">
+             <!-- Content set by JS -->
+             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+             <button type="button" class="btn btn-primary" id="actionModalConfirmButton">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="changePasswordModalLabel">Change Password</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body">
+            <div id="change-password-error" class="alert alert-danger alert-sm py-2" role="alert" style="display: none;"></div>
+            <div id="change-password-success" class="alert alert-success alert-sm py-2" role="alert" style="display: none;"></div>
+            <form id="change-password-form">
+              <div class="mb-3">
+                <label for="current_password" class="form-label">Current Password</label>
+                <input type="password" class="form-control" id="current_password" name="current_password" required>
+              </div>
+              <div class="mb-3">
+                <label for="new_password" class="form-label">New Password</label>
+                <input type="password" class="form-control" id="new_password" name="new_password" required minlength="8">
+                 <div class="form-text">Minimum 8 characters.</div>
+              </div>
+              <div class="mb-3">
+                <label for="confirm_password" class="form-label">Confirm New Password</label>
+                <input type="password" class="form-control" id="confirm_password" name="confirm_password" required minlength="8">
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="changePasswordConfirmButton">Change Password</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Bootstrap Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Our App Logic -->
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

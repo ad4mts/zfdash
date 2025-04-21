@@ -1,0 +1,73 @@
+--- ZfDash Enhanced Environment Check (GUI & Web UI) ---
+
+** 1. Operating System:
+    [INFO] Fedora Linux 41 (KDE Plasma)
+
+** 2. Kernel Version:
+    [INFO] Kernel: 6.13.8-200.fc41.x86_64
+
+** 3. ZFS Setup (Mandatory):
+    [ OK ] zpool command found: /usr/sbin/zpool (Version: 2.3.1-1)
+    Full ZFS Version Output:
+      zfs-2.3.1-1
+      zfs-kmod-2.3.1-1
+    [ OK ] zfs command found: /usr/sbin/zfs (Version: (Version checked via zpool))
+    [ OK ] ZFS kernel module appears loaded via lsmod
+  Package Info (Informative):
+    Name        : zfs
+    Version     : 2.3.1
+    Release     : 1.fc41
+    Architecture: x86_64
+
+** 4. Python Setup (Mandatory):
+    [ OK ] Python 3 found: /usr/bin/python3 (Version: Python 3.13.2)
+    [ OK ] pip found for this Python (Version: pip 24.2 from /usr/lib/python3.13/site-packages/pip (python 3.13))
+
+** 5. Required Python Modules (using '/usr/bin/python3 -m pip'):
+    [ OK ] Flask found (Version: 3.1.0)
+    [ OK ] Waitress found (Version: 3.0.2)
+    [ OK ] PySide6 found (Needed for GUI only) (Version: 6.9.0)
+    (Note: If using install.sh, check versions inside the script's venv)
+
+** 6. Python venv Module:
+    [ OK ] venv module appears available via '/usr/bin/python3 -m venv'
+
+** 7. lsblk (Mandatory):
+    [ OK ] lsblk found: /usr/bin/lsblk (Version: util-linux 2.40.4)
+    [ OK ] lsblk JSON output (-J) seems supported (Required)
+
+** 8. Polkit (PolicyKit):
+    [ OK ] Polkit found (Needed for GUI authentication) (Version: 125)
+
+** 9. pkexec:
+    [ OK ] pkexec found: /usr/bin/pkexec (Version: 125 (Needed for GUI authentication))
+
+** 10. Web Server Deployment (Informative):
+    [INFO] For headless/server deployment, DO NOT use 'flask run' or 'app.run()'.
+    [INFO] Use a production WSGI server (e.g., Gunicorn, uWSGI, Waitress).
+    [INFO] A reverse proxy (e.g., Nginx, Apache) is highly recommended.
+    [INFO] waitress-serve command found: /home/one/.local/bin/waitress-serve (Version: (Version: 3.0.2 - via pip))
+
+** 11. Daemon Management (Informative):
+    [INFO] The zfs_daemon.py needs to run as root.
+    [INFO] Use a process manager (like systemd) to manage the daemon service.
+    [INFO] Ensure correct permissions on the daemon socket (e.g., /run/zfdash/daemon.sock).
+    [INFO] The user running the Web UI (e.g., www-data) must have access to the daemon socket.
+
+** 12. Desktop Environment (Informative):
+    [INFO] XDG_CURRENT_DESKTOP=KDE
+    [INFO] DESKTOP_SESSION=plasmax11
+
+** 13. Display Server (Informative):
+    [INFO] XDG_SESSION_TYPE=x11
+    [INFO] WAYLAND_DISPLAY=Not Set
+    [INFO] DISPLAY=:0
+
+--- Check Summary ---
+
+    [ OK ] Core mandatory checks passed (Python3, ZFS tools/module, lsblk+JSON).
+    [ OK ] Web UI specific checks passed (Flask).
+    [ OK ] Checks for install script passed (venv).
+    [ OK ] GUI specific checks passed (Polkit, pkexec, PySide6).
+
+--- Check Complete ---

@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+"-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+"http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+
+  <action id="org.zfsgui.pkexec.daemon.launch">
+    <description>Run the ZfDash background daemon</description>
+    <message>Authentication is required to start the ZfDash background service</message>
+    <defaults>
+      <!-- Default: require admin authentication -->
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/opt/zfdash/app/zfdash</annotate>
+
+    <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
+    <!-- Rules moved to separate .rules file -->
+  </action>
+
+</policyconfig>

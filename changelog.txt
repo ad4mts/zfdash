@@ -1,0 +1,109 @@
+# ZfDash Changelog
+
+## v1.7.5-Beta initial release
+
+*   **Web UI:** Improved visual appearance of the Web UI.
+*   **Web UI:** Added a dedicated, styled login page (`login.html`).
+
+## v1.7.3-Beta (not released)
+
+*   **Security:** Improved password checking security (timing resistance).
+*   **Security:** Reduced potential security risks by ensuring the web service user is only added to the dedicated `zfdash` group, not general admin groups like `sudo` or `wheel`.
+
+## v1.7.2-Beta (not released)
+
+*   **GUI:** The GUI now waits properly for the background daemon to start before proceeding.
+*   **Fix:** Resolved an issue where snapshots wouldn't refresh correctly in the UI.
+*   **Fix:** Fixed `zpool scrub` start/stop functionality.
+*   **Install:** Added a script (`install_web_service.sh`) to install the Web UI as a systemd service for persistent running.
+*   **Install:** Updated the main installation script (`install.sh`).
+
+## v1.7.1-Beta (not released)
+
+*   **Security:** Implemented strong password hashing (PBKDF2 with unique salt per user).
+*   **Web UI:** Password changes are now handled securely by the background root daemon. The credentials file (`credentials.json`) is owned by root.
+*   **Web UI:** If the credentials file is missing at startup, the daemon creates one with default credentials (`admin`/`admin`) - **CHANGE THESE IMMEDIATELY!**
+
+## v1.7.0-Beta (not released)
+
+*   **Security:** Reworked communication between the UI (GUI/Web) and the background daemon. Now uses secure kernel-level pipes instead of a user-owned socket file, preventing other user processes from potentially interacting with the daemon.
+
+## v1.5.6-Beta (not released)
+
+*   **Web UI:** Implemented user login functionality. Usernames and hashed passwords are stored in `credentials.json` (location varies depending on installation method).
+
+## v1.5.5-Beta (not released)
+
+*   **GUI:** Fixed the "Name" column in tables being too narrow.
+*   **GUI:** Made table columns resizable.
+
+## v1.5.4-Beta (not released)
+
+*   **Web UI:** Removed extra whitespace at the top of the Web UI page.
+*   **Install:** Updated installation scripts.
+*   **Internal:** Improved separation between GUI and Web UI code.
+
+## v1.5.3-Alpha (not released)
+
+*   **Web UI:** Now uses the `waitress` production server instead of the Flask development server for better performance and stability.
+
+## v1.5.2-Alpha (not released)
+
+*   **Web UI:** Fixed the Mount/Unmount menu buttons being incorrectly disabled for root datasets.
+*   **GUI:** The GUI Runner now provides a more informative error message if the required Polkit policy file is missing.
+
+## v1.5.1-Alpha (not released)
+
+*   **Fix:** General bug fixes.
+
+## v1.5.0-Alpha (not released)
+
+*   **Feature:** Added the initial **Web UI** for remote/headless management.
+*   **Internal:** Introduced `gui_runner.py` to handle UI startup logic.
+*   **Internal:** Unified the application entry point to `main.py` with command-line arguments (`--web`, `--daemon`, etc.).
+
+## v1.4.4-Beta (not released)
+
+*   **Fix:** Corrected enable/disable logic for the `zpool scrub` start/stop menu options.
+*   **Internal:** Refactored backend logic for better structure.
+
+## v1.4.3-Beta (not released)
+
+*   **GUI:** Fixed the "Replace Device" functionality in the Pool Editor.
+*   **GUI:** Fixed the "Remove VDEV/Device" button in the Pool Editor sometimes being incorrectly disabled.
+
+## v1.4.2-Beta (not released)
+
+*   **Feature:** Improved ZFS encryption management options in the "Create Dataset" dialog and the "Encryption" tab.
+*   **Fix:** Addressed various bugs related to encryption and pool editing.
+
+## v1.3.0-Alpha (not released)
+
+*   **Feature:** Added basic ZFS encryption support:
+    *   Option to create encrypted datasets.
+    *   New "Encryption" tab to view status and manage keys (load, unload, change key/passphrase, change location).
+*   **Feature:** Added "Rename Dataset/Volume" functionality.
+*   **Feature:** Added a Log Viewer dialog with an option to enable/disable command logging to a file (`/run/user/<UID>/zfdash`).
+
+## v1.2.0-Alpha (not released)
+
+*   **Feature:** Implemented Pool Import functionality (search for importable pools, import specific pools, import all).
+*   **Feature:** Added "Force" option to "Create Pool" and "Add VDEV" dialogs.
+
+## v1.1.0-Alpha (not released)
+
+*   **Feature:** Added Pool Editor tab to manage pool devices (attach, detach, etc.).
+*   **Feature:** Improved "Create Pool" dialog to support multiple VDEVs (mirrors, raidz, etc.).
+*   **GUI:** Refreshing the view now remembers the previously selected tab and tree item.
+*   **Fix:** General bug fixes.
+
+## v1.0.0-Alpha (not released)
+
+*   **Initial:**
+    *   Basic GUI structure with tree view.
+    *   View pool status.
+    *   Create and destroy pools (basic VDEVs).
+    *   Import and export pools.
+    *   View and edit pool properties.
+    *   Create and destroy datasets/volumes.
+    *   Create and restore snapshots.

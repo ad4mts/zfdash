@@ -1,0 +1,1257 @@
+/* --- START OF FILE src/static/css/style.css --- */
+
+/* -- Theme Variables (Customize as needed) -- */
+:root {
+    --app-bg: #f0f2f5; /* Lighter, slightly cool background */
+    --app-pane-bg: #ffffff;
+    --app-border-color: #e8eaf0;
+    --app-text-color: #333b4d;
+    --app-text-muted: #7a869a;
+    --app-primary-color: #6a64e8; /* Adjusted from --bs-primary */
+    --app-primary-rgb: 106, 100, 232;
+    --app-primary-darker: #5752d6;
+    --app-hover-bg: #eef0f8;
+    --app-selected-bg: var(--app-primary-color);
+    --app-selected-text: #ffffff;
+    --bs-body-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --bs-font-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --bs-primary: var(--app-primary-color);
+    --bs-primary-rgb: var(--app-primary-rgb);
+}
+
+html, body {
+    height: 100%;
+    margin: 0;
+    font-family: var(--bs-body-font-family);
+    background-color: var(--app-bg);
+    color: var(--app-text-color);
+    font-size: 0.95rem;
+    overflow: hidden; /* Prevent scrolling on body */
+}
+
+/* --- Visibility Control --- */
+body.auth-loading #app-section { display: none; }
+body.logged-out #app-section { display: none; }
+body.logged-in #app-section { display: flex; } /* Main app section is flex column */
+
+/* --- Navbar --- */
+.navbar {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    z-index: 1030; /* Ensure navbar stays above content */
+    /* Apply animated gradient */
+    background: linear-gradient(135deg, #6a64e8, #7653d6, #8a4f9c, #6a64e8);
+    background-size: 300% 300%;
+    animation: gradientShift 15s ease infinite; /* Removed !important */
+    /* background-color: var(--app-primary-color) !important; <-- Remove static color */
+}
+.navbar-brand {
+    font-weight: 600;
+    display: flex; /* Align icon, brand, tagline */
+    align-items: baseline;
+}
+.navbar-brand .bi {
+    margin-right: 0.5rem; /* Space after icon */
+}
+
+/* Style for the new tagline */
+.navbar-tagline {
+    font-size: 0.75rem;
+    font-weight: 400;
+    margin-left: 0.75rem;
+    color: rgba(255, 255, 255, 0.75); /* Lighter text on dark navbar */
+    opacity: 0.9;
+}
+
+.navbar .btn, .navbar .nav-link {
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.85) !important; /* Ensure links/buttons are visible */
+}
+.navbar .nav-link:hover, .navbar .btn:hover {
+    color: #ffffff !important;
+}
+
+/* Add hover effect for dropdown toggles */
+.navbar .nav-link.dropdown-toggle:hover,
+.navbar .nav-link.dropdown-toggle:focus {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-radius: 0.25rem; /* Add slight rounding on hover */
+}
+
+/* Adjust dropdown menus for the new navbar color */
+.navbar .dropdown-menu {
+    background-color: var(--app-pane-bg); /* Use light pane background */
+    border: 1px solid var(--app-border-color); /* Add subtle border */
+    border-radius: 0.3rem;
+    box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+    margin-top: 0.5rem;
+}
+.navbar .dropdown-item {
+    color: var(--app-text-color); /* Use standard text color */
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+}
+.navbar .dropdown-item i {
+    margin-right: 0.5rem;
+    opacity: 0.7; /* Slightly less prominent icons */
+}
+
+.navbar .dropdown-item:hover, .navbar .dropdown-item:focus {
+    background-color: var(--app-hover-bg); /* Use standard hover */
+    color: var(--app-text-color);
+}
+/* Ensure disabled items look right */
+.navbar .dropdown-item.disabled, .navbar .dropdown-item:disabled {
+    color: var(--app-text-muted) !important; /* Muted text color */
+    background-color: transparent !important;
+}
+
+.navbar .dropdown-divider {
+    border-top: 1px solid var(--app-border-color); /* Use standard border color */
+}
+
+#status-indicator .spinner-border-sm { width: 0.8rem; height: 0.8rem; vertical-align: -0.1em; }
+#shutdown-daemon-button {
+    margin-left: 0.5rem;
+    /* Adjust shutdown button style for better contrast */
+    background-color: #dc3545; /* Keep red */
+    border-color: #dc3545;
+}
+#shutdown-daemon-button:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}
+
+/* Adjust Refresh Button */
+#refresh-button {
+    color: #fff !important;
+    border-color: rgba(255, 255, 255, 0.5) !important;
+}
+#refresh-button:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.75) !important;
+}
+
+/* --- Main App Section (#app-section) --- */
+/* Attributes set in index.html: class="flex-grow-1 d-flex flex-column overflow-hidden" */
+/* NOTE: overflow-hidden here also contributes to the mobile scroll issue */
+
+/* --- Tabs Panel (#tabs-panel) --- */
+#tabs-panel {
+/* Attributes set in index.html: class="bg-light border-bottom px-3 py-1 flex-shrink-0" */
+z-index: 1020; /* Below navbar, above main content */
+}
+#tabs-panel .nav-tabs {
+/* border-bottom: 0 !important; */ /* Removed border in index.html */
+}
+#tabs-panel .nav-link {
+    font-size: 0.9rem;
+    padding: 0.5rem 0.8rem;
+    /* Default state for enabled, inactive tabs */
+    color: var(--app-text-muted); /* Use the muted text color directly */
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+    transition: border-color 0.1s ease-in-out, color 0.1s ease-in-out;
+}
+
+/* Hover for enabled, inactive tabs */
+#tabs-panel .nav-link:not(.active):not(.disabled):hover {
+    color: var(--app-text-color); /* Full text color on hover */
+    border-bottom-color: var(--app-border-color);
+}
+
+/* Active Tab State */
+#tabs-panel .nav-link.active {
+    font-weight: 600;
+    color: var(--app-primary-color);
+    background-color: transparent;
+    border-bottom-color: var(--app-primary-color);
+    opacity: 1; /* Ensure active is fully opaque (already was) */
+}
+
+/* Disabled Tab State - Keep it very faded */
+#tabs-panel .nav-link.disabled {
+    color: #ced4da !important; /* Very light grey */
+    cursor: not-allowed;
+    background-color: transparent !important;
+    border-bottom-color: transparent !important;
+    opacity: 0.45; /* Keep low opacity */
+    pointer-events: none;
+}
+
+/* Explicitly remove hover effect for disabled tabs */
+#tabs-panel .nav-link.disabled:hover {
+    /* No style changes on hover for disabled */
+    opacity: 0.45 !important;
+    color: #ced4da !important;
+    border-bottom-color: transparent !important;
+}
+
+/* --- Content Area (#main-content-area) --- */
+/* Holds the row for left/right split */
+/* Attributes set in index.html: class="flex-grow-1 overflow-hidden" */
+#main-content-area {
+    background-color: #f8f9fa; /* Slightly off-white background for the area */
+    padding: 0.5rem;
+    gap: 0.5rem;
+    /* Removed animated gradient */
+    position: relative;
+    overflow: hidden; /* Keep overflow hidden just in case */
+}
+
+/* --- Row inside Content Area --- */
+/* Attributes set in index.html: class="row g-0 h-100" */
+
+/* --- Left Pane Column (Tree) --- */
+/* Attributes set in index.html: class="col-lg-4 col-md-5 d-flex flex-column h-100 border-end" */
+#main-content-area .col-lg-4, /* Left Pane */
+#main-content-area .col-lg-8  /* Right Pane */
+{
+    background-color: var(--app-pane-bg);
+    border-radius: 6px; /* Add rounded corners */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04); /* Softer shadow */
+    /* Add a very subtle inset shadow for depth */
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0,0,0,0.05);
+    transition: box-shadow 0.3s ease-in-out;
+}
+
+/* Optional: Slightly enhance shadow on hover */
+#main-content-area .col-lg-4:hover,
+#main-content-area .col-lg-8:hover {
+     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 8px rgba(0,0,0,0.07);
+}
+
+/* --- Card inside Left Pane --- */
+/* Attributes set in index.html: class="card flex-grow-1 rounded-0 border-0" */
+.card-header {
+    font-weight: 600;
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid var(--app-border-color);
+}
+.card-body { /* Used for Tree Container */
+    /* Attributes set in index.html: class="card-body flex-grow-1 overflow-auto p-2" */
+}
+
+/* --- Tree View Styling --- */
+#zfs-tree-container {
+padding: 0.5rem; /* Reduced padding */
+}
+.zfs-tree-view { font-size: 0.9rem; }
+.zfs-tree-view ul { padding-left: 0; margin-bottom: 0; }
+.zfs-tree-view li { list-style-type: none; }
+.tree-item { padding: 5px 8px; cursor: pointer; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; margin-bottom: 2px; transition: background-color 0.15s ease-in-out; }
+.tree-item:hover { background-color: var(--app-hover-bg); }
+.tree-item.selected { background-color: var(--app-selected-bg); color: var(--app-selected-text); font-weight: 500; }
+.tree-item.selected i, .tree-item.selected span.badge { color: var(--app-selected-text) !important; }
+.tree-item.selected span.badge.bg-light, .tree-item.selected span.badge.bg-white { background-color: rgba(255, 255, 255, 0.8) !important; color: #333 !important; }
+.tree-item i.bi { vertical-align: -0.125em; margin-right: 0.3rem; }
+.tree-toggle { cursor: pointer; display: inline-block; width: 1em; flex-shrink: 0; }
+.tree-item-name { margin-left: 2px; flex-grow: 1; overflow: hidden; text-overflow: ellipsis; }
+.tree-item .badge { margin-left: 0.5rem; font-size: 0.75em; padding: 0.25em 0.4em; }
+
+/* --- Right Pane Column (Tab Content) --- */
+/* Attributes set in index.html: class="col-lg-8 col-md-7 d-flex flex-column h-100" */
+#main-content-area .col-lg-8 { /* More specific selector */
+background-color: var(--app-pane-bg); /* Ensure background */
+}
+
+/* --- Tab Content Container --- */
+#details-tab-content {
+/* Attributes set in index.html: class="tab-content flex-grow-1 overflow-hidden" */
+position: relative; /* Needed for Bootstrap tabs */
+/* Visibility controlled by JS */
+}
+
+.tab-pane {
+    height: 100%; /* <-- Add this rule back */
+    display: flex; /* Enable flex layout */
+    flex-direction: column; /* Stack children vertically */
+    overflow: hidden; /* Prevent tab-pane itself scrolling - ISSUE ON MOBILE */
+}
+/* Ensure inactive tabs are truly hidden and don't take space */
+.tab-pane:not(.active) {
+    display: none !important;
+}
+
+/* --- Content inside Tabs (Scrolling handled by wrappers) --- */
+
+/* Properties Tab */
+#properties-tab-pane .flex-shrink-0 { /* Header bar */ }
+#properties-tab-pane .table-responsive { /* Scrollable area */
+flex-grow: 1; /* Take remaining space */
+overflow-y: auto; /* Scroll vertically */
+}
+#properties-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    margin-bottom: 1rem;
+}
+#properties-table thead {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+}
+#properties-table th {
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    color: #495057;
+    border: none;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+#properties-table td {
+    padding: 0.6rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: middle;
+}
+#properties-table tbody tr:last-child td {
+    border-bottom: none;
+}
+/* Section headers in properties table */
+#properties-table tr.table-primary td,
+#properties-table tr.table-secondary td {
+    padding: 0.5rem 1rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    border-radius: 0;
+}
+#properties-table tr.table-primary {
+    background-color: rgba(13, 110, 253, 0.08);
+}
+#properties-table tr.table-secondary {
+    background-color: rgba(108, 117, 125, 0.08);
+}
+/* Spacer rows */
+#properties-table tr.table-light {
+    background-color: transparent;
+    border: none;
+}
+#properties-table tr.table-light td {
+    padding: 4px;
+    border: none;
+}
+/* Highlight editable property rows with subtle color and hover effect */
+#properties-table tr.editable-property {
+    background-color: rgba(13, 110, 253, 0.03);
+    transition: background-color 0.15s ease;
+}
+#properties-table tr.editable-property:hover {
+    background-color: rgba(13, 110, 253, 0.08);
+}
+/* Style for property action buttons */
+#properties-table .properties-table-btn {
+    margin: 0 0.15rem;
+}
+/* Add more contrast to the property names */
+#properties-table td:first-child {
+    font-weight: 500;
+}
+/* Sticky header styling */
+#properties-table thead.sticky-top {
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+/* Snapshots Tab */
+#snapshots-tab-pane .flex-shrink-0 { /* Header/Button bar */ }
+#snapshots-tab-pane .table-responsive { /* Scrollable area */
+flex-grow: 1; /* Take remaining space */
+overflow-y: auto; /* Scroll vertically */
+}
+#snapshots-table { font-size: 0.85rem; margin-bottom: 0; }
+#snapshots-table tbody tr:hover { background-color: var(--app-hover-bg); cursor: pointer; }
+#snapshots-table tbody tr.table-active { background-color: var(--app-selected-bg); color: var(--app-selected-text); font-weight: 500; }
+
+/* Pool Status Tab */
+#pool-status-tab-pane .flex-shrink-0 { /* Header bar */ }
+#pool-status-tab-pane > .flex-grow-1 { /* Wrapper for pre - THIS needs to grow */
+flex-grow: 1; /* Take remaining space */
+overflow-y: auto; /* Make THIS div scroll */
+}
+#pool-status-content { /* The pre tag */
+font-family: var(--bs-font-monospace); font-size: 0.85rem;
+white-space: pre;
+border-radius: 0.25rem;
+/* *** REMOVED h-100 *** */
+/* *** REMOVED overflow: auto *** */
+margin-bottom: 0; /* Needed if inside scrolling div */
+}
+
+/* Pool Edit Tab */
+#pool-edit-tab-pane .flex-shrink-0 { /* Header/Button bar */ }
+#pool-edit-tree-container { /* Scrollable area */
+font-family: var(--bs-font-monospace); font-size: 0.85rem;
+flex-grow: 1; /* Take remaining space */
+overflow-y: auto; /* Scroll vertically */
+border-top: 1px solid var(--app-border-color); /* Add top border */
+}
+#pool-edit-tree-container ul { padding-left: 0; margin-bottom: 0; }
+#pool-edit-tree-container li.pool-edit-item { list-style-type: none; padding: 3px 6px; cursor: pointer; white-space: pre; border-radius: 3px; margin-bottom: 1px; }
+#pool-edit-tree-container li.pool-edit-item:hover { background-color: var(--app-hover-bg); }
+#pool-edit-tree-container li.pool-edit-item.selected {
+    background-color: #d6d4fa; /* Use the same light primary shade */
+    color: var(--app-text-color); /* Dark text for readability */
+    /* Remove default browser selection styles if necessary */
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10+ */
+    user-select: none; /* Standard syntax */
+}
+#pool-edit-tree-container li .badge { font-family: var(--bs-body-font-family); font-size: 0.7em; }
+#pool-edit-tree-container .pool-edit-children { margin-left: 1rem; border-left: 1px dashed #ccc; padding-left: 0.5rem; }
+
+/* --- START: Modern Pool Edit Tree Styling --- */
+#pool-edit-tree-container li.pool-edit-item {
+    border-radius: 4px;
+    padding: 4px 8px; /* Slightly more padding */
+    margin-bottom: 2px;
+    transition: background-color 0.15s ease-in-out;
+}
+
+#pool-edit-tree-container li.pool-edit-item:hover {
+    background-color: #e9ecef; /* Subtle hover */
+}
+
+#pool-edit-tree-container li.pool-edit-item.selected {
+    background-color: #d6d4fa; /* Use the same light primary shade */
+    color: var(--app-text-color); /* Dark text for readability */
+    /* Remove default browser selection styles if necessary */
+    -webkit-user-select: none; /* Safari */
+    -ms-user-select: none; /* IE 10+ */
+    user-select: none; /* Standard syntax */
+}
+
+/* Ensure badges remain readable on selection */
+#pool-edit-tree-container li.pool-edit-item.selected .badge {
+    color: #000 !important; /* Override potential parent color */
+    background-color: rgba(255, 255, 255, 0.7) !important; /* Slightly transparent white */
+}
+
+/* Make state badges slightly more prominent */
+#pool-edit-tree-container li.pool-edit-item .badge.float-end {
+    font-weight: 500;
+}
+/* --- END: Modern Pool Edit Tree Styling --- */
+
+/* Encryption Tab */
+#encryption-tab-pane .flex-shrink-0 { /* Header/Button bar */ }
+#encryption-tab-pane .enc-info-container { /* Scrollable area */
+flex-grow: 1; /* Take remaining space */
+overflow-y: auto; /* Scroll vertically */
+}
+#encryption-tab-pane .enc-info-table { font-size: 0.85rem; width: 100%; margin-bottom: 0; }
+#encryption-tab-pane .enc-info-table th { width: 150px; font-weight: 600; text-align: right; padding-right: 1rem; color: var(--app-text-muted); border: none; vertical-align: top; }
+#encryption-tab-pane .enc-info-table td { border: none; vertical-align: top; }
+
+/* Modal Styling (Unchanged) */
+.modal-dialog { max-width: 600px; }
+.modal-dialog.modal-lg { max-width: 800px; }
+.modal-dialog.modal-xl { max-width: 1140px; }
+.modal-body { max-height: 70vh; overflow-y: auto; }
+/* Create Pool/Add VDEV specific modal styling (Unchanged) */
+#pool-available-devices, #pool-vdev-config .device-list-in-vdev { font-size: 0.85rem; }
+#pool-available-devices .list-group-item, #pool-vdev-list .list-group-item { padding: 0.3rem 0.6rem; cursor: pointer; }
+#pool-vdev-list .list-group-item { border: 1px solid #eee; background-color: #f8f9fa; margin-bottom: 0.25rem; }
+#pool-vdev-list .list-group-item .d-flex { padding-bottom: 0.2rem; margin-bottom: 0.2rem; border-bottom: 1px solid #eee; }
+#pool-vdev-list .pool-vdev-device-item { background-color: var(--app-pane-bg); border: none; padding-left: 0.8rem; margin-bottom: 1px; }
+#pool-available-devices .pool-device-item.active, #pool-vdev-list .pool-vdev-item.active, #pool-vdev-list .pool-vdev-device-item.active { background-color: var(--app-selected-bg); color: var(--app-selected-text); border-color: var(--app-primary-color); }
+#pool-available-devices .pool-device-item:not(.active):hover, #pool-vdev-list .pool-vdev-device-item:not(.active):hover { background-color: var(--app-hover-bg); }
+#pool-vdev-list .pool-vdev-item.active > .d-flex { font-weight: bold; }
+
+/* Dropdown Item Disabled State (Unchanged) */
+.dropdown-item.disabled, .dropdown-item:disabled { cursor: not-allowed; pointer-events: all !important; opacity: 0.6; }
+.dropdown-item.disabled:hover, .dropdown-item:disabled:hover { background-color: transparent !important; }
+
+/* --- END OF FILE src/static/css/style.css --- */
+
+/* --- Styling for Create/Add Pool Modal Lists --- */
+
+/* Style for items in the Available Devices list */
+#pool-available-devices .pool-device-item:hover {
+    background-color: #f8f9fa; /* Light grey hover */
+    cursor: pointer;
+}
+
+#pool-available-devices .pool-device-item.active {
+    background-color: #cfe2ff; /* Bootstrap's light blue */
+    color: #000; /* Ensure text is readable */
+    border-color: #9ec5fe; /* Matching border */
+}
+
+/* Style for VDEV Type Headers in the Pool Config list */
+#pool-vdev-list .pool-vdev-item {
+    border: 1px solid #dee2e6;
+    border-radius: 0.3rem; /* Slightly larger radius */
+    background-color: #fff; /* Default background */
+    transition: background-color 0.15s ease-in-out;
+    padding: 0; /* Remove default padding for list-group-item */
+    margin-bottom: 0.5rem; /* Add space between VDEVs */
+}
+
+/* Style the VDEV header part */
+#pool-vdev-list .pool-vdev-item > div:first-child {
+    padding: 0.5rem 0.75rem; /* Padding for the header text/button */
+    border-bottom: 1px solid #dee2e6;
+}
+
+#pool-vdev-list .pool-vdev-item:hover > div:first-child {
+    background-color: #f8f9fa; /* Light grey hover on VDEV header area */
+    cursor: pointer;
+}
+
+#pool-vdev-list .pool-vdev-item.active {
+    /* Remove active background from the main item */
+    background-color: #fff;
+    border-color: var(--app-primary-color); /* Highlight border when active */
+    /* REMOVED box-shadow: 0 0 0 1px #9ec5fe; */
+}
+
+#pool-vdev-list .pool-vdev-item.active > div:first-child {
+    background-color: #d6d4fa; /* Use a lighter primary shade for header bg */
+    color: #000;
+    font-weight: 600;
+    border-bottom-color: var(--app-primary-color); /* Match border */
+}
+
+/* Ensure child devices DON'T look active when parent VDEV header is active */
+/* Also ensure the list itself remains visible */
+#pool-vdev-list .pool-vdev-item.active .device-list-in-vdev {
+    display: block; /* Ensure the UL is displayed */
+    background-color: transparent; /* Ensure no background bleed */
+    /* Removed visibility, height, overflow rules - rely on default block */
+}
+#pool-vdev-list .pool-vdev-item.active .pool-vdev-device-item {
+    background-color: transparent;
+    color: var(--app-text-color); /* FORCE text color back to default dark */
+    border-color: transparent;
+    opacity: 1;
+    display: block;
+}
+
+/* Re-apply hover/active styles for children *within* an active parent */
+#pool-vdev-list .pool-vdev-item.active .pool-vdev-device-item:hover {
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    cursor: pointer;
+}
+
+#pool-vdev-list .pool-vdev-item.active .pool-vdev-device-item.active {
+    background-color: #e0f1ff; /* Even lighter blue for selected device */
+    color: #000;
+    border-color: #9ec5fe;
+    font-weight: 500;
+}
+
+/* Style for individual devices WITHIN a VDEV in the Pool Config list */
+#pool-vdev-list .device-list-in-vdev {
+    padding: 0.25rem 0.75rem 0.5rem 0.75rem; /* Padding around device list */
+}
+
+#pool-vdev-list .pool-vdev-device-item {
+     transition: background-color 0.15s ease-in-out;
+     border: 1px solid transparent; /* Add border for spacing/hover */
+     margin-bottom: 2px;
+     padding: 0.3rem 0.6rem;
+     border-radius: 0.2rem;
+     /* Removed margin-left/padding-left adjustments */
+}
+
+#pool-vdev-list .pool-vdev-device-item:hover {
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    cursor: pointer;
+}
+
+#pool-vdev-list .pool-vdev-device-item.active {
+    background-color: #e0f1ff; /* Even lighter blue for selected device */
+    color: #000;
+    border-color: #9ec5fe;
+    font-weight: 500;
+}
+
+/* Adjustments for the remove button within VDEV headers */
+#pool-vdev-list .pool-vdev-item .remove-vdev-btn {
+    z-index: 2; /* Ensure it's clickable */
+}
+
+/* --- End Pool Modal List Styling --- */
+
+/* --- START: Login Page Enhancements --- */
+
+/* Apply to body tag with class="login-page" */
+body.login-page {
+    /* Restore CSS variables removed earlier */
+    --app-primary-color: #6a64e8;
+    --app-primary-rgb: 106, 100, 232;
+    --app-primary-darker: #5752d6;
+    --app-hover-bg: #eef0f8;
+    --app-selected-bg: var(--app-primary-color);
+    --app-selected-text: #ffffff;
+    --bs-body-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --bs-font-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    --bs-primary: var(--app-primary-color);
+    --bs-primary-rgb: var(--app-primary-rgb);
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    /* Restore simple animated gradient */
+    background: linear-gradient(135deg, #667eea, #764ba2, #8a4f9c, #667eea);
+    background-size: 300% 300%;
+    background-attachment: fixed;
+    padding: 1rem;
+    animation: gradientShift 10s ease infinite; /* Restore animation */
+    overflow: hidden; /* Prevent scrollbars from ripple effect */
+    position: relative; /* Needed for pseudo-element */
+}
+
+/* Noise overlay to combat gradient banding in Firefox */
+body.login-page::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    /* Simple embedded SVG noise filter - less ideal than an image but works */
+    /* background: url('data:image/svg+xml,...'); */ /* Replace with actual noise SVG/PNG if preferred */
+    /* Using a subtle noise texture via CSS gradients (less effective than image/SVG but avoids external files) */
+    background: linear-gradient(rgba(180, 180, 180, 0.02) 50%, transparent 0), linear-gradient(90deg, rgba(180, 180, 180, 0.02) 50%, transparent 0);
+    background-size: 2px 2px;
+    opacity: 0.2;
+    pointer-events: none; /* Don't interfere with mouse */
+    z-index: 1; /* Just above background, below content */
+}
+
+.login-wrapper {
+    width: 100%;
+    max-width: 420px; /* Control max width */
+}
+
+.login-container.card {
+    background-color: rgba(255, 255, 255, 0.98); /* Slightly transparent white */
+    backdrop-filter: blur(5px);
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    padding: 2.5rem;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+    transform-style: preserve-3d;
+    will-change: transform;
+    transition: transform 0.1s linear, box-shadow 0.3s ease;
+}
+
+.login-container.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+}
+
+.login-header .app-icon {
+    font-size: 3.5rem;
+    color: var(--app-primary-color);
+    margin-bottom: 0.75rem;
+    display: block;
+}
+
+.login-header h1 {
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 0.25rem;
+}
+
+.login-header p {
+    font-size: 0.95rem;
+}
+
+.login-body .form-label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #555;
+}
+
+.login-body .form-control {
+    background-color: #f8f9fa;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.login-body .form-control:focus {
+    border-color: var(--app-primary-color);
+    background-color: #fff;
+    box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.15),
+                0 0 15px rgba(var(--bs-primary-rgb), 0.4);
+    outline: none;
+}
+
+.login-body .btn-primary {
+    background-color: var(--app-primary-color);
+    border: none;
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
+    font-weight: 600;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.login-body .btn-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transition: left 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+    z-index: -1;
+}
+
+.login-body .btn-primary:hover::before {
+    left: 100%;
+}
+
+.login-body .btn-primary:hover {
+    background-color: #0b5ed7; /* Darker shade of primary */
+    transform: translateY(-2px);
+}
+
+.login-body .btn-primary:active {
+    transform: translateY(0);
+}
+
+/* Style flash messages */
+.flash-messages .alert {
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+/* Animation */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translate3d(0, 20px, 0);
+    }
+    to {
+        opacity: 1;
+        transform: translate3d(0, 0, 0);
+    }
+}
+
+.animate-fade-in-up {
+    animation: fadeInUp 0.6s ease forwards;
+    animation-delay: 0.1s; /* Slight delay */
+    opacity: 0; /* Start hidden */
+}
+
+/* Responsive adjustments if needed */
+@media (max-width: 576px) {
+    .login-container.card {
+        padding: 1.5rem;
+    }
+    .login-header .app-icon {
+        font-size: 3rem;
+    }
+    .login-header h1 {
+        font-size: 1.5rem;
+    }
+}
+
+/* --- END: Login Page Enhancements --- */
+
+/* --- START: Advanced Login Page Effects --- */
+
+/* Animated Gradient Background */
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+body.login-page {
+    /* Add more colors to the gradient and make it larger */
+    background: linear-gradient(135deg, #667eea, #764ba2, #8a4f9c, #667eea);
+    background-size: 300% 300%; /* Make gradient larger than viewport */
+    animation: gradientShift 10s ease infinite; /* Faster animation (was 18s) */
+}
+
+/* Tilt Effect Preparation */
+.login-container.card {
+    transform-style: preserve-3d; /* Needed for children in 3D space */
+    will-change: transform; /* Hint for performance */
+    /* Adjust transition for smoother tilt reset */
+    transition: transform 0.1s linear, box-shadow 0.3s ease; /* Faster transform reset */
+}
+.login-container.card:hover {
+    /* Keep existing hover shadow, transform is handled by JS */
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+}
+
+/* Input Field Focus Glow */
+.login-body .form-control:focus {
+    /* Enhance focus with a subtle glow */
+    box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.15), /* Keep BS focus ring */
+                0 0 15px rgba(var(--bs-primary-rgb), 0.4); /* Add glow effect */
+    transition: border-color 0.2s ease, box-shadow 0.3s ease; /* Smooth transition for glow */
+}
+
+/* Button Shine Effect on Hover */
+.login-body .btn-primary {
+    position: relative; /* Needed for pseudo-element positioning */
+    overflow: hidden; /* Hide overflow for shine */
+    z-index: 1;
+}
+
+.login-body .btn-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%; /* Start off-screen */
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transition: left 0.5s cubic-bezier(0.23, 1, 0.32, 1); /* Smooth transition */
+    z-index: -1;
+}
+
+.login-body .btn-primary:hover::before {
+    left: 100%; /* Move shine across on hover */
+}
+
+/* --- END: Advanced Login Page Effects --- */
+
+/* --- START: Button Appearance Tweaks --- */
+
+/* Login Page Flash Message Close Button */
+.login-page .flash-messages .alert .btn-close {
+    padding: 0.4rem; /* Slightly smaller padding */
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    /* Reset default Bootstrap styles */
+    background: transparent var(--bs-btn-close-bg) center/0.8em auto no-repeat; /* Smaller icon size */
+    border: 0;
+    border-radius: 0.25rem;
+    width: 1.2em; /* Smaller button width */
+    height: 1.2em; /* Smaller button height */
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 2;
+    filter: invert(0.5);
+}
+.login-page .flash-messages .alert .btn-close:hover {
+    opacity: 1;
+    filter: invert(0.2); /* Darker grey on hover */
+    background-color: rgba(0,0,0,0.05); /* Subtle background */
+}
+
+/* Create/Add Pool Modal - VDEV Remove Button */
+#pool-vdev-list .pool-vdev-item .remove-vdev-btn {
+    background-color: transparent;
+    border: none;
+    color: var(--bs-danger); /* Use Bootstrap danger color */
+    padding: 0.2rem 0.4rem; /* Adjust padding */
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+#pool-vdev-list .pool-vdev-item .remove-vdev-btn:hover {
+    opacity: 1;
+    color: #a01324; /* Darker red on hover */
+}
+
+#pool-vdev-list .pool-vdev-item .remove-vdev-btn i {
+    vertical-align: -0.1em; /* Align icon better */
+}
+
+/* --- END: Button Appearance Tweaks --- */
+
+/* --- START: Consistent Tab Button Colors --- */
+
+/* General style for buttons inside tabs */
+#details-tab-content .tab-pane .btn {
+    transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, opacity 0.15s ease-in-out, color 0.15s ease-in-out;
+    /* Ensure text color is white for colored buttons initially */
+    color: #fff;
+}
+
+#details-tab-content .tab-pane .btn i {
+    margin-right: 0.3rem;
+    vertical-align: -0.1em;
+}
+
+/* --- Define Color Overrides with HIGHER Specificity --- */
+
+/* Primary Actions (Use App Primary Color - Purple) */
+#pool-edit-tab-pane #add-pool-vdev-button, /* Add VDEV */
+#pool-edit-tab-pane #online-device-button, /* Online */
+#pool-edit-tab-pane #attach-device-button, /* Attach */
+#encryption-tab-pane #load-key-button,    /* Load Key */
+#encryption-tab-pane #change-key-button     /* Change Key */
+{
+    background-color: var(--app-primary-color);
+    border-color: var(--app-primary-color);
+    color: #fff;
+}
+#pool-edit-tab-pane #add-pool-vdev-button:hover,
+#pool-edit-tab-pane #online-device-button:hover,
+#pool-edit-tab-pane #attach-device-button:hover,
+#encryption-tab-pane #load-key-button:hover,
+#encryption-tab-pane #change-key-button:hover
+{
+    background-color: var(--app-primary-darker);
+    border-color: var(--app-primary-darker);
+}
+
+/* Positive/Create Actions (Use a complementary Blue - e.g., BS Blue) */
+#snapshots-tab-pane #create-snapshot-button, /* Create Snapshot */
+#pool-edit-tab-pane #replace-device-button   /* Replace (often positive outcome) */
+{
+    background-color: #0d6efd; /* Standard Bootstrap Blue */
+    border-color: #0d6efd;
+    color: #fff;
+}
+#snapshots-tab-pane #create-snapshot-button:hover,
+#pool-edit-tab-pane #replace-device-button:hover
+{
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+
+/* Secondary/Neutral Actions (Keep BS Secondary Grey) */
+#snapshots-tab-pane #clone-snapshot-button,
+#encryption-tab-pane #change-key-location-button,
+#pool-edit-tab-pane #detach-device-button,
+#pool-edit-tab-pane #split-pool-button
+{
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: #fff;
+}
+#snapshots-tab-pane #clone-snapshot-button:hover,
+#encryption-tab-pane #change-key-location-button:hover,
+#pool-edit-tab-pane #detach-device-button:hover,
+#pool-edit-tab-pane #split-pool-button:hover
+{
+    background-color: #5a6268;
+    border-color: #545b62;
+}
+
+/* Warning Actions (Keep BS Warning Yellow) */
+#snapshots-tab-pane #rollback-snapshot-button,
+#pool-edit-tab-pane #offline-device-button,
+#encryption-tab-pane #unload-key-button
+{
+    background-color: var(--bs-warning);
+    border-color: var(--bs-warning);
+    color: #000;
+}
+#snapshots-tab-pane #rollback-snapshot-button:hover,
+#pool-edit-tab-pane #offline-device-button:hover,
+#encryption-tab-pane #unload-key-button:hover
+{
+    background-color: #ffca2c;
+    border-color: #ffc720;
+}
+
+/* Destructive Actions (Keep BS Danger Red) */
+#snapshots-tab-pane #delete-snapshot-button,
+#pool-edit-tab-pane #remove-pool-vdev-button
+{
+    background-color: var(--bs-danger);
+    border-color: var(--bs-danger);
+    color: #fff;
+}
+#snapshots-tab-pane #delete-snapshot-button:hover,
+#pool-edit-tab-pane #remove-pool-vdev-button:hover
+{
+    background-color: #c82333;
+    border-color: #bd2130;
+}
+
+/* Disabled State - ensure consistency */
+#details-tab-content .tab-pane .btn:disabled {
+    opacity: 0.55 !important; /* Keep slightly more obvious disabled */
+    /* Let Bootstrap handle the background/border for disabled */
+    background-color: initial; /* Reset to allow BS default */
+    border-color: initial;
+    color: initial;
+}
+
+/* --- END: Consistent Tab Button Colors --- */
+
+/* --- START: Gradient Animation Keyframes --- */
+/* Ensure this is defined only once */
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+/* --- END: Gradient Animation Keyframes --- */
+
+/* --- START: Water Ripple Mouse Effect --- */
+.water-ripple {
+    position: fixed; /* Use fixed for viewport positioning */
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.4); /* Fainter border */
+    transform: translate(-50%, -50%) scale(0);
+    opacity: 1;
+    pointer-events: none;
+    z-index: 9999;
+    animation: water-ripple-effect 0.6s ease-out forwards;
+    /* Start small */
+    width: 20px;
+    height: 20px;
+}
+
+@keyframes water-ripple-effect {
+    0% {
+        transform: translate(-50%, -50%) scale(0);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-50%, -50%) scale(4); /* Scale up more */
+        opacity: 0;
+    }
+}
+/* --- END: Water Ripple Mouse Effect --- */
+
+/* --- START: Responsive Layout Fixes (for mobile)--- */
+
+@media (max-width: 767.98px) { /* Target below Bootstrap's md breakpoint */
+    
+    /* Allow scrolling on the main document */
+    html,
+    body {
+        overflow: auto !important; /* Allow body scrolling */
+        height: auto; /* Remove fixed height */
+    }
+    
+    /* Allow app section to overflow */
+    #app-section {
+        overflow: visible !important;
+        height: auto;
+    }
+    
+    /* Allow main content area to determine its own height */
+    #main-content-area {
+        overflow: visible; /* Let content flow */
+        height: auto;
+        padding-bottom: 1rem;
+    }
+
+    /* Remove fixed height from the row */
+    #main-content-area > .row {
+        /* Previous style: height: 100%; */
+        height: auto !important;
+    }
+
+    /* Remove fixed height from the columns */
+    #main-content-area .col-md-5, /* Left pane */
+    #main-content-area .col-md-7  /* Right pane */
+    {
+        /* Previous style: height: 100%; */
+        height: auto !important;
+        margin-bottom: 1rem;
+        display: block !important; /* Force block display */
+    }
+    #main-content-area .col-md-7 {
+        margin-bottom: 0;
+        min-height: 200px !important; /* Ensure right panel always has visible height */
+    }
+
+    /* Allow tab panes to expand based on content */
+    .tab-pane {
+        /* Previous style: height: 100%; overflow: hidden; display: flex; flex-direction: column; */
+        height: auto !important;
+        overflow: visible !important; 
+        display: block !important; /* Override flex to allow natural flow */
+        min-height: 150px !important; /* Ensure tab panes always have height */
+    }
+
+    /* Ensure active tab panes are fully visible */
+    .tab-pane.active {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        height: auto !important;
+        min-height: 150px !important;
+        position: static !important; /* Ensure proper positioning */
+    }
+
+    /* Allow tab content container to expand */
+    #details-tab-content {
+        /* Previous style: overflow: hidden; height: 100%; */
+        overflow: visible !important;
+        height: auto !important;
+        min-height: 150px !important; /* Ensure tab content always has height */
+    }
+    
+    /* Remove internal scrolling from tab content wrappers */
+    #properties-tab-pane .table-responsive,
+    #snapshots-tab-pane .table-responsive,
+    #pool-edit-tree-container,
+    #encryption-tab-pane .enc-info-container,
+    #pool-status-tab-pane > .flex-grow-1
+    {
+        /* Previous style: overflow-y: auto; flex-grow: 1; */
+        overflow-y: visible !important;
+        flex-grow: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        min-height: 50px !important; /* Ensure these containers are always visible */
+        display: block !important;
+    }
+    
+    /* Allow horizontal scroll on tables if needed */
+    #properties-tab-pane .table-responsive,
+    #snapshots-tab-pane .table-responsive {
+        overflow-x: auto;
+    }
+
+    /* Disable sticky headers on mobile */
+    #properties-table thead.sticky-top,
+    #snapshots-table thead.sticky-top {
+        /* Previous style: position: sticky; top: 0; z-index: 2; */
+        position: static !important;
+    }
+    
+    /* SPECIFIC FIX FOR ENCRYPTION TAB (privously not showing on mobile) */
+    #encryption-tab-pane {
+        display: none !important; /* Start with display none , so it doesnt show in other tabs*/
+        height: auto !important;
+        min-height: 200px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        overflow: visible !important;
+        position: static !important;
+    }
+    
+    #encryption-tab-pane.active {
+        display: block !important;
+        height: auto !important;
+        min-height: 200px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: static !important;
+    }
+    
+    #encryption-tab-pane .enc-info-container {
+        display: block !important; 
+        height: auto !important;
+        min-height: 150px !important;
+        overflow: visible !important;
+        position: static !important;
+        flex: none !important;
+        flex-grow: 0 !important;
+        flex-shrink: 1 !important;
+        padding: 1rem !important;
+    }
+    
+    #encryption-tab-pane .enc-info-table {
+        display: table !important;
+        width: 100% !important;
+        height: auto !important;
+        table-layout: fixed !important; /* Prevent table from collapsing */
+        margin-bottom: 1rem !important;
+    }
+    
+    /* Ensure table cells have proper spacing */
+    #encryption-tab-pane .enc-info-table th,
+    #encryption-tab-pane .enc-info-table td {
+        padding: 0.5rem !important;
+        vertical-align: top !important;
+        display: table-cell !important;
+    }
+    
+    /* Fix tab display behavior */
+    .tab-pane:not(.active) {
+        display: none !important;
+    }
+}
+
+/* --- END: Responsive Layout Fixes --- */
+
+/* Add new styles for property buttons */
+.properties-table-btn {
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    font-size: 0.85rem;
+}
+
+.properties-table-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.properties-table-btn.edit-btn {
+    background-color: #0d6efd;
+    color: white;
+    border: none;
+}
+
+.properties-table-btn.edit-btn:hover {
+    background-color: #0b5ed7;
+}
+
+.properties-table-btn.inherit-btn {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+}
+
+.properties-table-btn.inherit-btn:hover {
+    background-color: #5a6268;
+}
+
+/* Add highlighting for editable properties */
+tr.editable-property {
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+/* Make tab action buttons smaller and more compact */
+#snapshots-tab-pane .btn,
+#pool-edit-tab-pane .btn,
+#encryption-tab-pane .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+/* Make encryption tab buttons even smaller and more compact */
+#encryption-tab-pane .btn {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
+    margin-right: 0.35rem;
+}
+
+/* Ensure icons in buttons are sized correctly */
+#snapshots-tab-pane .btn i,
+#pool-edit-tab-pane .btn i,
+#encryption-tab-pane .btn i {
+    font-size: 0.8rem;
+    margin-right: 0.25rem;
+}
+
+/* Add button group styling for encryption tab */
+#encryption-tab-pane .enc-actions {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+/* Ensure encryption tab buttons are properly aligned */
+#encryption-tab-pane .enc-info-table + div .btn {
+    margin-bottom: 0.25rem;
+}
