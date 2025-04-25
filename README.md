@@ -1,10 +1,10 @@
-# ZfDash (v1.7.5-Beta)
+# ZfDash (v1.7.6-Beta)
 **(ZFS Management GUI / WEBUI) 💻** 
 **⚠️ Beta Software - Currently In Testing Phase ⚠️**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
-ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Python to simplify common ZFS pool, dataset, and snapshot management tasks on Linux. It interacts with a secure background daemon, launched on demand via Polkit, to ZFS operations.
+ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Python to simplify common ZFS pool, dataset, and snapshot management tasks on Linux. It interacts with a secure background daemon, launched on demand via Polkit, to perform ZFS operations.
 
 ---
 
@@ -77,6 +77,7 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 6.  Launch/Uninstall: See Method 1.
 
 **Method 3: Web UI Systemd Service (Headless/Server)**
+Note: (Polkit<0.106 is not supported for now, ie older Distros)
 1.  Install ZfDash via Method 1 or 2 first.
 2.  `cd install_service`
 3.  `chmod +x install_web_service.sh`

@@ -387,7 +387,14 @@ def login():
             login_user(user, remember=True) # Use remember=True
             app.logger.info(f"User '{username}' logged in successfully.")
             next_page = request.args.get('next')
-            if next_page and not next_page.startswith('/'):
+            # --- Prevent redirecting to logout page --- 
+            logout_url = url_for('logout')
+            if next_page == logout_url:
+                app.logger.debug(f"Login redirect target was '{logout_url}', overriding to index.")
+                next_page = None # Override to redirect to index
+            # --- End prevention ---    
+            if next_page and not next_page.startswith('/'): # Basic security check
+                app.logger.warning(f"Invalid next_page value detected: {next_page}. Clearing.")
                 next_page = None
             return redirect(next_page or url_for('index'))
         else:
@@ -429,34 +436,31 @@ def change_password():
         app.logger.warning(f"User '{user.username}' failed password change attempt: Incorrect current password.")
         return jsonify(status="error", error="Incorrect Password", details="The current password provided is incorrect."), 403
 
-    # --- Call ZFS Manager Daemon to change password via generic action ---
+    # --- Call ZFS Manager Daemon to change password via specific client method ---
     app.logger.info(f"User '{user.username}' attempting password change via daemon.")
-    # Use _handle_zfs_call which wraps the client call and error handling
-    # The backend action 'change_webui_password' expects username and new_password as args
-    # We pass the success message placeholder directly to _handle_zfs_call
-    result_json, status_code = _handle_zfs_call(
-        'execute_generic_action', # Client method name
-        'change_webui_password', # Actual action name for the backend
-        "Password changed successfully.", # Placeholder success message (backend might override)
-        # *args for execute_generic_action after action_name and success_msg:
-        user.username,
-        new_password
-    )
+    try:
+        client = _get_zfs_client()
+        success, message = client.change_webui_password(user.username, new_password)
 
-    # Check the result from _handle_zfs_call
-    result_data = result_json.get_json()
-    if result_data.get('status') == 'success':
-        app.logger.info(f"User '{user.username}' password successfully changed by daemon.")
-        # Force re-login for security and to update potential session data
-        logout_user()
-        # Return success, client-side JS should prompt for re-login maybe?
-        # Or just return success and rely on the session being invalid on next protected request?
-        # For simplicity, let's return success and let the next request handle the re-auth.
-        return jsonify(status="success", message=result_data.get('message', "Password changed successfully. Please log in again if needed.")), 200
-    else:
-        # Error already logged by _handle_zfs_call
-        # Return the error response from _handle_zfs_call
-        return result_json, status_code
+        if success:
+            app.logger.info(f"User '{user.username}' password successfully changed by daemon.")
+            # Force re-login for security and to update potential session data
+            logout_user()
+            # Return success, client-side JS should prompt for re-login maybe?
+            # Or just return success and rely on the session being invalid on next protected request?
+            # For simplicity, let's return success and let the next request handle the re-auth.
+            return jsonify(status="success", message=message or "Password changed successfully. Please log in again if needed."), 200
+        else:
+            app.logger.error(f"Password change failed for user '{user.username}'. Daemon error: {message}")
+            return jsonify(status="error", error="Password Change Failed", details=message or "Daemon failed to change the password."), 500
+
+    except (ZfsCommandError, ZfsClientCommunicationError, TimeoutError) as e:
+        app.logger.exception(f"Error communicating with daemon during password change for '{user.username}': {e}")
+        error_details = str(e) if isinstance(e, ZfsCommandError) else "Could not communicate with the backend service."
+        return jsonify(status="error", error="Communication Error", details=error_details), 503 # Service Unavailable
+    except Exception as e:
+        app.logger.exception(f"Unexpected error during password change for '{user.username}': {e}")
+        return jsonify(status="error", error="Internal Server Error", details="An unexpected error occurred."), 500
 
 
 # --- Protected API Routes ---

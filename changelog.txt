@@ -1,5 +1,10 @@
 # ZfDash Changelog
 
+## v1.7.6-Beta initial release
+
+*   **Fix:** Fixed Change Password in the Web UI.
+
+
 ## v1.7.5-Beta initial release
 
 *   **Web UI:** Improved visual appearance of the Web UI.
