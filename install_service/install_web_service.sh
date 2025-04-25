@@ -193,15 +193,20 @@ fi
 
 # 8. Create Polkit .rules file for passwordless access (javascript)
 RULES_FILE="/etc/polkit-1/rules.d/45-zfdash-admin.rules"
-log_info "Creating Polkit rules file: ${RULES_FILE}"
-cat > "${RULES_FILE}" << EOF
-polkit.addRule(function(action, subject) {
-    if (action.id == "org.zfsgui.pkexec.daemon.launch" &&
+RULES_DIR="/etc/polkit-1/rules.d"
+if [[ ! -d ${RULES_DIR} ]]; then
+    mkdir -p "/etc/polkit-1/rules.d"
+elif [[ ! -f ${RULES_FILE} ]]; then
+    log_info "Creating Polkit rules file: ${RULES_FILE}"
+    cat > "${RULES_FILE}" << EOF
+    polkit.addRule(function(action, subject) {
+        if (action.id == "org.zfsgui.pkexec.daemon.launch" &&
         subject.isInGroup("${ZFDASH_GROUP}")) {
         return polkit.Result.YES;
-    }
-});
+        }
+    });
 EOF
+fi
 # Set permissions for the rules file (readable by all is standard)
 chmod 644 "${RULES_FILE}"
 
