@@ -34,7 +34,8 @@ def get_user_ids():
 
 # Modified from gui_runner.py
 def launch_daemon():
-    """Launches the daemon mode using pkexec and establishes pipe communication.
+    """Launches the daemon mode using pkexec (if needed) or directly (if root)
+    and establishes pipe communication.
 
     Waits for a 'ready' signal from the daemon after potential pkexec authentication.
 
@@ -44,20 +45,12 @@ def launch_daemon():
                read_pipe_fd: File descriptor to read responses FROM the daemon (parent's read end).
 
     Raises:
-        RuntimeError: If pkexec is not found, user ID cannot be obtained, script/executable is missing,
-                      pipe creation fails, or the daemon launch fails.
+        RuntimeError: If pkexec is not found (when needed), user ID cannot be obtained,
+                      script/executable is missing, pipe creation fails, or the daemon launch fails.
         TimeoutError: If the daemon does not send the 'ready' signal within the timeout period.
         ValueError: If the daemon sends an invalid ready signal.
     """
-    print("DAEMON_UTILS(launch_daemon): Attempting to launch ZFS daemon via pkexec with pipes...")
-    # --- Find pkexec path dynamically ---
-    pkexec_path = shutil.which("pkexec")
-    if not pkexec_path:
-        print("ERROR: pkexec command not found\n"
-              "The 'pkexec' command is required to launch the daemon with root privileges.\n"
-              "Please install the 'pkexec' package (or equivalent for your distribution).", file=sys.stderr)
-        raise RuntimeError("pkexec command not found")
-    print(f"DAEMON_UTILS(launch_daemon): Found pkexec at: {pkexec_path}")
+    print("DAEMON_UTILS(launch_daemon): Attempting to launch ZFS daemon...")
 
     # --- Get User and Group ID ---
     try:
@@ -67,10 +60,26 @@ def launch_daemon():
         print(f"ERROR: User ID Error\nCould not determine current user/group ID: {e}", file=sys.stderr)
         raise RuntimeError("User ID error") from e
 
+    # --- Determine if we need pkexec ---
+    is_running_as_root = (user_uid == 0)
+    print(f"DAEMON_UTILS(launch_daemon): Running as root: {is_running_as_root}")
+
+    # --- Find pkexec path dynamically (only if needed) ---
+    pkexec_path = None
+    if not is_running_as_root:
+        pkexec_path = shutil.which("pkexec")
+        if not pkexec_path:
+            print("ERROR: pkexec command not found\n"
+                  "The 'pkexec' command is required to launch the daemon with root privileges when not already running as root.\n"
+                  "Please install the 'pkexec' package (or equivalent for your distribution).", file=sys.stderr)
+            raise RuntimeError("pkexec command not found")
+        print(f"DAEMON_UTILS(launch_daemon): Found pkexec at: {pkexec_path}")
+
+
     # --- Determine how to call the script/executable ---
     python_executable = sys.executable
     is_frozen = getattr(sys, 'frozen', False)
-    pkexec_cmd = [pkexec_path]
+    cmd_to_execute = [] # Will hold the final command list
 
     if is_frozen:
         # --- Running as a bundled executable ---
@@ -78,12 +87,15 @@ def launch_daemon():
         if not python_executable or not os.path.exists(python_executable):
              print(f"ERROR: Executable Error\nBundled executable path '{python_executable}' not found.", file=sys.stderr)
              raise RuntimeError("Executable error")
-        pkexec_cmd.extend([
-            python_executable,
-            '--daemon',
-            '--uid', str(user_uid),
-            '--gid', str(user_gid)
-        ])
+
+        base_cmd = [python_executable, '--daemon', '--uid', str(user_uid), '--gid', str(user_gid)]
+        if is_running_as_root:
+            cmd_to_execute = base_cmd
+            print("DAEMON_UTILS(launch_daemon): Will execute daemon directly (frozen, as root).")
+        else:
+            cmd_to_execute = [pkexec_path] + base_cmd
+            print("DAEMON_UTILS(launch_daemon): Will execute daemon via pkexec (frozen, non-root).")
+
     else:
         # --- Running as a Python script ---
         print("DAEMON_UTILS(launch_daemon): Detected script execution.")
@@ -91,15 +103,17 @@ def launch_daemon():
              print(f"ERROR: Python Error\nPython interpreter '{python_executable}' not found.", file=sys.stderr)
              raise RuntimeError("Python error")
         if not os.path.exists(DAEMON_SCRIPT_PATH):
-             print(f"ERROR: Script Error\nMain script '{DAEMON_SCRIPT_PATH}' not found for pkexec.", file=sys.stderr)
+             print(f"ERROR: Script Error\nMain script '{DAEMON_SCRIPT_PATH}' not found for execution.", file=sys.stderr)
              raise RuntimeError("Script error")
-        pkexec_cmd.extend([
-            python_executable,
-            DAEMON_SCRIPT_PATH,
-            '--daemon',
-            '--uid', str(user_uid),
-            '--gid', str(user_gid)
-        ])
+
+        base_cmd = [python_executable, DAEMON_SCRIPT_PATH, '--daemon', '--uid', str(user_uid), '--gid', str(user_gid)]
+        if is_running_as_root:
+            cmd_to_execute = base_cmd
+            print("DAEMON_UTILS(launch_daemon): Will execute daemon directly (script, as root).")
+        else:
+            cmd_to_execute = [pkexec_path] + base_cmd
+            print("DAEMON_UTILS(launch_daemon): Will execute daemon via pkexec (script, non-root).")
+
 
     # Removed Policy File Check - pkexec handles policy inherently
 
@@ -125,13 +139,13 @@ def launch_daemon():
         if pipe_from_daemon_w != -1: os.close(pipe_from_daemon_w)
         raise RuntimeError(f"Pipe creation failed: {e}") from e
 
-    # --- Execute pkexec_cmd with Pipe Redirection ---
-    print(f"DAEMON_UTILS(launch_daemon): Executing: {shlex.join(pkexec_cmd)}")
+    # --- Execute cmd_to_execute (either direct or via pkexec) with Pipe Redirection ---
+    print(f"DAEMON_UTILS(launch_daemon): Executing: {shlex.join(cmd_to_execute)}") # Changed pkexec_cmd to cmd_to_execute
     process = None
     try:
         current_env = os.environ.copy()
         process = subprocess.Popen(
-            pkexec_cmd,
+            cmd_to_execute, # Changed pkexec_cmd to cmd_to_execute
             env=current_env,
             stdin=pipe_to_daemon_r,      # Daemon reads from this pipe's read end
             stdout=pipe_from_daemon_w,   # Daemon writes to this pipe's write end

@@ -1034,24 +1034,33 @@ function renderProperties(props, isLoading = false) {
         propertiesTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted"><span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Loading properties...</td></tr>`;
         return;
     }
-    if (!props || Object.keys(props).length === 0) {
-        propertiesTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No properties available for this item.</td></tr>`;
+    if (!props) { // Handle null props after loading finished (e.g., fetch error)
+        propertiesTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-danger">Failed to load properties or none available.</td></tr>`;
         return;
     }
+    // If props is an empty object (valid fetch, but no props set/returned)
+    if (Object.keys(props).length === 0 && !Object.keys(window.EDITABLE_PROPERTIES_WEB || {}).length > 0) {
+         propertiesTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No properties available for this item.</td></tr>`;
+         return;
+    }
 
-    // Get all property keys
-    const allKeys = Object.keys(props);
+    // Get all property keys returned by the backend
+    const fetchedKeys = Object.keys(props);
     
     // Separate editable and non-editable properties
     const editableKeys = [];
     const nonEditableKeys = [];
     
-    allKeys.forEach(key => {
-        // Check if property is editable
-        const isEditable = window.EDITABLE_PROPERTIES_WEB && 
-                          window.EDITABLE_PROPERTIES_WEB[key] && 
-                          !(window.EDITABLE_PROPERTIES_WEB[key].readOnlyFunc && 
-                            window.EDITABLE_PROPERTIES_WEB[key].readOnlyFunc(currentSelection));
+    // Process fetched properties first
+    fetchedKeys.forEach(key => {
+        // Check if property is defined as editable in our config
+        const editInfo = window.EDITABLE_PROPERTIES_WEB?.[key];
+        let isEditable = false;
+        if (editInfo) {
+            // Check readOnlyFunc if it exists
+             const isReadOnlyForObject = editInfo.readOnlyFunc && editInfo.readOnlyFunc(currentSelection);
+             isEditable = !isReadOnlyForObject;
+        }
         
         if (isEditable) {
             editableKeys.push(key);
@@ -1059,72 +1068,132 @@ function renderProperties(props, isLoading = false) {
             nonEditableKeys.push(key);
         }
     });
-    
-    // Sort each group alphabetically
-    editableKeys.sort();
+
+    // --- START: Add missing editable properties ---
+    // Now check for editable properties defined in config but NOT returned by backend
+    Object.keys(window.EDITABLE_PROPERTIES_WEB || {}).forEach(editableKey => {
+        if (!props.hasOwnProperty(editableKey)) { // If not found in fetched props
+             const editInfo = window.EDITABLE_PROPERTIES_WEB[editableKey];
+             // Check if readOnlyFunc makes it non-editable for the current object
+             const isReadOnlyForObject = editInfo.readOnlyFunc && editInfo.readOnlyFunc(currentSelection);
+             if (!isReadOnlyForObject) {
+                 // Only add if not already somehow present in editableKeys
+                 if (!editableKeys.includes(editableKey)) { 
+                    editableKeys.push(editableKey);
+                 }
+             } else {
+                 // If read-only for this object, add to non-editable list if not already there
+                 if (!nonEditableKeys.includes(editableKey) && !editableKeys.includes(editableKey)) {
+                      nonEditableKeys.push(editableKey);
+                 }
+             }
+        }
+    });
+    // --- END: Add missing editable properties ---
+
+    // Sort editable keys: Auto-snapshot first by custom order, then others alphabetically
+    const autoSnapshotEditable = editableKeys.filter(k => AUTO_SNAPSHOT_PROPS.includes(k)).sort((a, b) => {
+        const indexA = AUTO_SNAPSHOT_SORT_ORDER_WEB.indexOf(a);
+        const indexB = AUTO_SNAPSHOT_SORT_ORDER_WEB.indexOf(b);
+        // Handle cases where a key might not be in the sort order list (shouldn't happen here)
+        if (indexA === -1 && indexB === -1) return a.localeCompare(b); // Fallback alpha sort
+        if (indexA === -1) return 1; // Place unknown at end
+        if (indexB === -1) return -1; // Place unknown at end
+        return indexA - indexB;
+    });
+    const otherEditable = editableKeys.filter(k => !AUTO_SNAPSHOT_PROPS.includes(k)).sort();
+    const sortedEditableKeys = [...autoSnapshotEditable, ...otherEditable];
+
+    // Sort non-editable keys alphabetically
     nonEditableKeys.sort();
     
+    // --- Render Sections ---
     // Add section header for editable properties if any exist
-    if (editableKeys.length > 0) {
+    if (sortedEditableKeys.length > 0) {
         const headerRow = propertiesTableBody.insertRow();
-        headerRow.className = "table-primary";
+        headerRow.className = "table-primary table-group-header"; // Add class for potential styling
         headerRow.innerHTML = `<td colspan="4"><strong>Editable Properties</strong></td>`;
         
-        // Render editable properties
-        renderPropertyGroup(editableKeys, props, true);
+        // Render editable properties (pass the sorted keys)
+        renderPropertyGroup(sortedEditableKeys, props, true);
         
-        // Add spacing row
-        const spacerRow = propertiesTableBody.insertRow();
-        spacerRow.className = "table-light";
-        spacerRow.style.height = "8px";
-        spacerRow.innerHTML = `<td colspan="4"></td>`;
+        // Add spacing row only if there are also non-editable properties
+        if (nonEditableKeys.length > 0) {
+            const spacerRow = propertiesTableBody.insertRow();
+            spacerRow.className = "table-light";
+            spacerRow.style.height = "8px";
+            spacerRow.innerHTML = `<td colspan="4"></td>`;
+        }
     }
     
-    // Add section header for non-editable properties
-    const nonEditableHeader = propertiesTableBody.insertRow();
-    nonEditableHeader.className = "table-secondary";
-    nonEditableHeader.innerHTML = `<td colspan="4"><strong>${editableKeys.length > 0 ? 'Other' : 'All'} Properties</strong></td>`;
-    
-    // Render non-editable properties
-    renderPropertyGroup(nonEditableKeys, props, false);
+    // Render non-editable properties if any exist
+    if (nonEditableKeys.length > 0) {
+        // Add section header for non-editable properties
+        const nonEditableHeader = propertiesTableBody.insertRow();
+        nonEditableHeader.className = "table-secondary table-group-header"; // Add class
+        // Adjust header text based on whether editable properties were shown
+        nonEditableHeader.innerHTML = `<td colspan="4"><strong>${sortedEditableKeys.length > 0 ? 'Other' : 'All'} Properties</strong></td>`;
+        
+        // Render non-editable properties
+        renderPropertyGroup(nonEditableKeys, props, false);
+    }
+
+    // Handle case where there were no keys at all (after checking editable)
+     if (sortedEditableKeys.length === 0 && nonEditableKeys.length === 0) {
+         propertiesTableBody.innerHTML = `<tr><td colspan="4" class="text-center text-muted">No properties available for this item.</td></tr>`;
+     }
 }
 
 // Helper function to render a group of properties
 function renderPropertyGroup(keys, props, isEditable) {
+    const datasetName = currentSelection?.name; // Get the name for data attributes
+
     keys.forEach(key => {
-        const propData = props[key];
-        const value = propData.value;
-        const source = propData.source;
-        // Refined check: Inherited if source exists and isn't local/default/-
+        // --- START: Handle potentially missing propData for unset editable props ---
+        const propData = props[key]; // Might be undefined if key was added because it's editable but unset
+        const value = propData?.value ?? '-'; // Default to '-' if propData or value is missing
+        const source = propData?.source ?? (datasetName?.includes('/') ? 'inherited' : 'default'); // Guess source if missing
         const isInherited = source && !['-', 'local', 'default', 'received'].includes(source);
+        const displayValue = (propData === undefined && isEditable) ? '-' : formatSize(value);
+        const displaySource = (propData === undefined && isEditable) ? (datasetName?.includes('/') ? 'inherited' : 'default') : (source === '-' ? 'local/default' : source);
+        // --- END: Handle potentially missing propData ---
         
         const row = propertiesTableBody.insertRow();
-        if (isEditable) {
-            row.className = "editable-property";
+        // Add specific class if it's an editable property, even if read-only for *this* object
+        if (window.EDITABLE_PROPERTIES_WEB?.[key]) { 
+             row.className = "editable-property-config"; // Use a class to indicate it's generally editable
         }
-        
-        // Use formatSize for value display, show raw value in title
+        // --- Add specific class for master switch ---
+        if (key === "com.sun:auto-snapshot") {
+            row.classList.add("master-snapshot-switch"); // Add class for CSS styling (e.g., bold)
+        }
+        // --- End class add ---
+
+        // Render row content
         row.innerHTML = `
         <td><span title="Internal: ${key}">${window.EDITABLE_PROPERTIES_WEB?.[key]?.displayName || key}</span></td>
-        <td class="${isInherited ? 'text-muted' : ''}" title="Raw: ${value}">${formatSize(value)}</td>
-        <td>${source === '-' ? 'local/default' : source}</td>
+        <td class="${isInherited ? 'text-muted' : ''}" title="Raw: ${value}">${displayValue}</td>
+        <td>${displaySource}</td>
         <td class="text-end"></td>
         `;
         const actionCell = row.cells[3];
 
+        // Add Edit button only if it's *actually* editable for this object
         if (isEditable) {
             const editBtn = document.createElement('button');
-            editBtn.className = 'btn properties-table-btn edit-btn me-1';
+            editBtn.className = 'btn properties-table-btn edit-btn me-1'; // *** RESTORED ORIGINAL CLASS ***
             editBtn.innerHTML = '<i class="bi bi-pencil"></i>';
             editBtn.title = `Edit ${key}`;
-            editBtn.onclick = () => handleEditProperty(key, value, window.EDITABLE_PROPERTIES_WEB[key]);
+            // Pass the actual current value ('-' if undefined) to the handler
+            editBtn.onclick = () => handleEditProperty(key, value, window.EDITABLE_PROPERTIES_WEB[key]); 
             actionCell.appendChild(editBtn);
         }
 
-        // Allow inherit if source is 'local' or 'received' (i.e., not inherited or default)
-        if (source === 'local' || source === 'received') {
+        // Allow inherit if source is 'local' or 'received'
+        // Do not show inherit button if propData is undefined (it's already inherited/default)
+        if (propData && (source === 'local' || source === 'received')) {
             const inheritBtn = document.createElement('button');
-            inheritBtn.className = 'btn properties-table-btn inherit-btn';
+            inheritBtn.className = 'btn properties-table-btn inherit-btn'; // *** RESTORED ORIGINAL CLASS ***
             inheritBtn.innerHTML = '<i class="bi bi-arrow-down-left-circle"></i>';
             inheritBtn.title = `Inherit ${key}`;
             inheritBtn.onclick = () => handleInheritProperty(key);
@@ -1628,7 +1697,7 @@ window.EDITABLE_PROPERTIES_WEB = {
     'mountpoint': { internalName: 'mountpoint', displayName: 'Mount Point', editor: 'lineedit' },
     'quota': { internalName: 'quota', displayName: 'Quota', editor: 'lineedit', placeholder: 'e.g., 100G, none', validation: 'sizeOrNone' },
     'reservation': { internalName: 'reservation', displayName: 'Reservation', editor: 'lineedit', placeholder: 'e.g., 5G, none', validation: 'sizeOrNone' },
-    'recordsize': { internalName: 'recordsize', displayName: 'Record Size', editor: 'combobox', options: ['inherit', '512'] + Array.from({length: 11-7+1}, (_, i) => `${2**(i+7)}K`) + ['1M'] },
+    'recordsize': { internalName: 'recordsize', displayName: 'Record Size', editor: 'combobox', options: ['inherit', '512', ...Array.from({length: 11-7+1}, (_, i) => `${2**(i+7)}K`), '1M'] },
     'compression': { internalName: 'compression', displayName: 'Compression', editor: 'combobox', options: ['inherit', 'off', 'on', 'lz4', 'gzip', 'gzip-1', 'gzip-9', 'zle', 'lzjb', 'zstd', 'zstd-fast'] },
     'atime': { internalName: 'atime', displayName: 'Access Time (atime)', editor: 'combobox', options: ['inherit', 'on', 'off'] },
     'relatime': { internalName: 'relatime', displayName: 'Relative Access Time', editor: 'combobox', options: ['inherit', 'on', 'off'] },
@@ -1646,6 +1715,44 @@ window.EDITABLE_PROPERTIES_WEB = {
     // Add autotrim, autoreplace etc. if backend supports them via 'set'
 };
 
+// --- Define AUTO_SNAPSHOT_PROPS here, right before use ---
+const AUTO_SNAPSHOT_PROPS = [
+    "com.sun:auto-snapshot",
+    "com.sun:auto-snapshot:daily",
+    "com.sun:auto-snapshot:frequent",
+    "com.sun:auto-snapshot:hourly",
+    "com.sun:auto-snapshot:monthly",
+    "com.sun:auto-snapshot:weekly",
+    "com.sun:auto-snapshot:yearly",
+];
+
+// --- Define Auto Snapshot Sort Order for WebUI ---
+const AUTO_SNAPSHOT_SORT_ORDER_WEB = [
+    "com.sun:auto-snapshot", // Master switch first
+    "com.sun:auto-snapshot:frequent",
+    "com.sun:auto-snapshot:hourly",
+    "com.sun:auto-snapshot:daily",
+    "com.sun:auto-snapshot:weekly",
+    "com.sun:auto-snapshot:monthly",
+    "com.sun:auto-snapshot:yearly",
+];
+
+// --- Add Auto Snapshot Properties to Web Editable List ---
+AUTO_SNAPSHOT_PROPS.forEach(prop => {
+    const suffix = prop.includes(':') ? prop.split(':').pop() : 'Default';
+    // --- Make Master Switch Name More Obvious ---
+    const is_master_switch = (prop === "com.sun:auto-snapshot");
+    const displayName = is_master_switch ? "Auto Snapshot (Master Switch)" : `Auto Snapshot (${suffix.charAt(0).toUpperCase() + suffix.slice(1)})`;
+    // --- End Master Switch Name Change ---
+    window.EDITABLE_PROPERTIES_WEB[prop] = {
+        internalName: prop,
+        displayName: displayName,
+        editor: 'combobox', // Use combobox for the dropdown
+        options: ['true', 'false', '-'], // Values for the dropdown
+        readOnlyFunc: (obj) => !(obj?.obj_type === 'dataset' || obj?.obj_type === 'volume') // Editable on datasets/volumes only
+    };
+});
+
 function validateSizeOrNone(value) {
     if (value.toLowerCase() === 'none') return true;
     // Basic check: starts with digit, optional unit K, M, G, T, P etc.
@@ -1659,8 +1766,16 @@ function handleEditProperty(propName, currentValue, editInfo) {
     if (editInfo.editor === 'lineedit') {
         inputHtml = `<input type="text" id="prop-edit-input" class="form-control" value="${currentValue}" placeholder="${editInfo.placeholder || ''}">`;
     } else if (editInfo.editor === 'combobox' && editInfo.options) {
+        // *** ADD CHECK: Ensure options is actually an array ***
+        if (!Array.isArray(editInfo.options)) {
+            console.error(`Configuration error: options for property '${propName}' is not an array.`, editInfo.options);
+            showErrorAlert("Internal Error", `Cannot create editor for '${propName}' due to invalid configuration.`);
+            return;
+        }
+        // *** END CHECK ***
+        
         inputHtml = `<select id="prop-edit-input" class="form-select">`;
-        editInfo.options.forEach(opt => {
+        editInfo.options.forEach(opt => { // Now safe to call forEach
             inputHtml += `<option value="${opt}" ${opt === currentValue ? 'selected' : ''}>${opt}</option>`;
         });
         inputHtml += `</select>`;
@@ -1674,6 +1789,16 @@ function handleEditProperty(propName, currentValue, editInfo) {
               () => { // onConfirm
                   const inputElement = document.getElementById('prop-edit-input');
                   const newValue = inputElement.value.trim();
+
+                  // --- START MODIFICATION: Handle inherit for auto-snapshot combo ---
+                  if (editInfo.editor === 'combobox' && newValue === '-' && AUTO_SNAPSHOT_PROPS.includes(propName)) {
+                        // If it's an auto-snapshot prop and '-' is selected, trigger inherit instead of set
+                        actionModal.hide(); // Hide current modal
+                        // Use a slight delay to ensure modal is hidden before potential confirmation dialog from inherit
+                        setTimeout(() => handleInheritProperty(propName), 100); 
+                        return; // Stop further processing in this handler
+                  }
+                  // --- END MODIFICATION ---
 
                   if (newValue === currentValue) {
                       updateStatus('Value not changed.', 'info');

@@ -1,5 +1,10 @@
 # ZfDash Changelog
 
+## v1.8.0-Beta Privileged Container, Auto Snapshot Properties, Feedback
+
+*   **Feature** Added Docker Containerized privileged version of ZfDash
+*   **Feature** Added Auto Snapshot Properties for datasets
+
 ## v1.7.6-Beta initial release
 
 *   **Fix:** Fixed Change Password in the Web UI.

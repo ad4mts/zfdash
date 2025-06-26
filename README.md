@@ -86,12 +86,53 @@ Note: (Polkit<0.106 is not supported for now, ie older Distros)
 6.  Access: `http://<server-ip>:5001` (or configured port/host)
 7.  Uninstall Service: `cd install_service && chmod +x uninstall_web_service.sh && sudo ./uninstall_web_service.sh`
 
-**Method 4: Manual Run (Development Only)**
-1.  Clone repo: `git clone https://github.com/ad4mts/zfdash && cd zfdash`
-2.  Setup venv & install deps: `python3 -m venv venv && source venv/bin/activate && pip install -r requirements.txt`
-3.  Ensure Polkit policy is installed (see `install.sh` or copy manually).
-4.  Run GUI: `cd src && python3 main.py`
-5.  Run Web UI: `cd src && python3 main.py --web [--host <ip>] [--port <num>] [--debug]`
+**Method 4: Docker (Only Web UI)**
+Running zfdash in a privileged Docker container.
+*-Clone the repository first:*
+```bash
+git clone https://github.com/ad4mts/zfdash && cd zfdash
+```
+*-Manually build the Docker image or use the provided `run_docker.sh` script:*
+```bash
+chmod +x run_docker.sh
+sudo ./run_docker.sh
+```
+*This script will build the image, stop and remove any existing `zfdash` container, and start a new one.*
+
+*-Manual Docker Build:*
+1.  **Build the Docker image:**
+    This command builds the Docker image from the `Dockerfile` in the repository.
+    ```bash
+    sudo docker build -t zfdash-docker .
+    ```
+
+2.  **Run the Docker container:**
+    This command starts the ZfDash container.
+    ```bash
+    sudo docker run -d --name zfdash \
+      --privileged \
+      --device=/dev/zfs:/dev/zfs \
+      -v zfdash_data:/opt/zfdash/data \
+      -v zfdash_config:/root/.config/ZfDash \
+      -p 5001:5001 \
+      zfdash-docker
+    ```
+    *   `--privileged`: Is required for ZFS operations inside the container.
+    *   `--device=/dev/zfs:/dev/zfs`: Mounts the ZFS device into the container.
+    *   `-v zfdash_data...`: Persists application data.
+    *   `-v zfdash_config...`: Persists user configuration and credentials.
+    *   `-p 5001:5001`: Maps the container's port 5001 to the host's port 5001.
+
+3.  **Access the Web UI:**
+    Open your browser and navigate to `http://localhost:5001`. The default credentials are `admin`/`admin`. **Please change the password immediately.**
+
+4.  **Stopping and removing the container:**
+    ```bash
+    sudo docker stop zfdash
+    sudo docker rm zfdash
+    ```
+
+
 
 ## 💡 Usage Tutorial
 

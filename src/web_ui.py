@@ -1,4 +1,4 @@
-# --- START OF FILE web_ui.py ---
+
 
 # --- START OF FILE src/web_ui.py ---
 
@@ -86,40 +86,73 @@ app.config['JSON_SORT_KEYS'] = False # Keep order in JSON responses
 
 
 # --- *** IMPORTANT: Secret Key for Sessions *** ---
-# --- *** IMPORTANT: Secret Key for Sessions *** ---
-#app.secret_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-replace-me!') #old removed
-# Try to load the key from file, environment variable, or use fallback
-# 1. Check installed system path first
-FLASK_KEY_SYSTEM_PATH = "/opt/zfdash/data/flask_secret_key.txt"
-# 2. Try in the same directory as the app
-FLASK_KEY_LOCAL_PATH = os.path.join(data_folder, "flask_secret_key.txt")
+# Handle Flask Secret Key generation and persistence within the Docker container.
+# In this Docker setup, the entire container runs as root (see run_docker.sh).
+# Therefore, this web_ui.py process has root privileges within the container
+# and can manage the key file in the persistent volume.
+
+# Path for the persistent secret key within the container, mapped to a Docker volume.
+FLASK_KEY_PERSISTENT_PATH = "/opt/zfdash/data/flask_secret_key.txt"
 
 flask_key = None
-# First try system path
-if os.path.exists(FLASK_KEY_SYSTEM_PATH):
-    try:
-        with open(FLASK_KEY_SYSTEM_PATH, 'r') as f:
-            flask_key = f.read().strip()
-    except Exception as e:
-        print(f"Error reading Flask key from {FLASK_KEY_SYSTEM_PATH}: {e}", file=sys.stderr)
 
-# Then try local path
-if flask_key is None and os.path.exists(FLASK_KEY_LOCAL_PATH):
-    try:
-        with open(FLASK_KEY_LOCAL_PATH, 'r') as f:
+# 1. Try to load the key from the persistent path (mapped volume) (generated during install)
+try:
+    if os.path.exists(FLASK_KEY_PERSISTENT_PATH):
+        with open(FLASK_KEY_PERSISTENT_PATH, 'r') as f:
             flask_key = f.read().strip()
-    except Exception as e:
-        print(f"Error reading Flask key from {FLASK_KEY_LOCAL_PATH}: {e}", file=sys.stderr)
+            if not flask_key:
+                # Handle case where file exists but is empty
+                print(f"WARNING: Flask key file '{FLASK_KEY_PERSISTENT_PATH}' exists but is empty.", file=sys.stderr)
+                flask_key = None # Treat empty file as key not found
+            else:
+                # Key loaded successfully from persistent volume
+                print(f"INFO: Loaded Flask secret key from persistent path {FLASK_KEY_PERSISTENT_PATH}", file=sys.stderr)
 
-# Finally fall back to environment variable or default
+    # 2. If key wasn't loaded (file missing or empty), generate, save, and use a new one (for docker only .. webui as root).
+    if flask_key is None:
+        print(f"INFO: Flask secret key not found or empty at {FLASK_KEY_PERSISTENT_PATH}. Generating a new secure key...", file=sys.stderr)
+        # Generate a cryptographically secure random key
+        flask_key = os.urandom(32).hex()
+        try:
+            # Ensure the target directory exists in the volume (running as root allows this)
+            os.makedirs(os.path.dirname(FLASK_KEY_PERSISTENT_PATH), mode=0o755, exist_ok=True)
+            # Write the new key to the persistent file
+            with open(FLASK_KEY_PERSISTENT_PATH, 'w') as f:
+                f.write(flask_key)
+            # Set permissions (root:root, rw-r--r--) - 600 might be slightly better but 644 is fine here.
+            os.chmod(FLASK_KEY_PERSISTENT_PATH, 0o644)
+            # Ensure ownership is root:root (should be by default as container runs as root)
+            try:
+                os.chown(FLASK_KEY_PERSISTENT_PATH, 0, 0)
+            except OSError as chown_err: # Catch potential permission issues if chown isn't allowed (unlikely for root)
+                print(f"WARNING: Could not set ownership on {FLASK_KEY_PERSISTENT_PATH}: {chown_err}", file=sys.stderr)
+
+            print(f"INFO: Successfully generated and saved new Flask secret key to {FLASK_KEY_PERSISTENT_PATH}", file=sys.stderr)
+        except (IOError, OSError) as e:
+            # Handle errors during key saving
+            print(f"ERROR: Failed to save generated Flask secret key to {FLASK_KEY_PERSISTENT_PATH}: {e}", file=sys.stderr)
+            print("ERROR: Falling back to environment variable or default key. Session security may be compromised!", file=sys.stderr)
+            flask_key = None # Nullify key if save failed, force fallback below
+
+except Exception as e:
+    # Catch any other unexpected errors during key handling
+    print(f"ERROR: An unexpected error occurred during Flask secret key loading/generation: {e}", file=sys.stderr)
+    print("ERROR: Falling back to environment variable or default key. Session security may be compromised!", file=sys.stderr)
+    flask_key = None # Nullify key on error, force fallback below
+
+
+# 3. Fallback to environment variable or insecure default (only if loading/generation/saving failed)
 if flask_key is None:
     flask_key = os.environ.get('FLASK_SECRET_KEY', 'dev-secret-key-replace-me!')
     if flask_key == 'dev-secret-key-replace-me!':
-        print("WARNING: Using insecure default Flask secret key. This is not recommended for production.", file=sys.stderr)
-        print("         Please use a real installation or set FLASK_SECRET_KEY environment variable.", file=sys.stderr)
+        # This warning should ideally not appear if the volume permissions are correct.
+        print("WARNING: Using insecure default Flask secret key. This should only happen if saving the generated key failed.", file=sys.stderr)
+        print("         Check permissions for the 'zfdash_data' volume mount or set FLASK_SECRET_KEY environment variable.", file=sys.stderr)
 
+
+# Set the Flask application's secret key
 app.secret_key = flask_key
-# --- *** IMPORTANT: Secret Key for Sessions *** ---
 # --- *** IMPORTANT: Secret Key for Sessions *** ---
 
 # ---End Defining app-----------------------------

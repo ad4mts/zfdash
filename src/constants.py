@@ -26,7 +26,29 @@ ZFS_SNAPSHOT_PROPS = [
     'logicalused', 'logicalreferenced'
 ]
 
+# Custom Properties for UI Editing
+AUTO_SNAPSHOT_PROPS = [
+    "com.sun:auto-snapshot",
+    "com.sun:auto-snapshot:daily",
+    "com.sun:auto-snapshot:frequent",
+    "com.sun:auto-snapshot:hourly",
+    "com.sun:auto-snapshot:monthly",
+    "com.sun:auto-snapshot:weekly",
+    "com.sun:auto-snapshot:yearly",
+]
+
+# Desired sort order for auto-snapshot properties in UI
+AUTO_SNAPSHOT_SORT_ORDER = [
+    "com.sun:auto-snapshot", # Master switch first
+    "com.sun:auto-snapshot:frequent",
+    "com.sun:auto-snapshot:hourly",
+    "com.sun:auto-snapshot:daily",
+    "com.sun:auto-snapshot:weekly",
+    "com.sun:auto-snapshot:monthly",
+    "com.sun:auto-snapshot:yearly",
+]
+
 # --- Default Settings ---
-DEFAULT_DAEMON_COMMAND_TIMEOUT = 120 # Default timeout in seconds for ZFS/ZPOOL commands
+DEFAULT_DAEMON_COMMAND_TIMEOUT = 120 # Default timeout for daemon commands in seconds
 
 # --- END OF FILE constants.py ---
