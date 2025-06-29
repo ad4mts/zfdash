@@ -1,7 +1,6 @@
-# ZfDash (v1.7.6-Beta)
-**(ZFS Management GUI / WEBUI) 💻** 
+# ZfDash (v1.8.0-beta)
+**(ZFS Management GUI / WEBUI) 💻**
 **⚠️ Beta Software - Currently In Testing Phase ⚠️**
-
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Python to simplify common ZFS pool, dataset, and snapshot management tasks on Linux. It interacts with a secure background daemon, launched on demand via Polkit, to perform ZFS operations.
@@ -19,6 +18,7 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 * [📸 Screenshots](#-screenshots)
 * [⚙️ Requirements](#️-requirements)
 * [🚀 Installation & Running](#-installation--running)
+* [🐳 Docker Usage](#-docker-usage)
 * [💡 Usage Tutorial](#-usage-tutorial)
 * [💖 Motivation](#-motivation)
 * [⚠️ IMPORTANT WARNINGS](#️-important-warnings)
@@ -41,12 +41,9 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 ![ZfDash Web UI Screenshot 1](screenshots/webui1.jpg)
 ![ZfDash Web UI Screenshot 2](screenshots/webui2.jpg)
 
-
 **Desktop GUI:**
 
 ![ZfDash GUI Screenshot 1](screenshots/gui.jpg)
-
-
 
 ## ⚙️ Requirements
 
@@ -54,7 +51,6 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 * **ZFS installed and configured** (Tested with zfs-2.3.1. `zfs` and `zpool` commands must be executable by root).
 * **Python 3** (Developed/Tested with 3.11, 3.13).
 * **Python Dependencies (for Build/Manual Run):** Listed in `requirements.txt` (PySide6 for GUI, Flask, Waitress, Flask-Login for WebUI). If building from source, `pip` and potentially `python3-venv` are needed.
-
 
 ## 🚀 Installation & Running
 
@@ -76,7 +72,64 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 5.  `sudo ./install.sh`
 6.  Launch/Uninstall: See Method 1.
 
-**Method 3: Web UI Systemd Service (Headless/Server)**
+**Method 3: Docker (Only Web UI)**
+Running zfdash in a privileged Docker container.
+## 🐳 Docker Usage
+
+This is the recommended method for deploying the ZfDash Web UI. It uses a pre-built container image, simplifying deployment and ensuring all dependencies are met.
+
+### 1. Pull the Image from a Registry
+
+The image is available on both Docker Hub and GitHub Container Registry (GHCR). Docker Hub is the recommended source.
+
+*   **From Docker Hub (Recommended):**
+    ```bash
+    sudo docker pull ad4mts/zfdash:latest
+    ```
+
+*   **From GitHub Container Registry (Alternative):**
+    ```bash
+    sudo docker pull ghcr.io/ad4mts/zfdash:latest
+    ```
+
+### 2. Run the Container
+
+This command starts the container and uses Docker **named volumes** (`zfdash_config` and `zfdash_data`) to safely persist your application's configuration and data. These volumes are managed by Docker and are the recommended way to handle persistent data.
+
+```bash
+sudo docker run -d --name zfdash \
+  --privileged \
+  --device=/dev/zfs:/dev/zfs \
+  -v zfdash_config:/root/.config/ZfDash \
+  -v zfdash_data:/opt/zfdash/data \
+  -p 5001:5001 \
+  --restart unless-stopped \
+  ad4mts/zfdash:latest
+```
+You can then access the Web UI at `http://localhost:5001`.
+
+Stopping and removing the container:
+```bash
+sudo docker stop zfdash
+sudo docker rm zfdash
+```
+
+### Convenience Script
+
+If you have cloned this repository, you can use the provided `run_docker.sh` script. First, edit the script to set your Docker Hub repository name, then make it executable and run it:
+```bash
+chmod +x run_docker.sh
+sudo ./run_docker.sh
+```
+
+### Docker Security Note (Advanced)
+
+ZfDash requires direct access to the host's ZFS subsystem, which presents a security challenge for containerization.
+
+*   **`--privileged` Flag**: The command above uses `--privileged`, which grants the container full, unrestricted access to the host. This is the simplest way to ensure functionality but is also the least secure.
+*   **A More Secure Alternative**: For better security, you can replace `--privileged` with the more granular `--cap-add SYS_ADMIN` flag and mount /dev/disk using `--device=/dev/disk:/dev/disk`. If you still encounter permission errors (often due to AppArmor or SELinux policies on the host), you may also need to add `--security-opt seccomp=unconfined` as a last resort.
+
+**Method 4: Web UI Systemd Service (Headless/Server)**
 Note: (Polkit<0.106 is not supported for now, ie older Distros)
 1.  Install ZfDash via Method 1 or 2 first.
 2.  `cd install_service`
@@ -85,54 +138,6 @@ Note: (Polkit<0.106 is not supported for now, ie older Distros)
 5.  Control: `sudo systemctl [start|stop|status|enable|disable] zfdash-web`
 6.  Access: `http://<server-ip>:5001` (or configured port/host)
 7.  Uninstall Service: `cd install_service && chmod +x uninstall_web_service.sh && sudo ./uninstall_web_service.sh`
-
-**Method 4: Docker (Only Web UI)**
-Running zfdash in a privileged Docker container.
-*-Clone the repository first:*
-```bash
-git clone https://github.com/ad4mts/zfdash && cd zfdash
-```
-*-Manually build the Docker image or use the provided `run_docker.sh` script:*
-```bash
-chmod +x run_docker.sh
-sudo ./run_docker.sh
-```
-*This script will build the image, stop and remove any existing `zfdash` container, and start a new one.*
-
-*-Manual Docker Build:*
-1.  **Build the Docker image:**
-    This command builds the Docker image from the `Dockerfile` in the repository.
-    ```bash
-    sudo docker build -t zfdash-docker .
-    ```
-
-2.  **Run the Docker container:**
-    This command starts the ZfDash container.
-    ```bash
-    sudo docker run -d --name zfdash \
-      --privileged \
-      --device=/dev/zfs:/dev/zfs \
-      -v zfdash_data:/opt/zfdash/data \
-      -v zfdash_config:/root/.config/ZfDash \
-      -p 5001:5001 \
-      zfdash-docker
-    ```
-    *   `--privileged`: Is required for ZFS operations inside the container.
-    *   `--device=/dev/zfs:/dev/zfs`: Mounts the ZFS device into the container.
-    *   `-v zfdash_data...`: Persists application data.
-    *   `-v zfdash_config...`: Persists user configuration and credentials.
-    *   `-p 5001:5001`: Maps the container's port 5001 to the host's port 5001.
-
-3.  **Access the Web UI:**
-    Open your browser and navigate to `http://localhost:5001`. The default credentials are `admin`/`admin`. **Please change the password immediately.**
-
-4.  **Stopping and removing the container:**
-    ```bash
-    sudo docker stop zfdash
-    sudo docker rm zfdash
-    ```
-
-
 
 ## 💡 Usage Tutorial
 

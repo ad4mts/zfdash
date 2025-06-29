@@ -1,0 +1,63 @@
+name: Docker Publish
+
+on:
+  # Run on pushes to the main branch and when new version tags are created.
+  push:
+    branches: [ "main" ]
+    tags: [ 'v*.*.*' ]
+  # Run builds on pull requests targeting the main branch to validate changes.
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  # GitHub Container Registry
+  REGISTRY_GHCR: ghcr.io
+  IMAGE_NAME_GHCR: ${{ github.repository }}
+
+  # Docker Hub Image Name (the user/org will be taken from secrets)
+  IMAGE_NAME_DOCKERHUB: zfdash
+
+jobs:
+  build-and-push-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: write
+      id-token: write # Required for ghcr.io authentication.
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY_GHCR }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to Docker Hub
+        # Only log in to Docker Hub on a push event (not PRs) and if secrets are present.
+        if: github.event_name != 'pull_request' && secrets.DOCKERHUB_USERNAME != ''
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels) for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME_GHCR }}
+            ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME_DOCKERHUB }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          # Only push the image on a push event (not on a pull request).
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
