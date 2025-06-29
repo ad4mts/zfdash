@@ -76,7 +76,7 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 Running zfdash in a privileged Docker container.
 ## 🐳 Docker Usage
 
-This is the recommended method for deploying the ZfDash Web UI. It uses a pre-built container image, simplifying deployment and ensuring all dependencies are met.
+This is the recommended method for deploying the ZfDash Web UI.
 
 ### 1. Pull the Image from a Registry
 
@@ -94,7 +94,7 @@ The image is available on both Docker Hub and GitHub Container Registry (GHCR). 
 
 ### 2. Run the Container
 
-This command starts the container and uses Docker **named volumes** (`zfdash_config` and `zfdash_data`) to safely persist your application's configuration and data. These volumes are managed by Docker and are the recommended way to handle persistent data.
+This command starts the container and uses Docker **named volumes** (`zfdash_config` and `zfdash_data`) to safely persist your application's configuration and data.
 
 ```bash
 sudo docker run -d --name zfdash \
@@ -112,14 +112,6 @@ Stopping and removing the container:
 ```bash
 sudo docker stop zfdash
 sudo docker rm zfdash
-```
-
-### Convenience Script
-
-If you have cloned this repository, you can use the provided `run_docker.sh` script. First, edit the script to set your Docker Hub repository name, then make it executable and run it:
-```bash
-chmod +x run_docker.sh
-sudo ./run_docker.sh
 ```
 
 ### Docker Security Note (Advanced)
