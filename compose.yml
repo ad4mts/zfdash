@@ -1,0 +1,18 @@
+name: zfdash
+services:
+  zfdash:
+    container_name: zfdash
+    image: ad4mts/zfdash:latest
+    build: .
+    privileged: true
+    devices:
+      - /dev/zfs:/dev/zfs
+    volumes:
+      - config:/root/.config/ZfDash
+      - data:/opt/zfdash/data
+    ports:
+      - 5001:5001
+    restart: unless-stopped
+volumes:
+  config:
+  data:

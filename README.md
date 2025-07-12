@@ -74,6 +74,7 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 
 **Method 3: Docker (Only Web UI)**
 Running zfdash in a privileged Docker container.
+
 ## 🐳 Docker Usage
 
 This is the recommended method for deploying the ZfDash Web UI.
@@ -106,20 +107,37 @@ sudo docker run -d --name zfdash \
   --restart unless-stopped \
   ad4mts/zfdash:latest
 ```
+
+A Docker Compose stack is also [included](compose.yml). To use that instead of the above Docker command:
+```bash
+sudo docker compose up -d
+```
+
 You can then access the Web UI at `http://localhost:5001`.
 
-Stopping and removing the container:
+Stopping and removing the container, if deployed with the Docker command:
 ```bash
 sudo docker stop zfdash
 sudo docker rm zfdash
 ```
+
+Or if deployed with Docker Compose (add `-v` to remove the volumes as well):
+```bash
+sudo docker compose down
+```
+
 
 ### Docker Security Note (Advanced)
 
 ZfDash requires direct access to the host's ZFS subsystem, which presents a security challenge for containerization.
 
 *   **`--privileged` Flag**: The command above uses `--privileged`, which grants the container full, unrestricted access to the host. This is the simplest way to ensure functionality but is also the least secure.
-*   **A More Secure Alternative**: For better security, you can replace `--privileged` with the more granular `--cap-add SYS_ADMIN` flag and mount /dev/disk using `--device=/dev/disk:/dev/disk`. If you still encounter permission errors (often due to AppArmor or SELinux policies on the host), you may also need to add `--security-opt seccomp=unconfined` as a last resort.
+*   **A More Secure Alternative**: For better security, you can replace `--privileged` with the more granular `--cap-add SYS_ADMIN` flag and mount /dev as volume using `-v /dev:/dev` (so the container has access to disks). If you still encounter permission errors (often due to AppArmor or SELinux policies on the host), you may also need to add `--security-opt seccomp=unconfined` as a last resort.
+    * If using Docker Compose, use the included [compose.moresecure.yml](compose.moresecure.yml) to as an override and redeploy:
+      ```bash
+      mv compose.moresecure.yml compose.override.yml
+      docker compose up -d
+      ```
 
 **Method 4: Web UI Systemd Service (Headless/Server)**
 Note: (Polkit<0.106 is not supported for now, ie older Distros)
