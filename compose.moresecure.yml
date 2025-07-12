@@ -1,0 +1,7 @@
+services:
+  zfdash:
+    privileged: false
+    cap_add:
+      - SYS_ADMIN
+    security_opt:
+      - seccomp=unconfined
