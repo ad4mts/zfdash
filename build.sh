@@ -17,7 +17,7 @@ set -e
 # --- Application Info ---
 APP_NAME="ZfDash"
 INSTALL_NAME="zfdash" # Base name for executable output
-APP_VERSION="1.5.4" # Used in logging, could be dynamic later
+APP_VERSION="1.8.0" # Used in logging, could be dynamic later
 
 # --- Build Configuration ---
 CONDA_PYTHON_VERSION="3.11" # Desired Python version for the build env
@@ -109,10 +109,38 @@ log_info " Prerequisite checks passed."
 log_info "[2/4] Setting up Conda build environment..."
 if ! command_exists conda; then
     log_info " Conda not found in PATH. Setting up local Miniconda instance..."
-    PLATFORM=$(uname -s); ARCH=$(uname -m); if [ "$PLATFORM" != "Linux" ]; then exit_error "Unsupported build platform: $PLATFORM"; fi; if [ "$ARCH" != "x86_64" ]; then exit_error "Unsupported architecture: $ARCH"; fi
-    MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"; MINICONDA_SCRIPT="${CONDA_INSTALLER_DIR}/miniconda_installer.sh"
+    
+    # --- Terms of Service Agreement ---
+    log_info " This script needs to download and install Miniconda to create a local build environment."
+    log_info " Miniconda is governed by the Anaconda Terms of Service."
+    log_info " Please review the terms at: https://legal.anaconda.com/policies/en/?name=terms-of-service"
+    read -p " Do you agree to these terms and wish to proceed with the download? (y/N): " agree_to_tos
+    if [[ ! "$agree_to_tos" =~ ^[Yy]$ ]]; then
+        exit_error "Build cancelled by user. You must agree to the Anaconda ToS to proceed."
+    fi
+    # --- End ToS Agreement ---
+
+    PLATFORM=$(uname -s); ARCH=$(uname -m)
+    if [ "$PLATFORM" != "Linux" ]; then exit_error "Unsupported build platform: $PLATFORM"; fi
+    
+    # Architecture Detection and URL Selection
+    case "$ARCH" in
+        "x86_64")
+            MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh"
+            log_info " Detected x86_64 architecture"
+            ;;
+        "aarch64"|"arm64")
+            MINICONDA_URL="https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-aarch64.sh"
+            log_info " Detected ARM64/aarch64 architecture"
+            ;;
+        *)
+            exit_error "Unsupported architecture: $ARCH. Supported: x86_64, aarch64/arm64"
+            ;;
+    esac
+    
+    MINICONDA_SCRIPT="${CONDA_INSTALLER_DIR}/miniconda_installer.sh"
     log_info " Creating directory for installer: $CONDA_INSTALLER_DIR"; mkdir -p "$CONDA_INSTALLER_DIR" || exit_error "Failed to create directory: $CONDA_INSTALLER_DIR"
-    if [ ! -f "$MINICONDA_SCRIPT" ]; then log_info " Downloading Miniconda installer..."; $DOWNLOADER "$MINICONDA_SCRIPT" "$MINICONDA_URL" || exit_error "Failed to download Miniconda."; chmod +x "$MINICONDA_SCRIPT" || exit_error "Failed to make Miniconda script executable."; else log_info " Using existing Miniconda installer: $MINICONDA_SCRIPT"; fi
+    if [ ! -f "$MINICONDA_SCRIPT" ]; then log_info " Downloading Miniconda installer for $ARCH..."; $DOWNLOADER "$MINICONDA_SCRIPT" "$MINICONDA_URL" || exit_error "Failed to download Miniconda."; chmod +x "$MINICONDA_SCRIPT" || exit_error "Failed to make Miniconda script executable."; else log_info " Using existing Miniconda installer: $MINICONDA_SCRIPT"; fi
     log_info " Installing Miniconda to ${CONDA_BASE_DIR}..."; if [ -d "$CONDA_BASE_DIR" ]; then log_warn " Removing existing local Miniconda base: $CONDA_BASE_DIR"; rm -rf "$CONDA_BASE_DIR" || exit_error "Failed to remove existing Miniconda base."; fi
     bash "$MINICONDA_SCRIPT" -b -p "$CONDA_BASE_DIR" || exit_error "Miniconda installation failed."; log_info " Miniconda installed locally."
     CONDA_EXEC_PATH="${CONDA_BASE_DIR}/bin/conda"
@@ -120,6 +148,33 @@ else
     CONDA_EXEC_PATH=$(command -v conda); log_info " Using existing Conda found at: $CONDA_EXEC_PATH"
 fi
 if [ ! -x "$CONDA_EXEC_PATH" ]; then exit_error "Conda executable not found at expected path after setup: $CONDA_EXEC_PATH"; fi
+
+# Accept Terms of Service to prevent build errors in non-interactive environments
+log_info " Configuring Conda to be non-interactive and accepting ToS..."
+"$CONDA_EXEC_PATH" config --set auto_update_conda false
+"$CONDA_EXEC_PATH" config --set notify_outdated_conda false
+
+# Use the 'tos' command for newer conda versions, which is more robust.
+# If the '--non-interactive' flag is not supported, pipe 'yes' to the command.
+if "$CONDA_EXEC_PATH" tos --help &>/dev/null; then
+    log_info " Accepting Terms of Service for default channels..."
+    if "$CONDA_EXEC_PATH" tos accept --help | grep -q -- '--non-interactive'; then
+        "$CONDA_EXEC_PATH" tos accept --non-interactive --channel https://repo.anaconda.com/pkgs/main
+        "$CONDA_EXEC_PATH" tos accept --non-interactive --channel https://repo.anaconda.com/pkgs/r
+    else
+        log_warn " '--non-interactive' flag not available. Piping 'yes' to 'conda tos accept' command."
+        # Temporarily disable pipefail to avoid issues with 'yes' and SIGPIPE
+        (
+            set +o pipefail
+            echo "yes" | "$CONDA_EXEC_PATH" tos accept --channel https://repo.anaconda.com/pkgs/main
+            echo "yes" | "$CONDA_EXEC_PATH" tos accept --channel https://repo.anaconda.com/pkgs/r
+        )
+    fi
+else
+    log_warn " 'conda tos' command not found. Attempting legacy ToS acceptance..."
+    "$CONDA_EXEC_PATH" config --set anaconda_tos_accepted true || log_warn "Could not set legacy anaconda_tos_accepted config."
+fi
+
 
 # Create/Update the build environment
 CREATE_ENV=false
