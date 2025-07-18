@@ -7,3 +7,4 @@ services:
       - seccomp=unconfined
     volumes:
       - /dev:/dev
+      - /etc/hostid:/etc/hostid:ro

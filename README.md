@@ -103,6 +103,7 @@ sudo docker run -d --name zfdash \
   --device=/dev/zfs:/dev/zfs \
   -v zfdash_config:/root/.config/ZfDash \
   -v zfdash_data:/opt/zfdash/data \
+  -v /etc/hostid:/etc/hostid:ro \
   -p 5001:5001 \
   --restart unless-stopped \
   ad4mts/zfdash:latest
@@ -138,6 +139,16 @@ ZfDash requires direct access to the host's ZFS subsystem, which presents a secu
       mv compose.moresecure.yml compose.override.yml
       docker compose up -d
       ```
+
+ZFS also needs access to the hostid of the machine, if not the container will create it's own hostid and **`zpool status`** will show an error
+```
+status: Mismatch between pool hostid and system hostid on imported pool.
+	This pool was previously imported into a system with a different hostid,
+	and then was verbatim imported into this system.
+action: Export this pool on all systems on which it is imported.
+	Then import it to correct the mismatch.
+```
+Therefore we map /etc/hostid into the container as a readonly file using the ``-v /etc/hostid:/etc/hostid:ro``
 
 **Method 4: Web UI Systemd Service (Headless/Server)**
 Note: (Polkit<0.106 is not supported for now, ie older Distros)

@@ -10,6 +10,7 @@ services:
     volumes:
       - config:/root/.config/ZfDash
       - data:/opt/zfdash/data
+      - /etc/hostid:/etc/hostid:ro
     ports:
       - 5001:5001
     restart: unless-stopped
