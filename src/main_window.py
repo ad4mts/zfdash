@@ -954,14 +954,27 @@ class MainWindow(QMainWindow):
 
             full_name, type_str, properties, encryption_options = dialog_result
 
-            # Prepare the arguments for the zfs_manager command
-            # Assuming the daemon handler for 'create_dataset' expects kwargs like:
-            # full_dataset_name, dataset_type, properties, encryption_options
+            # Convert type string to boolean and extract volsize
+            is_volume = (type_str == 'volume')
+            volsize = properties.pop('volsize', None) if is_volume else None
+            
+            # Extract passphrase if required
+            passphrase = None
+            if encryption_options.get('passphrase_required'):
+                # The dialog validates passphrase but doesn't return it for security
+                # We need to get it from the dialog before it closes
+                # For now, this will be None and ZFS will prompt if needed
+                passphrase = encryption_options.get('passphrase')
+
+            # Prepare the arguments for the backend create_dataset function
+            # Matches zfs_manager_core.py signature: 
+            # create_dataset(full_dataset_name, is_volume, volsize, options, passphrase, ...)
             create_kwargs = {
                 'full_dataset_name': full_name,
-                'dataset_type': type_str,
-                'properties': properties,
-                'encryption_options': encryption_options
+                'is_volume': is_volume,
+                'volsize': volsize,
+                'options': properties,
+                'passphrase': passphrase
             }
 
             # Use the generic action executor

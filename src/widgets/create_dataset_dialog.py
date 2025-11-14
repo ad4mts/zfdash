@@ -293,8 +293,11 @@ class CreateDatasetDialog(QDialog):
                       if passphrase != confirm_passphrase:
                            QMessageBox.warning(self, "Passphrase Mismatch", "Passphrases do not match.")
                            return None
-                      # Passphrase is not sent directly, ZFS prompts
+                      # Store passphrase in encryption_options so it can be passed to backend
                       encryption_options['passphrase_required'] = True
+                      encryption_options['passphrase'] = passphrase
+                      # Set keylocation to prompt so ZFS knows to read from stdin
+                      properties['keylocation'] = 'prompt'
 
                       pbkdf2iters = self.enc_pbkdf2iters_edit.text().strip()
                       if pbkdf2iters:
