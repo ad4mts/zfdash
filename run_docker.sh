@@ -22,16 +22,13 @@ echo "--- Removing existing container (if any): $CONTAINER_NAME ---"
 sudo docker rm "$CONTAINER_NAME" || true
 
 echo "--- Running new container: $CONTAINER_NAME ---"
-# Run the new container in detached mode, mapping port 5001,
-# mounting /dev/zfs, and running as root.
-# Mount volumes for persistent data (credentials, config)
-# replacing --privileged with --cap-add SYS_ADMIN (more granular and secure) > (the container doesnt have access to block devices, which make create pool.. etc not possible.. maybe mount /dev/disk for future ver. (--device=/dev/disk:/dev/disk))
+# Run the new container matching the README command
 sudo docker run -d --name "$CONTAINER_NAME" \
   --privileged \
   --device=/dev/zfs:/dev/zfs \
-  --user=root \
-  -v zfdash_data:/opt/zfdash/data \
   -v zfdash_config:/root/.config/ZfDash \
+  -v zfdash_data:/opt/zfdash/data \
+  -v /etc:/host-etc:ro \
   -p 5001:5001 \
   --restart unless-stopped \
   "$IMAGE_NAME"

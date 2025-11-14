@@ -10,8 +10,14 @@ RUN echo "deb http://deb.debian.org/debian bookworm main contrib non-free-firmwa
     apt-get update && \
     export DEBIAN_FRONTEND=noninteractive && \
     apt-get install -y --no-install-recommends zfsutils-linux sudo && \
+    # Remove baked-in hostid to prevent mismatches with host ZFS pools
+    rm -f /etc/hostid && \
     # Clean up apt cache
     rm -rf /var/lib/apt/lists/*
+
+# Copy and setup entrypoint script for hostid synchronization
+COPY docker/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 # Copy requirements file
 COPY requirements.txt .
@@ -28,6 +34,9 @@ VOLUME ["/opt/zfdash/data", "/root/.config/ZfDash"]
 
 # Expose the default web UI port
 EXPOSE 5001
+
+# Set entrypoint to handle hostid synchronization
+ENTRYPOINT ["/entrypoint.sh"]
 
 # Default command to run the web UI
 # Listen on 0.0.0.0 to be accessible from outside the container

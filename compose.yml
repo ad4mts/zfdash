@@ -10,6 +10,7 @@ services:
     volumes:
       - config:/root/.config/ZfDash
       - data:/opt/zfdash/data
+      - /etc:/host-etc:ro  # Read-only access to check host's /etc/hostid
     ports:
       - 5001:5001
     restart: unless-stopped

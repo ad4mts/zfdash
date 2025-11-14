@@ -7,3 +7,4 @@ services:
       - seccomp=unconfined
     volumes:
       - /dev:/dev
+      - /etc:/host-etc:ro  # Read-only access to check host's /etc/hostid

@@ -1,1 +1,17 @@
+build_env_zfdash/
+miniconda_installer/
+miniconda_base/
+build/
+dist/
+__pycache__/
+*.spec
+*.pyc
+*.pyo
+*.pyd
+*.log
+.cache/
+.cache
+.venv/
+developer documentation/
 compose.override.yml
+**/docker-local-debug.sh

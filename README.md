@@ -1,6 +1,5 @@
-# ZfDash (v1.8.0-beta)
-**(ZFS Management GUI / WEBUI) 💻**
-**⚠️ Beta Software - Currently In Testing Phase ⚠️**
+# ZfDash (v1.8.1-beta)
+**(ZFS Management GUI / WEBUI) 💻** (Currently In Testing Phase) 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Python to simplify common ZFS pool, dataset, and snapshot management tasks on Linux. It interacts with a secure background daemon, launched on demand via Polkit, to perform ZFS operations.
@@ -103,6 +102,7 @@ sudo docker run -d --name zfdash \
   --device=/dev/zfs:/dev/zfs \
   -v zfdash_config:/root/.config/ZfDash \
   -v zfdash_data:/opt/zfdash/data \
+  -v /etc:/host-etc:ro \  # For ZFS hostid compatibility
   -p 5001:5001 \
   --restart unless-stopped \
   ad4mts/zfdash:latest
@@ -138,6 +138,8 @@ ZfDash requires direct access to the host's ZFS subsystem, which presents a secu
       mv compose.moresecure.yml compose.override.yml
       docker compose up -d
       ```
+
+**HostID Compatibility Note**: ZFS pools store the system hostid they were created on. To prevent hostid mismatch errors, the container syncs with the host's `/etc/hostid` via the `-v /etc:/host-etc:ro` mount (already included in compose files). This works across all distributions, handling missing hostid files gracefully.
 
 **Method 4: Web UI Systemd Service (Headless/Server)**
 Note: (Polkit<0.106 is not supported for now, ie older Distros)
