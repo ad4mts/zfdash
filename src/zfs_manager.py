@@ -19,6 +19,7 @@ import utils # For parsing/formatting in helper functions here
 # Import config manager to get user settings (like logging pref)
 try:
     import config_manager
+    import constants
 except ImportError:
      print("MANAGER_CLIENT: Warning: config_manager not found.", file=sys.stderr)
      # Define fallback
@@ -27,6 +28,10 @@ except ImportError:
          def get_log_file_path(self): return "mock_zfdash_client.log"
          def get_viewer_log_file_path(self): return "mock_zfdash_client.log"
      config_manager = MockConfigManager()
+     # Mock constants module
+     class MockConstants:
+         DEFAULT_LOGGING_ENABLED = False
+     constants = MockConstants()
 
 # Removed SOCKET_NAME, SOCKET_PATH
 # Removed _get_dynamic_socket_path function
@@ -194,7 +199,7 @@ class ZfsManagerClient:
         # Correct indentation for request_meta and request_dict
         request_meta = {
             "request_id": request_id,
-            "log_enabled": config_manager.get_setting('logging_enabled', False),
+            "log_enabled": config_manager.get_setting('logging_enabled', constants.DEFAULT_LOGGING_ENABLED),
             "user_uid": os.getuid() if hasattr(os, 'getuid') else -1
         }
         request_dict = {

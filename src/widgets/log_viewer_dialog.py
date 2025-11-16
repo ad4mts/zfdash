@@ -10,17 +10,19 @@ from PySide6.QtWidgets import (
 from PySide6.QtGui import QFont
 from PySide6.QtCore import Qt, Slot
 
-# Import the config manager
+# Import config manager and log path function
 try:
     import config_manager
+    import constants
+    from paths import get_viewer_log_file_path
 except ImportError:
     # Mock for standalone testing
-    print("Warning: config_manager not found, using mock.", file=sys.stderr)
+    print("Warning: config_manager or paths not found, using mock.", file=sys.stderr)
     class MockConfigManager:
         def get_setting(self, key, default): return default
         def set_setting(self, key, value): pass
-        def get_viewer_log_file_path(self): return "mock_zfdash.log" # Use viewer path getter
     config_manager = MockConfigManager()
+    def get_viewer_log_file_path(): return "mock_zfdash.log"
 
 
 class LogViewerDialog(QDialog):
@@ -30,7 +32,7 @@ class LogViewerDialog(QDialog):
         self.setWindowTitle("ZfDash Log Viewer")
         self.setMinimumSize(700, 500)
         # Get the log path from the viewer's perspective
-        self._log_file_path = config_manager.get_viewer_log_file_path()
+        self._log_file_path = get_viewer_log_file_path()
 
         layout = QVBoxLayout(self)
 
@@ -39,7 +41,7 @@ class LogViewerDialog(QDialog):
         self.enable_logging_checkbox = QCheckBox("Enable Command Logging")
         self.enable_logging_checkbox.setToolTip("Log executed ZFS commands and their output to the log file.")
         # Load setting from user's config
-        self.enable_logging_checkbox.setChecked(config_manager.get_setting('logging_enabled', False))
+        self.enable_logging_checkbox.setChecked(config_manager.get_setting('logging_enabled', constants.DEFAULT_LOGGING_ENABLED))
         self.enable_logging_checkbox.stateChanged.connect(self._toggle_logging)
 
         self.refresh_button = QPushButton("Refresh Log")
@@ -88,7 +90,7 @@ class LogViewerDialog(QDialog):
                  # Scroll to the bottom
                  self.text_edit.verticalScrollBar().setValue(self.text_edit.verticalScrollBar().maximum())
         except PermissionError:
-             self.text_edit.setText(f"Permission denied reading log file:\n'{log_path}'\n\n(Check permissions on /run/user/UID/ or the log file itself)")
+            self.text_edit.setText(f"Permission denied reading log file:\n'{log_path}'\n\n(Check permissions on /run/user/{os.getuid()}/ or the log file itself)")
         except IOError as e:
             self.text_edit.setText(f"Error reading log file '{log_path}':\n{e}")
         except Exception as e:
@@ -131,7 +133,7 @@ class LogViewerDialog(QDialog):
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     # Create a dummy log file for testing in the expected location
-    dummy_log_path = config_manager.get_viewer_log_file_path()
+    dummy_log_path = get_viewer_log_file_path()
     try:
         os.makedirs(os.path.dirname(dummy_log_path), exist_ok=True)
         with open(dummy_log_path, 'w') as f:

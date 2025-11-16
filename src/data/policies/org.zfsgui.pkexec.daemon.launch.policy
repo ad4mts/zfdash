@@ -13,7 +13,7 @@
       <allow_inactive>auth_admin_keep</allow_inactive>
       <allow_active>auth_admin_keep</allow_active>
     </defaults>
-    <annotate key="org.freedesktop.policykit.exec.path">/opt/zfdash/app/zfdash</annotate>
+    <annotate key="org.freedesktop.policykit.exec.path">/opt/zfdash/zfdash</annotate>
 
     <annotate key="org.freedesktop.policykit.exec.allow_gui">true</annotate>
     <!-- Rules moved to separate .rules file -->

@@ -6,25 +6,24 @@ import traceback
 import argparse
 # Removed socket, signal, threading, time, pwd, stat imports
 
+from paths import DAEMON_STDERR_LOG
+
 # Assuming zfs_manager_core is in the same directory or PYTHONPATH
 import zfs_manager_core
 from zfs_manager_core import ZfsCommandError
-# Import config_manager to get log file path based on UID
+# Import config_manager for password functions and credential management
 try:
     import config_manager
     # --- ADD IMPORT FOR PASSWORD FUNC --- (and default creation)
     from config_manager import update_user_password, create_default_credentials_if_missing
+    # Import log path function from paths module
+    from paths import get_daemon_log_file_path
 except ImportError as e:
     print(f"DAEMON: Error - config_manager or required function not found: {e}!", file=sys.stderr)
     # Define dummy functions if import fails
     def get_daemon_log_file_path(uid): return f"/tmp/zfdash-daemon.log.{uid}.err"
     def update_user_password(u, p): print("DAEMON: ERROR - Dummy update_user_password called!", file=sys.stderr); return False
     def create_default_credentials_if_missing(): print("DAEMON: ERROR - Dummy create_default_credentials_if_missing called!", file=sys.stderr)
-    config_manager = type('obj', (object,), {
-        'get_daemon_log_file_path': get_daemon_log_file_path,
-        # No need to add update_user_password to the dummy module
-        # No need to add create_default_credentials_if_missing to the dummy module
-    })()
 
 
 # Removed SOCKET_NAME, SOCKET_PATH constants
@@ -65,7 +64,7 @@ def main():
         sys.exit(1)
 
     # Determine paths based on the target user UID
-    daemon_log_file_path = config_manager.get_daemon_log_file_path(target_uid)
+    daemon_log_file_path = get_daemon_log_file_path(target_uid)
     print(f"DAEMON: Using log file path (for ZfsManagerCore): {daemon_log_file_path}", file=sys.stderr)
 
     # --- Ensure default credentials file exists (create if missing) ---
@@ -74,10 +73,10 @@ def main():
     # --- End Credentials Check ---
 
 
-    # --- DEBUG: Redirect stderr to /tmp/zfs_daemon_stderr for troubleshooting issues ---
+    # --- DEBUG: Redirect stderr to daemon log for troubleshooting issues ---
     # This block is for debug purposes ONLY. Dont remove it!
     try:
-        sys.stderr = open('/tmp/zfs_daemon_stderr.log', 'a', buffering=1)  # Line buffered
+        sys.stderr = open(DAEMON_STDERR_LOG, 'a', buffering=1)  # Line buffered
     except Exception as e:
         # If redirection fails, print to original stderr
         print(f"DAEMON: Failed to redirect stderr: {e}", file=sys.__stderr__)

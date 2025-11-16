@@ -3,8 +3,8 @@
 echo "--- ZfDash Uninstaller ---"; set +e # Allow errors during removal
 INSTALL_BASE_DIR="/opt/zfdash"; INSTALL_LAUNCHER_PATH="/usr/local/bin/zfdash"
 INSTALL_DESKTOP_FILE_PATH="/usr/share/applications/zfdash.desktop"; INSTALL_POLICY_PATH="/usr/share/polkit-1/actions/org.zfsgui.pkexec.daemon.launch.policy"
-# Add log paths to be used within the uninstall script
-SYSTEM_DAEMON_LOG_PATH="/tmp/zfdash-daemon.log"
+# Add log paths/patterns to be used within the uninstall script
+SYSTEM_DAEMON_LOG_PATTERN="/tmp/zfdash-daemon.log*" # Pattern to match all user-specific daemon logs
 SYSTEM_DAEMON_STDERR_LOG_PATH="/tmp/zfdash_daemon_stderr.log"
 # INSTALL_CREDENTIALS_PATH is implicitly removed when INSTALL_BASE_DIR is removed.
 # No explicit removal needed here unless it moves outside INSTALL_BASE_DIR later.
@@ -19,8 +19,9 @@ echo "INFO: Removing desktop entry: ${INSTALL_DESKTOP_FILE_PATH}..."; if [ -f "$
 echo "INFO: Removing Polkit policy: ${INSTALL_POLICY_PATH}..."; if [ -f "${INSTALL_POLICY_PATH}" ]; then rm -f "${INSTALL_POLICY_PATH}"; else echo "INFO: Polkit policy already removed."; fi
 
 # Attempt to remove potential system-wide log files (defined above)
-echo "INFO: Checking for system daemon log file: ${SYSTEM_DAEMON_LOG_PATH}..."
-if [ -f "${SYSTEM_DAEMON_LOG_PATH}" ]; then echo "INFO: Removing ${SYSTEM_DAEMON_LOG_PATH}..."; rm -f "${SYSTEM_DAEMON_LOG_PATH}" || echo "WARN: Failed to remove ${SYSTEM_DAEMON_LOG_PATH}." >&2; fi
+echo "INFO: Checking for system daemon log files: ${SYSTEM_DAEMON_LOG_PATTERN}..."
+# Use wildcard pattern to remove all user-specific daemon logs (e.g., /tmp/zfdash-daemon.log.1000)
+rm -f ${SYSTEM_DAEMON_LOG_PATTERN} 2>/dev/null && echo "INFO: Removed daemon log files matching ${SYSTEM_DAEMON_LOG_PATTERN}" || echo "INFO: No daemon log files found matching pattern."
 echo "INFO: Checking for system daemon stderr log file: ${SYSTEM_DAEMON_STDERR_LOG_PATH}..."
 if [ -f "${SYSTEM_DAEMON_STDERR_LOG_PATH}" ]; then echo "INFO: Removing ${SYSTEM_DAEMON_STDERR_LOG_PATH}..."; rm -f "${SYSTEM_DAEMON_STDERR_LOG_PATH}" || echo "WARN: Failed to remove ${SYSTEM_DAEMON_STDERR_LOG_PATH}." >&2; fi
 

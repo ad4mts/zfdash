@@ -6,16 +6,14 @@ from PySide6.QtGui import QIcon, QColor, QBrush, QPalette
 from PySide6.QtWidgets import QApplication
 
 import utils # Import the whole module
-import os
 from models import Pool, Dataset, Snapshot, ZfsObject
 
 
-# Icon paths (not implemented for now)
-ICON_DIR = os.path.join(os.path.dirname(__file__), '..', 'icons') #not the right way of finding icons (look at gui_runner.py *dynamically*)
-ICON_POOL = QIcon.fromTheme("drive-harddisk", QIcon(os.path.join(ICON_DIR, "pool.png")))
-ICON_DATASET = QIcon.fromTheme("folder", QIcon(os.path.join(ICON_DIR, "dataset.png")))
-ICON_VOLUME = QIcon.fromTheme("drive-optical", QIcon(os.path.join(ICON_DIR, "dataset.png")))
-ICON_SNAPSHOT = QIcon.fromTheme("camera-photo", QIcon(os.path.join(ICON_DIR, "snapshot.png")))
+# Icon paths using system theme icons with empty fallbacks
+ICON_POOL = QIcon.fromTheme("drive-harddisk", QIcon())
+ICON_DATASET = QIcon.fromTheme("folder", QIcon())
+ICON_VOLUME = QIcon.fromTheme("drive-optical", QIcon())
+ICON_SNAPSHOT = QIcon.fromTheme("camera-photo", QIcon())
 ICON_ENCRYPTED = QIcon.fromTheme("dialog-password", QIcon())
 ICON_MOUNTED = QIcon.fromTheme("emblem-mounted", QIcon())
 

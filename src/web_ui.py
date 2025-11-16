@@ -23,8 +23,9 @@ try:
     from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
     # Import config_manager to get credential path and hashing constants
     import config_manager
-    from config_manager import CREDENTIALS_FILE_PATH, PASSWORD_INFO_KEY, \
+    from config_manager import PASSWORD_INFO_KEY, \
                                PBKDF2_ALGORITHM, PBKDF2_ITERATIONS, PBKDF2_SALT_BYTES
+    from paths import TEMPLATES_DIR, STATIC_DIR, FLASK_KEY_PERSISTENT_PATH, CREDENTIALS_FILE_PATH
     import utils # For formatting/parsing in backend if needed
     # Import models needed for type checking in dict conversion
     from models import ZfsObject, Pool, Dataset, Snapshot
@@ -60,28 +61,10 @@ except ImportError as e:
     PBKDF2_SALT_BYTES = 16
 
 # --- *** Defining the app with folder *** ---
-# --- pyinstaller change: Determine base directory for resources ---
-# This section ensures that template and static files are found correctly
-# whether running from source or as a PyInstaller bundled executable.
-if getattr(sys, 'frozen', False):
-    # Running in a PyInstaller bundle (frozen)
-    base_dir = sys._MEIPASS
-else:
-    # Running in a normal Python environment
-    # Assuming web_ui.py is in a 'src' directory, adjust if necessary
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-
-# --- pyinstaller change: Construct full paths to template, static, and data folders ---
-template_folder = os.path.join(base_dir, 'templates')
-static_folder = os.path.join(base_dir, 'static')
-data_folder = os.path.join(base_dir, 'data') # Define data folder path
-# --- pyinstaller change: End resource path determination ---
-
-
-# --- pyinstaller change: Create Flask app using dynamic paths ---
+# Path logic now centralized in paths.py module
 app = Flask(__name__,
-            template_folder=template_folder,
-            static_folder=static_folder)
+            template_folder=TEMPLATES_DIR,
+            static_folder=STATIC_DIR)
 app.config['JSON_SORT_KEYS'] = False # Keep order in JSON responses
 
 
@@ -90,9 +73,6 @@ app.config['JSON_SORT_KEYS'] = False # Keep order in JSON responses
 # In this Docker setup, the entire container runs as root (see run_docker.sh).
 # Therefore, this web_ui.py process has root privileges within the container
 # and can manage the key file in the persistent volume.
-
-# Path for the persistent secret key within the container, mapped to a Docker volume.
-FLASK_KEY_PERSISTENT_PATH = "/opt/zfdash/data/flask_secret_key.txt"
 
 flask_key = None
 

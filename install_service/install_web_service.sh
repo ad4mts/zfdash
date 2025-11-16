@@ -15,7 +15,7 @@ ENV_DIR="/etc/zfdash"
 ENV_FILE="${ENV_DIR}/web.env"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 INSTALL_BASE_DIR="/opt/${INSTALL_NAME}"
-INSTALLED_APP_DIR="${INSTALL_BASE_DIR}/app"
+# INSTALLED_APP_DIR removed - using flat structure with INSTALL_BASE_DIR directly
 INSTALLED_LAUNCHER="/usr/local/bin/${INSTALL_NAME}"
 
 # --- Web Service Configuration ---
@@ -178,13 +178,13 @@ chmod 640 "${ENV_FILE}"
 # 7. Determine Working Directory
 WORKING_DIR=""
 if [ "${SERVICE_USER}" == "zfdash" ]; then
-    WORKING_DIR="${INSTALLED_APP_DIR}" # System user has no home
+    WORKING_DIR="${INSTALL_BASE_DIR}" # System user has no home
     log_info "Setting WorkingDirectory to ${WORKING_DIR} (system user)"
 elif [ -d "/home/${SERVICE_USER}" ]; then
     WORKING_DIR="/home/${SERVICE_USER}"
     log_info "Setting WorkingDirectory to ${WORKING_DIR}"
-elif [ -d "${INSTALLED_APP_DIR}" ]; then
-    WORKING_DIR="${INSTALLED_APP_DIR}" # Fallback for existing user without standard home
+elif [ -d "${INSTALL_BASE_DIR}" ]; then
+    WORKING_DIR="${INSTALL_BASE_DIR}" # Fallback for existing user without standard home
     log_info "Setting WorkingDirectory to ${WORKING_DIR} (user home not found)"
 else
     log_warn "Could not determine a suitable WorkingDirectory. Service might fail."

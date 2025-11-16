@@ -49,6 +49,9 @@ AUTO_SNAPSHOT_SORT_ORDER = [
 ]
 
 # --- Default Settings ---
-DEFAULT_DAEMON_COMMAND_TIMEOUT = 120 # Default timeout for daemon commands in seconds
+# These are fallback values used when config file doesn't have the setting or value is invalid
+
+DEFAULT_DAEMON_COMMAND_TIMEOUT = 120  # Default timeout for daemon commands in seconds
+DEFAULT_LOGGING_ENABLED = False       # Default state for logging feature (disabled by default)
 
 # --- END OF FILE constants.py ---

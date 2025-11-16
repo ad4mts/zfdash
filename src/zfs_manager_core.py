@@ -13,12 +13,13 @@ import traceback # Added traceback import
 import utils # <-- Import utils here
 from functools import wraps
 
-# Import constants and config manager
+# Import constants, config manager, and path functions
 try:
     import constants
     import config_manager
+    from paths import get_daemon_log_file_path
 except ImportError as e:
-    print(f"CORE: Error importing constants/config_manager: {e}. Cannot continue without them.", file=sys.stderr)
+    print(f"CORE: Error importing constants/config_manager/paths: {e}. Cannot continue without them.", file=sys.stderr)
     raise e # Or sys.exit(1)
 
 # --- Find ZFS/ZPOOL Executables ---
@@ -186,7 +187,7 @@ def _run_command(
             if user_uid < 0:
                  print(f"DAEMON_CORE: Warning: Cannot log command, invalid user UID ({user_uid}) provided.", file=sys.stderr)
             else:
-                log_path = config_manager.get_daemon_log_file_path(user_uid)
+                log_path = get_daemon_log_file_path(user_uid)
                 end_time = datetime.datetime.now()
                 duration = end_time - start_time
                 try:

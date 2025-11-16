@@ -10,14 +10,13 @@ import json       # Added for parsing ready signal
 import time       # Added for timeout
 import select     # Added for non-blocking read
 
+from paths import IS_FROZEN, DAEMON_SCRIPT_PATH
+
 # --- Constants ---
 # Removed SOCKET_NAME, SOCKET_PATH
 
 # Constants moved from gui_runner.py for launch_daemon
 POLKIT_DAEMON_LAUNCH_ACTION_ID = "org.zfsgui.pkexec.daemon.launch"
-# It assumes main.py is in the same directory as daemon_utils.py
-# Adjust if daemon_utils.py is moved relative to main.py
-DAEMON_SCRIPT_PATH = os.path.abspath(os.path.join(os.path.dirname(__file__), "main.py"))
 
 
 # --- Helper Functions ---
@@ -78,10 +77,9 @@ def launch_daemon():
 
     # --- Determine how to call the script/executable ---
     python_executable = sys.executable
-    is_frozen = getattr(sys, 'frozen', False)
     cmd_to_execute = [] # Will hold the final command list
 
-    if is_frozen:
+    if IS_FROZEN:
         # --- Running as a bundled executable ---
         print("DAEMON_UTILS(launch_daemon): Detected frozen executable execution.")
         if not python_executable or not os.path.exists(python_executable):

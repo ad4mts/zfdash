@@ -1,6 +1,7 @@
 # --- START OF FILE src/main.py ---
 import sys
 import os
+import platform
 import traceback # Keep for error reporting if needed
 import argparse # Import argparse
 from typing import Optional
@@ -8,6 +9,7 @@ from typing import Optional
 # Import new dependencies
 import daemon_utils
 from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
+from paths import IS_FROZEN
 
 
 # Basic error display function ONLY for cases where GUI components cannot load
@@ -41,12 +43,11 @@ if __name__ == "__main__":
     parser.add_argument('--port', '-p', default=5001, type=int, help="Port for the Web UI server (default: 5001).")
     parser.add_argument('--debug', action='store_true', help="Enable debug mode for Web UI server.")
 
-    # Filter out PyInstaller arguments if frozen before parsing
+    # Filter out platform-specific launcher arguments when frozen (for future macOS .app bundle support)
     main_args = sys.argv[1:]
-    if getattr(sys, 'frozen', False):
-        # A simple heuristic: ignore arguments starting with '-psn_' which macOS sometimes adds
+    if IS_FROZEN and platform.system() == "Darwin":
+        # macOS Finder injects -psn_<ProcessSerialNumber> when launching .app bundles
         main_args = [arg for arg in main_args if not arg.startswith('-psn_')]
-        # It might need more sophisticated filtering based on how PyInstaller passes args
 
     try:
          args = parser.parse_args(args=main_args)

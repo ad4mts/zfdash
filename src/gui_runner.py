@@ -3,6 +3,8 @@ import sys
 import os
 import traceback
 
+from paths import ICON_PATH
+
 # GUI Imports
 try:
     from PySide6.QtWidgets import QApplication, QMessageBox
@@ -55,26 +57,6 @@ def show_critical_error(title, message):
         print(f"GUI_RUNNER: Error displaying GUI error message: {e}", file=sys.stderr)
 
 
-# --- HELPER: Find Resource Path (Handles Bundled Apps - **WEB_UI STYLE**) ---
-def find_resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller (web_ui style) """
-    try:
-        # PyInstaller creates a temp folder and stores path in _MEIPASS
-        is_frozen = getattr(sys, 'frozen', False)
-
-        if is_frozen:
-             # If the application is run as a bundle, the base path is _MEIPASS
-             base_path = sys._MEIPASS
-        else:
-             # If running from source, the base path is the directory of this script (src/)
-             base_path = os.path.dirname(os.path.abspath(__file__))
-
-        # Join the base path with the relative path provided by the caller
-        resource_path = os.path.join(base_path, relative_path)
-        return resource_path
-    except Exception as e:
-        print(f"ERROR: Failed during resource path calculation for '{relative_path}': {e}", file=sys.stderr)
-
 # --- Main GUI Application Entry Point Function (Modified) ---
 def start_gui(zfs_client: ZfsManagerClient):
     """Sets up and runs the main GUI application, using the provided ZFS client."""
@@ -94,22 +76,12 @@ def start_gui(zfs_client: ZfsManagerClient):
     QApplication.setApplicationVersion(APP_VERSION)
     QApplication.setOrganizationName(APP_ORG)
 
-    # --- Set Window Icon (Using Resource Path Helper - **WEB_UI STYLE**) ---
+    # --- Set Window Icon (Path from paths.py module) ---
     try:
-        icon_filename = "zfs-gui.png"
-        # Define the path *relative* to the base directory (src/ when not frozen, _MEIPASS when frozen)
-        # This path must match the destination structure defined in build.sh's --add-data
-        # Assuming build.sh bundles src/data/icons to data/icons within _MEIPASS
-        icon_relative_path = os.path.join("data", "icons", icon_filename)
-
-        # Use the updated helper function to get the correct absolute path
-        icon_path = find_resource_path(icon_relative_path)
-
-        if os.path.exists(icon_path):
-            app.setWindowIcon(QIcon(icon_path))
+        if os.path.exists(ICON_PATH):
+            app.setWindowIcon(QIcon(ICON_PATH))
         else:
-            print(f"WARN: Window icon not found at calculated path: {icon_path}", file=sys.stderr)
-            print(f"WARN: (Relative path passed to find_resource_path was: {icon_relative_path})", file=sys.stderr)
+            print(f"WARN: Window icon not found at path: {ICON_PATH}", file=sys.stderr)
     except Exception as e:
         print(f"ERROR: Failed to set window icon: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr) # Print traceback for icon errors

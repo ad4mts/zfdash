@@ -3,11 +3,12 @@
 import json
 import os
 import sys
-import platform
 import hashlib
 import binascii # Needed for hex conversion of salt/hash bytes
 import tempfile # For atomic writes
 import logging
+
+from paths import CREDENTIALS_FILE_PATH, PERSISTENT_DATA_DIR, USER_CONFIG_DIR, USER_CONFIG_FILE_PATH
 
 # --- Hashing Constants (Standard Library) ---
 # OWASP recommendation as of early 2023 for PBKDF2-HMAC-SHA256
@@ -16,49 +17,13 @@ PBKDF2_SALT_BYTES = 16
 PBKDF2_ALGORITHM = 'sha256'
 PASSWORD_INFO_KEY = "password_info" # Key in credentials dict for the hash details
 
-# --- System-wide Paths (Used by Daemon running as root) ---
-# Based on install.sh paths
-SYSTEM_INSTALL_BASE_DIR = "/opt/zfdash"
-SYSTEM_DATA_DIR = os.path.join(SYSTEM_INSTALL_BASE_DIR, "data") #Data for the credentials
-CREDENTIALS_FILE_NAME = "credentials.json"
-# Canonical path to the credentials file, owned by root
-CREDENTIALS_FILE_PATH = os.path.join(SYSTEM_DATA_DIR, CREDENTIALS_FILE_NAME)
-
-
 # --- Daemon Logging Setup ---
 # Simplified: Daemon will configure its own logger
 log = logging.getLogger(__name__) # Use standard logging
 
-
-CONFIG_DIR_NAME = "ZfDash"
-CONFIG_FILE_NAME = "config.json"
-LOG_FILE_NAME = "zfdash-daemon.log" # Log file specific to the daemon for a user session
-
-def get_config_dir() -> str:
-    """Gets the platform-specific configuration directory FOR THE CURRENT USER."""
-    # This should run as the GUI user to get the correct path
-    if platform.system() == "Windows":
-        app_data = os.environ.get('APPDATA')
-        if app_data:
-            return os.path.join(app_data, CONFIG_DIR_NAME)
-        else:
-             return os.path.join(os.path.expanduser("~"), ".config", CONFIG_DIR_NAME)
-    elif platform.system() == "Darwin":
-        return os.path.join(os.path.expanduser("~"), "Library", "Application Support", CONFIG_DIR_NAME)
-    else:
-        xdg_config_home = os.environ.get('XDG_CONFIG_HOME')
-        if xdg_config_home:
-            return os.path.join(xdg_config_home, CONFIG_DIR_NAME)
-        else:
-            return os.path.join(os.path.expanduser("~"), ".config", CONFIG_DIR_NAME)
-
-def get_config_file_path() -> str:
-    """Gets the full path to the configuration file."""
-    return os.path.join(get_config_dir(), CONFIG_FILE_NAME)
-
 def load_config() -> dict:
     """Loads the configuration from the JSON file."""
-    config_path = get_config_file_path()
+    config_path = USER_CONFIG_FILE_PATH
     if os.path.exists(config_path):
         try:
             with open(config_path, 'r') as f:
@@ -75,8 +40,8 @@ def load_config() -> dict:
 
 def save_config(config: dict):
     """Saves the configuration dictionary to the JSON file."""
-    config_dir = get_config_dir()
-    config_path = get_config_file_path()
+    config_dir = str(USER_CONFIG_DIR)
+    config_path = USER_CONFIG_FILE_PATH
     try:
         os.makedirs(config_dir, exist_ok=True)
         # Ensure user owns the config dir/file if created by root previously (unlikely now)
@@ -122,35 +87,6 @@ def set_setting(key: str, value):
     _config_cache = config
 
 # --- Log File Path (Daemon uses this) ---
-def get_daemon_log_file_path(uid: int) -> str:
-    """Gets the path for the daemon's log file within the user's runtime directory."""
-    if uid < 0:
-         # Fallback if UID is invalid somehow
-         print("CONFIG: Warning: Invalid UID passed to get_daemon_log_file_path. Using /tmp.", file=sys.stderr)
-         return f"/tmp/{LOG_FILE_NAME}.{uid}"
-
-    runtime_dir = f"/run/user/{uid}"
-    log_path = os.path.join(runtime_dir, LOG_FILE_NAME)
-
-    # Check if runtime dir exists - daemon should create socket there first
-    if not os.path.isdir(runtime_dir):
-         print(f"CONFIG: Warning: Runtime directory {runtime_dir} not found for UID {uid}. Using /tmp for logs.", file=sys.stderr)
-         log_path = f"/tmp/{LOG_FILE_NAME}.{uid}"
-         # Attempt to create /tmp log file with user ownership? Daemon runs as root...
-         # Daemon should handle log file creation and permissions within _run_command's finally block.
-    # No need to os.makedirs here, daemon will handle file opening/creation.
-    return log_path
-
-# --- Log File Path (Log Viewer uses this) ---
-def get_viewer_log_file_path() -> str:
-    """Gets the path for the log file from the viewer's perspective (needs user's UID)."""
-    try:
-        uid = os.getuid()
-        return get_daemon_log_file_path(uid)
-    except Exception as e:
-        print(f"CONFIG: Error getting current user UID for log path: {e}. Falling back to /tmp.", file=sys.stderr)
-        return f"/tmp/{LOG_FILE_NAME}.unknownUID"
-
 # --- ADD Password Management Functions (Daemon-side) ---
 
 def _read_credentials() -> dict:
@@ -174,9 +110,9 @@ def _write_credentials(credentials: dict) -> bool:
     """Writes the credentials dict to the file atomically. Returns True on success."""
     try:
         # Ensure data dir exists (should be created by installer)
-        os.makedirs(SYSTEM_DATA_DIR, mode=0o755, exist_ok=True)
+        os.makedirs(str(PERSISTENT_DATA_DIR), mode=0o755, exist_ok=True)
         # Atomic write using temporary file
-        temp_fd, temp_path = tempfile.mkstemp(dir=SYSTEM_DATA_DIR)
+        temp_fd, temp_path = tempfile.mkstemp(dir=str(PERSISTENT_DATA_DIR))
         with os.fdopen(temp_fd, 'w') as f:
             json.dump(credentials, f, indent=4)
 

@@ -236,14 +236,15 @@ log_info "  --add-data $PYINSTALLER_ADD_DATA_DATA" # Bundle the entire data dire
 log_info "  --name $APP_EXECUTABLE_NAME"
 log_info "  Main Script: $PYINSTALLER_MAIN_SCRIPT"
 
+# Resources (templates, static, data) are now installed by install.sh
+# This significantly reduces executable size by unbundling assets
+# Expected size reduction: ~XX MB bundled → ~YY MB unbundled
+# (Actual sizes depend on template/static content and dependencies)
 run_in_conda_env pyinstaller \
     --noconfirm \
     --distpath "$DIST_OUTPUT_DIR" \
     --workpath "$BUILD_OUTPUT_DIR" \
     --specpath "$SCRIPT_DIR" \
-    --add-data "$PYINSTALLER_ADD_DATA_TEMPLATES" \
-    --add-data "$PYINSTALLER_ADD_DATA_STATIC" \
-    --add-data "$PYINSTALLER_ADD_DATA_DATA" \
     --name "$APP_EXECUTABLE_NAME" \
     "$PYINSTALLER_MAIN_SCRIPT" || exit_error "PyInstaller bundling failed."
 

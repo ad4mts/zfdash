@@ -36,7 +36,6 @@ SOURCE_FLASK_KEY_FILENAME="flask_secret_key.txt" # Added for Flask secret key
 
 # --- Installation Paths (System-wide) ---
 INSTALL_BASE_DIR="/opt/${INSTALL_NAME}"
-INSTALL_APP_SUBDIR="app" # Bundled app code goes here
 INSTALL_DATA_SUBDIR="data" # Assets like icons go here (separate from app code)
 INSTALL_ICON_SUBDIR="icons"
 INSTALL_LAUNCHER_DIR="/usr/local/bin"
@@ -58,7 +57,7 @@ SOURCE_ICON_PATH="${SOURCE_DATA_DIR}/icons/${SOURCE_ICON_FILENAME}" # Icon sourc
 SOURCE_POLICY_PATH="${SOURCE_DATA_DIR}/policies/${SOURCE_POLICY_FILENAME}" # Policy source path from src/data
 SOURCE_CREDENTIALS_PATH="${SOURCE_DATA_DIR}/${SOURCE_CREDENTIALS_FILENAME}" # Default credentials source path
 SOURCE_FLASK_KEY_PATH="${SOURCE_DATA_DIR}/${SOURCE_FLASK_KEY_FILENAME}" # Flask key source path
-INSTALL_APP_DIR="${INSTALL_BASE_DIR}/${INSTALL_APP_SUBDIR}" # Bundled app install location
+# INSTALL_APP_DIR removed - using flat structure with INSTALL_BASE_DIR directly
 INSTALL_DATA_DIR="${INSTALL_BASE_DIR}/${INSTALL_DATA_SUBDIR}" # Directory for installed assets
 INSTALL_ICON_DIR="${INSTALL_DATA_DIR}/${INSTALL_ICON_SUBDIR}" # Directory for installed icons
 INSTALLED_ICON_PATH="${INSTALL_ICON_DIR}/${SOURCE_ICON_FILENAME}" # Fixed icon install path
@@ -116,7 +115,29 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 log_info "Running as root. Proceeding..."
 
-# 2. Verify Source Build Directory Exists
+# 2. Check if ZfDash Daemon is Running
+log_info "Checking if ZfDash daemon is currently running..."
+if pgrep -f "zfs_daemon.py" > /dev/null 2>&1; then
+    log_warn "ZfDash daemon process is currently running."
+    log_warn "Installing while the daemon is active may cause issues or data loss."
+    read -p "Do you want to continue anyway? (NOT RECOMMENDED) (y/N): " daemon_confirm
+    if [[ ! "$daemon_confirm" =~ ^[Yy]$ ]]; then
+        log_info "Installation cancelled by user."
+        echo ""
+        echo "Please stop the daemon before installing:"
+        echo "  - If running as a service: sudo systemctl stop zfdash-web.service"
+        echo "  - If running manually: Close all ZfDash GUI/Web instances"
+        echo ""
+        exit 0
+    else
+        log_warn "User chose to proceed despite daemon running. Installation may be unstable."
+        sleep 2
+    fi
+else
+    log_info "No running daemon detected. Safe to proceed."
+fi
+
+# 3. Verify Source Build Directory Exists
 log_info "Verifying presence of pre-built application..."
 if [ ! -d "$SOURCE_BUNDLED_APP_DIR" ]; then
     exit_error "Bundled application directory not found at expected location: ${SOURCE_BUNDLED_APP_DIR}\nPlease run the build script (build.sh) first."
@@ -142,8 +163,18 @@ if [ ! -f "$SOURCE_CREDENTIALS_PATH" ]; then
 fi
 # --- END MODIFICATION ---
 
-# 3. Check/Offer Uninstall Existing
+# 4. Check/Offer Uninstall Existing
 log_info "Checking for existing installation..."
+# Check for old installation structure (pre-refactoring with /opt/zfdash/app)
+if [ -d "${INSTALL_BASE_DIR}/app" ]; then
+    log_warn "============================================================"
+    log_warn "MAJOR UPGRADE DETECTED: Old installation structure found!"
+    log_warn "This installation uses a new flat structure."
+    log_warn "The old /opt/zfdash/app directory will be replaced."
+    log_warn "============================================================"
+    echo ""
+    sleep 2
+fi
 if [ -d "$INSTALL_BASE_DIR" ] || [ -f "$INSTALL_LAUNCHER_PATH" ] || [ -f "$INSTALL_DESKTOP_FILE_PATH" ] || [ -f "$INSTALL_POLICY_PATH" ]; then
     log_warn "An existing ${APP_NAME} installation or leftover components were found."; read -p "Do you want to remove the existing components before installing? (y/N): " remove_confirm
     if [[ "$remove_confirm" =~ ^[Yy]$ ]]; then log_info "Uninstalling existing version..."; if ! uninstall_existing; then exit_error "Uninstall of existing version failed. Aborting installation."; fi; log_info "Existing components removed.";
@@ -151,72 +182,106 @@ if [ -d "$INSTALL_BASE_DIR" ] || [ -f "$INSTALL_LAUNCHER_PATH" ] || [ -f "$INSTA
 else log_info "No existing installation found."; fi
 
 
-# 4. Create Installation Directories
+# 5. Create Installation Directories
 log_info "Creating installation directories..."
-# --- MODIFICATION: Create app, data, and icon dirs explicitly ---
-mkdir -vp "$INSTALL_BASE_DIR" "$INSTALL_APP_DIR" "$INSTALL_ICON_DIR" "$INSTALL_LAUNCHER_DIR" "$INSTALL_DESKTOP_DIR" || exit_error "Failed to create installation directories."
-# --- END MODIFICATION ---
+# Create necessary installation directories (flat structure - no /app subdirectory)
+mkdir -vp "$INSTALL_BASE_DIR" "$INSTALL_DATA_DIR" "$INSTALL_ICON_DIR" "$INSTALL_LAUNCHER_DIR" "$INSTALL_DESKTOP_DIR" || exit_error "Failed to create installation directories."
 
 
-# 5. Copy Bundled Application Code
-log_info "Copying bundled application code from ${SOURCE_BUNDLED_APP_DIR} to ${INSTALL_APP_DIR}..."
-# This rsync command copies the *contents* of SOURCE_BUNDLED_APP_DIR into INSTALL_APP_DIR
-if ! rsync -a --delete "${SOURCE_BUNDLED_APP_DIR}/" "${INSTALL_APP_DIR}/"; then exit_error "Failed to copy bundled application files."; fi
-log_info "Application code copied."
+# 6. Copy Bundled Application (Executable + Dependencies)
+log_info "Copying bundled application from ${SOURCE_BUNDLED_APP_DIR} to ${INSTALL_BASE_DIR}..."
+# Copy entire PyInstaller bundle including executable and _internal/ directory with dependencies
+# The trailing slashes mean "copy contents of source into destination"
+if ! rsync -av --delete "${SOURCE_BUNDLED_APP_DIR}/" "${INSTALL_BASE_DIR}/"; then exit_error "Failed to copy bundled application."; fi
+log_info "Application bundle copied (includes executable and _internal/ dependencies)."
 
 
-# 6. Copy Data Files (Icon) from Source Tree to Fixed Location
-# --- MODIFICATION: Copy icon from source to fixed install location ---
-if [ -f "$SOURCE_ICON_PATH" ]; then
-    log_info "Copying icon file from ${SOURCE_ICON_PATH} to ${INSTALL_ICON_DIR}...";
-    cp -v "$SOURCE_ICON_PATH" "${INSTALL_ICON_DIR}/" || log_warn "Failed to copy icon file to ${INSTALL_ICON_DIR}.";
+# 7. Copy Unbundled Resources (Templates, Static, Data)
+# These resources are no longer bundled in the PyInstaller executable
+log_info "Copying unbundled resources from source tree..."
+
+# 7a. Copy templates directory
+SOURCE_TEMPLATES_DIR="${SCRIPT_DIR}/src/templates"
+INSTALL_TEMPLATES_DIR="${INSTALL_BASE_DIR}/templates"
+if [ -d "$SOURCE_TEMPLATES_DIR" ]; then
+    log_info " - Copying templates from ${SOURCE_TEMPLATES_DIR} to ${INSTALL_TEMPLATES_DIR}..."
+    if ! rsync -av --delete "${SOURCE_TEMPLATES_DIR}/" "${INSTALL_TEMPLATES_DIR}/"; then 
+        log_error "Failed to copy templates directory.";
+        exit_error "Templates copy failed. Installation cannot continue.";
+    fi
+    log_info "   Templates copied successfully."
 else
-    log_warn "Source icon file not found at ${SOURCE_ICON_PATH}, skipping icon copy.";
+    log_warn "Source templates directory not found at ${SOURCE_TEMPLATES_DIR}. Web UI may not function correctly."
 fi
-# --- END MODIFICATION ---
+
+# 7b. Copy static directory
+SOURCE_STATIC_DIR="${SCRIPT_DIR}/src/static"
+INSTALL_STATIC_DIR="${INSTALL_BASE_DIR}/static"
+if [ -d "$SOURCE_STATIC_DIR" ]; then
+    log_info " - Copying static files from ${SOURCE_STATIC_DIR} to ${INSTALL_STATIC_DIR}..."
+    if ! rsync -av --delete "${SOURCE_STATIC_DIR}/" "${INSTALL_STATIC_DIR}/"; then 
+        log_error "Failed to copy static directory.";
+        exit_error "Static files copy failed. Installation cannot continue.";
+    fi
+    log_info "   Static files copied successfully."
+else
+    log_warn "Source static directory not found at ${SOURCE_STATIC_DIR}. Web UI may not function correctly."
+fi
+
+# 7c. Copy data directory (icons, policies, etc.)
+# This replaces the old individual file copy approach
+if [ -d "$SOURCE_DATA_DIR" ]; then
+    log_info " - Copying data directory from ${SOURCE_DATA_DIR} to ${INSTALL_DATA_DIR}..."
+    if ! rsync -av --delete "${SOURCE_DATA_DIR}/" "${INSTALL_DATA_DIR}/"; then 
+        log_error "Failed to copy data directory.";
+        exit_error "Data directory copy failed. Installation cannot continue.";
+    fi
+    log_info "   Data directory copied successfully (includes icons, policies)."
+else
+    exit_error "Source data directory not found at ${SOURCE_DATA_DIR}. Cannot proceed with installation."
+fi
+
+log_info "All unbundled resources copied."
 
 
-# 7. Install Polkit Policy from Source Tree
-if [ ! -d "$INSTALL_POLICY_DIR" ]; then log_warn "System policy directory does not exist: $INSTALL_POLICY_DIR. Creating..."; mkdir -p "$INSTALL_POLICY_DIR" || log_warn "Failed to create policy dir."; fi
-# Ensure policy is copied from the correct source path
-if [ -f "$SOURCE_POLICY_PATH" ]; then
-    log_info "Installing Polkit policy file from ${SOURCE_POLICY_PATH} to $INSTALL_POLICY_PATH...";
-    if cp -v "$SOURCE_POLICY_PATH" "$INSTALL_POLICY_PATH"; then
-        log_info "Polkit policy file copied successfully. Permissions will be set later.";
+# [OBSOLETE STEPS 8-9 REMOVED]
+# Icon and policy files are now copied as part of the data directory rsync in step 7c.
+# Individual file copies are no longer needed.
+
+# 8. Install Polkit Policy to System Directory
+# Policy file was copied to data/ in step 7c, now create symlink to system location
+if [ ! -d "$INSTALL_POLICY_DIR" ]; then 
+    log_warn "System policy directory does not exist: $INSTALL_POLICY_DIR. Creating..."; 
+    mkdir -p "$INSTALL_POLICY_DIR" || log_warn "Failed to create policy dir."; 
+fi
+# Check if policy exists in installed data dir (copied in step 7c)
+INSTALLED_POLICY_SOURCE="${INSTALL_DATA_DIR}/policies/${SOURCE_POLICY_FILENAME}"
+if [ -f "$INSTALLED_POLICY_SOURCE" ]; then
+    log_info "Creating Polkit policy symlink from ${INSTALLED_POLICY_SOURCE} to $INSTALL_POLICY_PATH...";
+    # Remove old policy file/link if exists
+    if [ -e "$INSTALL_POLICY_PATH" ] || [ -L "$INSTALL_POLICY_PATH" ]; then
+        rm -f "$INSTALL_POLICY_PATH" || log_warn "Failed to remove old policy at $INSTALL_POLICY_PATH"
+    fi
+    # Create symlink
+    if ln -s "$INSTALLED_POLICY_SOURCE" "$INSTALL_POLICY_PATH"; then
+        log_info "Polkit policy symlink created successfully.";
     else
-        log_warn "Failed to copy Polkit policy file.";
+        log_warn "Failed to create Polkit policy symlink. Trying direct copy as fallback...";
+        cp -v "$INSTALLED_POLICY_SOURCE" "$INSTALL_POLICY_PATH" || log_error "Failed to copy policy file."
     fi
 else
-    exit_error "Source Polkit policy file not found: ${SOURCE_POLICY_PATH}";
+    log_error "Policy file not found at ${INSTALLED_POLICY_SOURCE} after data directory copy.";
+    log_error "This should not happen. Check step 7c data directory copy.";
 fi
 
-# 7b. Install Default Credentials File from Source Tree
-if [ -f "$SOURCE_CREDENTIALS_PATH" ]; then
-    log_info "Installing default credentials file from ${SOURCE_CREDENTIALS_PATH} to ${INSTALL_DATA_DIR}..."
-    # Ensure the target data directory exists (created in step 4)
-    if [ ! -d "$INSTALL_DATA_DIR" ]; then
-        log_warn "Installation data directory ${INSTALL_DATA_DIR} does not exist. Creating..."
-        mkdir -p "$INSTALL_DATA_DIR" || log_warn "Failed to create data directory."
-    fi
-    # Copy the file
-    if cp -v "$SOURCE_CREDENTIALS_PATH" "$INSTALL_CREDENTIALS_PATH"; then
-        log_info "Default credentials file copied successfully. Permissions will be set later.";
-    else
-        log_warn "Failed to copy default credentials file.";
-    fi
-else
-    log_info "Source credentials file not found at ${SOURCE_CREDENTIALS_PATH}, skipping installation.";
-    log_info "The daemon will create a default file if necessary on first run.";
-fi
+# [OBSOLETE STEPS 9-10 REMOVED]
+# Credentials file and Flask secret key handling changed:
+# - credentials.json is now copied from src/data/ in step 7c (if exists in source)
+# - Flask secret key generation moved to first-run by the application
+# This simplifies installation and ensures proper initialization
 
-# 7c. Generate and Install Flask Secret Key
+# 9. Generate and Install Flask Secret Key
 log_info "Generating and installing Flask secret key..."
-# Ensure the target data directory exists (created in step 4)
-if [ ! -d "$INSTALL_DATA_DIR" ]; then
-    log_warn "Installation data directory ${INSTALL_DATA_DIR} does not exist. Creating..."
-    mkdir -p "$INSTALL_DATA_DIR" || log_warn "Failed to create data directory."
-fi
-
 # Generate a random 64-character secret key
 if command_exists openssl; then
     FLASK_SECRET_KEY=$(openssl rand -base64 48 | tr -dc 'a-zA-Z0-9' | head -c 64)
@@ -225,7 +290,7 @@ else
     FLASK_SECRET_KEY=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | head -c 64)
 fi
 
-# Write the key to the file
+# Write the key to the file (data directory was created and populated in step 7c)
 if echo "${FLASK_SECRET_KEY}" > "${INSTALL_FLASK_KEY_PATH}"; then
     log_info "Generated Flask secret key and saved to ${INSTALL_FLASK_KEY_PATH}."
     log_info "Secret key will have permissions set to 644 later during permissions phase."
@@ -235,9 +300,9 @@ else
 fi
 
 
-# 8. Create Launcher Script (No changes needed here)
+# 10. Create Launcher Script
 log_info "Creating launcher script at $INSTALL_LAUNCHER_PATH..."
-INSTALLED_EXECUTABLE_PATH="${INSTALL_APP_DIR}/${APP_EXECUTABLE_NAME}"
+INSTALLED_EXECUTABLE_PATH="${INSTALL_BASE_DIR}/${APP_EXECUTABLE_NAME}"
 cat > "$INSTALL_LAUNCHER_PATH" <<EOF
 #!/bin/bash
 # Launcher for ${APP_NAME} (${INSTALL_NAME}) - Version ${APP_VERSION}
@@ -254,7 +319,7 @@ if [ $? -ne 0 ]; then exit_error "Failed to write launcher script content."; fi
 log_info "Launcher script content written. Permissions will be set later.";
 
 
-# 9. Create Desktop Entry
+# 11. Create Desktop Entry
 log_info "Creating desktop entry at $INSTALL_DESKTOP_FILE_PATH..."
 # --- MODIFICATION: Use the fixed INSTALLED_ICON_PATH ---
 ICON_LINE=""; if [ -f "$INSTALLED_ICON_PATH" ]; then ICON_LINE="Icon=${INSTALLED_ICON_PATH}"; else log_warn "Installed icon file not found at ${INSTALLED_ICON_PATH}."; ICON_LINE="# Icon=${INSTALL_NAME}"; fi
@@ -279,7 +344,7 @@ log_info "Desktop entry content written. Permissions will be set later.";
 
 
 
-# 10. Create Uninstall Script
+# 12. Create Uninstall Script
 log_info "Creating uninstall script at $UNINSTALL_SCRIPT_PATH..."
 # --- MODIFICATION: Uninstall script removes the base dir, which includes the copied icon and credentials ---
 cat > "$UNINSTALL_SCRIPT_PATH" <<EOF
@@ -323,7 +388,7 @@ if [ $? -ne 0 ]; then exit_error "Failed to write uninstall script content."; fi
 log_info "Uninstall script content written. Permissions will be set later.";
 
 
-# 11. Set Final Permissions for Installation Directory
+# 13. Set Final Permissions for Installation Directory
 log_info "Setting final permissions for installation files and directories..."
 
 # Set ownership/permissions for files OUTSIDE the main installation directory first
@@ -342,19 +407,22 @@ if [ -f "$INSTALL_POLICY_PATH" ]; then
 fi
 
 # Set ownership/permissions for files INSIDE the main installation directory
+# This includes: executable, templates/, static/, data/ (with icons, policies, credentials, flask key)
 log_info " - Setting permissions for application directory: ${INSTALL_BASE_DIR}..."
 if chown -R root:root "$INSTALL_BASE_DIR"; then
     # ---------Set base directory permissions (755)---------
+    # This applies to all directories including templates/, static/, data/, data/icons/, data/policies/
     find "$INSTALL_BASE_DIR" -type d -exec chmod 755 {} \; || log_warn "Failed setting base directory permissions."
     # ---------Set default file permissions (644)---------
+    # This applies to all files including templates, static assets, icons, policies, credentials
     find "$INSTALL_BASE_DIR" -type f -exec chmod 644 {} \; || log_warn "Failed setting default file permissions."
     #------------------------------------------------------
 
     # Apply specific permissions overrides within the base directory:
     log_info "   - Applying specific overrides within ${INSTALL_BASE_DIR}..."
     # - Bundled executable (755)
-    if [ -f "${INSTALL_APP_DIR}/${APP_EXECUTABLE_NAME}" ]; then
-        chmod 755 "${INSTALL_APP_DIR}/${APP_EXECUTABLE_NAME}" || log_warn "Failed setting executable permission on main app: ${INSTALL_APP_DIR}/${APP_EXECUTABLE_NAME}"
+    if [ -f "${INSTALL_BASE_DIR}/${APP_EXECUTABLE_NAME}" ]; then
+        chmod 755 "${INSTALL_BASE_DIR}/${APP_EXECUTABLE_NAME}" || log_warn "Failed setting executable permission on main app: ${INSTALL_BASE_DIR}/${APP_EXECUTABLE_NAME}"
     fi
     # - Credentials file (644) - for now 644! (strong hash) web_ui runs as user!
     if [ -f "$INSTALL_CREDENTIALS_PATH" ]; then
@@ -364,8 +432,8 @@ if chown -R root:root "$INSTALL_BASE_DIR"; then
     if [ -f "$INSTALL_FLASK_KEY_PATH" ]; then
         chmod 644 "$INSTALL_FLASK_KEY_PATH" || log_warn "Failed setting 644 permission on Flask secret key file: $INSTALL_FLASK_KEY_PATH"
     fi
-    # - Uninstall script (755) - Overrides the find above (will be created in the next step)
-    if [ -f "$UNINSTALL_SCRIPT_PATH" ]; then # Check just in case, though it's created after this section
+    # - Uninstall script (755) - Overrides the find above (will be created in the previous step)
+    if [ -f "$UNINSTALL_SCRIPT_PATH" ]; then # Check just in case, though it's created in step 13
         chmod 755 "$UNINSTALL_SCRIPT_PATH" || log_warn "Failed setting executable permission on uninstaller: $UNINSTALL_SCRIPT_PATH"
     fi
     log_info "All application directory permissions set."
@@ -374,32 +442,32 @@ else
 fi
 
 
-#Final Steps
+# 14. Final Steps
 # Update Desktop/Icon Caches After Install
 log_info "Updating desktop database and icon caches (optional)..."
 if command_exists update-desktop-database && [ -d "$INSTALL_DESKTOP_DIR" ]; then update-desktop-database -q "$INSTALL_DESKTOP_DIR" || log_warn "update-desktop-database command failed."; fi
 if command_exists gtk-update-icon-cache && [ -d "/usr/share/icons/hicolor" ]; then gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || log_warn "gtk-update-icon-cache command failed."; fi
 
-# --- Final Message ---
+# 15. Final Message
 echo ""
 log_info "--- ${APP_NAME} Installation Complete ---"
 echo ""
 # Check if executable exists before showing message
-if [ -f "${INSTALL_APP_DIR}/${APP_EXECUTABLE_NAME}" ]; then
+if [ -f "${INSTALL_BASE_DIR}/${APP_EXECUTABLE_NAME}" ]; then
     echo "Installed To:        ${INSTALL_BASE_DIR}"
-    echo "Bundled App Exec:  ${INSTALL_APP_DIR}/${APP_EXECUTABLE_NAME}"
-    echo "Launcher Command:  ${INSTALL_NAME}"
-    echo "Launcher Path:     ${INSTALL_LAUNCHER_PATH}"
-    echo "Desktop Entry:     ${INSTALL_DESKTOP_FILE_PATH}"
-    echo "Icon Location:     ${INSTALLED_ICON_PATH}" # Shows the fixed path
-    echo "Credentials:     ${INSTALL_CREDENTIALS_PATH} (if installed from source)" # Added info
-    echo "Flask Secret Key: ${INSTALL_FLASK_KEY_PATH}" # Added info
+    echo "Executable:          ${INSTALL_BASE_DIR}/${APP_EXECUTABLE_NAME}"
+    echo "Launcher Command:    ${INSTALL_NAME}"
+    echo "Launcher Path:       ${INSTALL_LAUNCHER_PATH}"
+    echo "Desktop Entry:       ${INSTALL_DESKTOP_FILE_PATH}"
+    echo "Icon Location:       ${INSTALLED_ICON_PATH}" # Shows the fixed path
+    echo "Credentials:         ${INSTALL_CREDENTIALS_PATH} (if exists in source)" # Added info
+    echo "Flask Secret Key:    ${INSTALL_FLASK_KEY_PATH}" # Added info
     echo ""
     echo "You should now find '${APP_NAME}' in your application menu or run '${INSTALL_NAME}' from the terminal."
     echo "To uninstall, run: sudo ${UNINSTALL_SCRIPT_PATH}"
 else
     log_error "Installation finished, but main executable seems missing!"
-    log_error "Please check installation logs. Location: ${INSTALL_APP_DIR}/${APP_EXECUTABLE_NAME}"
+    log_error "Please check installation logs. Location: ${INSTALL_BASE_DIR}/${APP_EXECUTABLE_NAME}"
 fi
 echo ""
 log_info "--- Installation Phase Finished ---"
