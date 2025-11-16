@@ -38,6 +38,8 @@ if __name__ == "__main__":
     parser.add_argument('--daemon', action='store_true', help="Run the background daemon process (requires --uid and --gid).")
     parser.add_argument('--uid', type=int, help="User ID for daemon to target (required with --daemon).")
     parser.add_argument('--gid', type=int, help="Group ID for daemon to target (required with --daemon).")
+    parser.add_argument('--listen-socket', type=str, metavar='PATH', help="[Daemon] Create and listen on Unix socket at PATH (daemon server mode).")
+    parser.add_argument('--socket', action='store_true', help="[Client] Use Unix sockets instead of pipes for IPC (experimental).")
     parser.add_argument('--web', '-w', action='store_true', help="Run the Web UI interface.")
     parser.add_argument('--host', default='127.0.0.1', help="Host for the Web UI server (default: 127.0.0.1).")
     parser.add_argument('--port', '-p', default=5001, type=int, help="Port for the Web UI server (default: 5001).")
@@ -50,7 +52,12 @@ if __name__ == "__main__":
         main_args = [arg for arg in main_args if not arg.startswith('-psn_')]
 
     try:
-         args = parser.parse_args(args=main_args)
+         # Use parse_known_args when in daemon mode to allow daemon-specific arguments
+         # (e.g., --listen-socket <path>) to pass through to zfs_daemon.main()
+         if '--daemon' in main_args:
+             args, unknown = parser.parse_known_args(args=main_args)
+         else:
+             args = parser.parse_args(args=main_args)
     except SystemExit:
          # parser.parse_args exits if '--help' is used, allow this.
          sys.exit(0)
@@ -91,11 +98,11 @@ if __name__ == "__main__":
             # Launch the daemon using daemon_utils
             # This call now blocks until the daemon is ready or fails/times out
             print("MAIN: Calling daemon_utils.launch_daemon()...", file=sys.stderr)
-            daemon_process, stdin_fd, stdout_fd = daemon_utils.launch_daemon()
+            daemon_process, transport = daemon_utils.launch_daemon(use_socket=args.socket)
             print(f"MAIN: daemon_utils.launch_daemon() returned successfully (PID: {daemon_process.pid}). Creating client...", file=sys.stderr)
 
             # Create the ZFS Manager Client instance
-            zfs_manager_client = ZfsManagerClient(daemon_process, stdin_fd, stdout_fd)
+            zfs_manager_client = ZfsManagerClient(daemon_process, transport)
 
             print("MAIN: ZFS Manager client created. Proceeding with UI launch.", file=sys.stderr)
 

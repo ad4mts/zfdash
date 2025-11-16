@@ -8,6 +8,10 @@ import argparse
 
 from paths import DAEMON_STDERR_LOG
 
+# SECURITY: Only import server-side transport classes.
+# This module contains NO daemon launching or privilege escalation code.
+from ipc_server import PipeServerTransport, SocketServerTransport
+
 # Assuming zfs_manager_core is in the same directory or PYTHONPATH
 import zfs_manager_core
 from zfs_manager_core import ZfsCommandError
@@ -40,17 +44,42 @@ def main():
     """Main daemon execution function, communicating via stdin/stdout pipes."""
     global target_uid, target_gid, daemon_log_file_path
 
-    parser = argparse.ArgumentParser(description="ZFS GUI Background Daemon (Pipe IPC)")
+    parser = argparse.ArgumentParser(description="ZFS GUI Background Daemon")
     # These arguments are expected to be passed via pkexec by daemon_utils.py
     parser.add_argument('--uid', required=True, type=int, help="Real User ID of the GUI/WebUI process owner")
     parser.add_argument('--gid', required=True, type=int, help="Real Group ID of the GUI/WebUI process owner")
     parser.add_argument('--daemon', action='store_true', help="Flag indicating daemon mode (for main.py)")
+    parser.add_argument('--listen-socket', type=str, help="Unix socket path to create and listen on (if not provided, uses stdin/stdout pipes)")
     args = parser.parse_args()
     target_uid = args.uid
     target_gid = args.gid
 
-    # Use stderr for all daemon logging output
-    print(f"DAEMON: Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [Pipe Mode]...", file=sys.stderr)
+    # --- Setup stderr logging: Write to BOTH terminal and log file ---
+    original_stderr = sys.stderr
+    
+    # Simple wrapper that writes to multiple destinations
+    class Tee:
+        def __init__(self, *files):
+            self.files = files
+        def write(self, data):
+            for f in self.files:
+                try: f.write(data); f.flush()
+                except: pass
+        def flush(self):
+            for f in self.files:
+                try: f.flush()
+                except: pass
+    
+    try:
+        try: os.remove(DAEMON_STDERR_LOG)  # Remove old log (avoid permission errors)
+        except: pass
+        log_file = open(DAEMON_STDERR_LOG, 'w', buffering=1, encoding='utf-8', errors='replace')
+        os.chmod(DAEMON_STDERR_LOG, 0o666)  # Readable by all for debugging
+        sys.stderr = Tee(original_stderr, log_file)  # Send stderr to both terminal and file
+        print(f"DAEMON: Logging stderr to {DAEMON_STDERR_LOG} + terminal", file=sys.stderr)
+    except Exception as e:
+        print(f"DAEMON: Logging stderr setup failed: {e}", file=original_stderr)
+    # --- End logging setup ---
 
     # Initial Checks
     if os.geteuid() != 0:
@@ -73,37 +102,54 @@ def main():
     # --- End Credentials Check ---
 
 
-    # --- DEBUG: Redirect stderr to daemon log for troubleshooting issues ---
-    # This block is for debug purposes ONLY. Dont remove it!
+    # --- Setup Communication Channel (Simplified with ipc_server) ---
     try:
-        sys.stderr = open(DAEMON_STDERR_LOG, 'a', buffering=1)  # Line buffered
+        if args.listen_socket:
+            # Socket server mode
+            print(f"DAEMON: Creating socket server: {args.listen_socket}", file=sys.stderr)
+            transport = SocketServerTransport(
+                socket_path=args.listen_socket,
+                uid=target_uid,
+                gid=target_gid
+            )
+            transport_mode = f"Socket: {args.listen_socket}"
+        else:
+            # Pipe mode (stdin/stdout)
+            print("DAEMON: Using pipe transport (stdin/stdout)", file=sys.stderr)
+            transport = PipeServerTransport()
+            transport_mode = "Pipe (stdin/stdout)"
+        
+        print(f"DAEMON: Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", file=sys.stderr)
+        
+        # Wait for client connection (blocks for socket, no-op for pipes)
+        transport.accept_connection()
+        print("DAEMON: Client connected", file=sys.stderr)
+        
+        # Send ready signal (daemon-specific protocol handshake)
+        transport.send_line(json.dumps({"status": "ready"}))
+        print("DAEMON: Sent ready signal to client", file=sys.stderr)
+        
+    except KeyboardInterrupt:
+        print("\nDAEMON: Interrupted by user (Ctrl+C), shutting down...", file=sys.stderr)
+        transport.close()
+        sys.exit(0)
     except Exception as e:
-        # If redirection fails, print to original stderr
-        print(f"DAEMON: Failed to redirect stderr: {e}", file=sys.__stderr__)
-    # --- END DEBUG BLOCK ---
+        print(f"DAEMON: Failed to setup transport: {e}", file=sys.stderr)
+        sys.exit(1)
 
-
-    # --- Communication Loop (stdin/stdout) ---
-    print("DAEMON: Entering communication loop (stdin/stdout)...", file=sys.stderr)
-
-    # --- Send Ready Signal ---
+    # --- Command Loop (Simplified with transport) ---
     try:
-        ready_signal = json.dumps({"status": "ready"}) + '\n'
-        sys.stdout.write(ready_signal)
-        sys.stdout.flush()
-        print("DAEMON: Sent ready signal to parent.", file=sys.stderr)
-    except Exception as e:
-        print(f"DAEMON: Error sending ready signal: {e}", file=sys.stderr)
-        sys.exit(1) # Exit if we can't even send the ready signal
-    # --- END Ready Signal ---
-
-    try:
-        for line in sys.stdin:
-            if not line.strip(): # Skip empty lines
-                continue
-            print(f"DAEMON: Received line: {line.strip()}", file=sys.stderr) # Log received data
+        while True:
+            line = transport.receive_line()
+            if not line or not line.strip():  # EOF or empty line
+                if not line:  # EOF - client disconnected
+                    print("DAEMON: Client disconnected (EOF)", file=sys.stderr)
+                    break
+                continue  # Skip empty lines
+            
+            print(f"DAEMON: Received line: {line.strip()}", file=sys.stderr)
             response = {}
-            request_id = None # Initialize request_id for this request
+            request_id = None  # Initialize request_id for this request
             try:
                 request = json.loads(line)
                 command = request.get("command")
@@ -120,10 +166,13 @@ def main():
                     print("DAEMON: Received shutdown command. Preparing to exit.", file=sys.stderr)
                     response = {"status": "success", "data": "Daemon shutting down gracefully."}
                     # Write final response before exiting
-                    response["meta"] = {"request_id": request_id} # Add meta with request_id
-                    response_json = json.dumps(response) + '\n'
-                    sys.stdout.write(response_json)
-                    sys.stdout.flush()
+                    response["meta"] = {"request_id": request_id}  # Add meta with request_id
+                    try:
+                        transport.send_line(json.dumps(response))
+                        print("DAEMON: Shutdown response sent successfully.", file=sys.stderr)
+                    except (BrokenPipeError, OSError) as e:
+                        # Client may have already closed - that's OK for shutdown
+                        print(f"DAEMON: Client disconnected before shutdown response: {e}", file=sys.stderr)
                     print("DAEMON: Exiting cleanly after shutdown command.", file=sys.stderr)
                     sys.exit(0)
 
@@ -176,17 +225,15 @@ def main():
             # --- Send Response ---
             if response:
                 try:
-                    response_json = json.dumps(response) + '\n'
-                    sys.stdout.write(response_json)
-                    sys.stdout.flush()
-                    print(f"DAEMON: Sent response for ReqID={request_id}, Cmd='{command if 'command' in request else 'unknown'}'", file=sys.stderr) # Log sent data
+                    transport.send_line(json.dumps(response))
+                    print(f"DAEMON: Sent response for ReqID={request_id}, Cmd='{command if 'command' in request else 'unknown'}'", file=sys.stderr)
                 except Exception as e:
-                    print(f"DAEMON: Error sending response via stdout: {e}. Response was: {response}", file=sys.stderr)
-                    print("DAEMON: Exiting due to stdout write error.", file=sys.stderr)
+                    print(f"DAEMON: Error sending response: {e}. Response was: {response}", file=sys.stderr)
+                    print("DAEMON: Exiting due to write error.", file=sys.stderr)
                     sys.exit(1)
 
     except EOFError:
-        print("DAEMON: EOF received on stdin (parent likely closed pipe). Exiting.", file=sys.stderr)
+        print("DAEMON: EOF received on input stream (parent likely closed connection). Exiting.", file=sys.stderr)
     except KeyboardInterrupt:
         print("DAEMON: KeyboardInterrupt received. Exiting.", file=sys.stderr)
     except Exception as e:
@@ -195,7 +242,12 @@ def main():
         traceback.print_exc(file=sys.stderr)
     finally:
         print("DAEMON: Exiting main function.", file=sys.stderr)
-        # No socket cleanup needed
+        # Cleanup transport (handles socket file removal automatically)
+        try:
+            transport.close()
+            print("DAEMON: Transport closed successfully", file=sys.stderr)
+        except Exception as e:
+            print(f"DAEMON: Error closing transport: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

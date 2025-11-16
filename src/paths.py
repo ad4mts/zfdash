@@ -76,6 +76,32 @@ def get_viewer_log_file_path() -> str:
         return f"/tmp/{LOG_FILE_NAME}.unknownUID"
 
 
+def get_daemon_socket_path(uid: int) -> str:
+    """
+    Gets the path for the daemon's Unix socket for IPC.
+    
+    Returns the socket path in the user's runtime directory.
+    On Linux this is typically /run/user/{uid}/zfdash.sock.
+    
+    Args:
+        uid: The user ID for which to get the socket path
+        
+    Returns:
+        str: Absolute path to the daemon socket file
+    """
+    if uid < 0:
+        print("CONFIG: Warning: Invalid UID passed to get_daemon_socket_path. Using /tmp.", file=sys.stderr)
+        return f"/tmp/zfdash.sock.{uid}"
+    
+    # Use XDG_RUNTIME_DIR if available, otherwise /run/user/{uid}
+    runtime_dir = os.environ.get('XDG_RUNTIME_DIR')
+    if not runtime_dir or not os.path.isdir(runtime_dir):
+        runtime_dir = f"/run/user/{uid}"
+    
+    socket_path = os.path.join(runtime_dir, "zfdash.sock")
+    return socket_path
+
+
 # Export list for module
 __all__ = [
     'IS_FROZEN', 'IS_DOCKER',
@@ -85,5 +111,5 @@ __all__ = [
     'CREDENTIALS_FILE_PATH', 'FLASK_KEY_PERSISTENT_PATH',
     'USER_CONFIG_DIR', 'USER_CONFIG_FILE_PATH',
     'DAEMON_SCRIPT_PATH', 'DAEMON_STDERR_LOG',
-    'get_daemon_log_file_path', 'get_viewer_log_file_path'
+    'get_daemon_log_file_path', 'get_viewer_log_file_path', 'get_daemon_socket_path'
 ]

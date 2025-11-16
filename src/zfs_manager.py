@@ -1,6 +1,5 @@
-# --- START OF FILE src/zfs_manager.py (Refactored for Pipe IPC) ---
+# --- START OF FILE src/zfs_manager.py (Refactored for Transport IPC) ---
 
-# Removed socket import
 import json
 import os
 import sys
@@ -11,6 +10,9 @@ import time
 import subprocess # For Popen type hint
 from typing import List, Dict, Tuple, Optional, Any
 import traceback # Import traceback for error printing
+
+# Import IPC transport
+from ipc_client import LineBufferedTransport
 
 # Import models and utils needed by the GUI code that USES this manager
 from models import Pool, Dataset, Snapshot, ZfsObject, find_child
@@ -57,41 +59,27 @@ class ZfsClientCommunicationError(Exception):
 
 # --- ZFS Manager Client Class ---
 class ZfsManagerClient:
-    def __init__(self, daemon_process: subprocess.Popen, daemon_stdin_fd: int, daemon_stdout_fd: int):
-        """Initializes the client with the running daemon process and pipe FDs."""
+    def __init__(self, daemon_process: subprocess.Popen, transport: LineBufferedTransport):
+        """
+        Initialize the client with the running daemon process and IPC transport.
+        
+        Args:
+            daemon_process: The daemon subprocess.Popen object
+            transport: LineBufferedTransport for JSON-line protocol communication
+        """
         self.daemon_process = daemon_process
+        self.transport = transport
         self.pending_requests: Dict[int, queue.Queue] = {}
         self.request_lock = threading.Lock()
         self.request_id_counter = 0
         self.shutdown_event = threading.Event()
         self.reader_thread: Optional[threading.Thread] = None
-        self.daemon_stdin = None
-        self.daemon_stdout = None
         self._communication_error = None # To store fatal reader errors
 
-        if daemon_process is None or daemon_stdin_fd < 0 or daemon_stdout_fd < 0:
-            raise ValueError("Invalid daemon process or pipe file descriptors provided.")
+        if daemon_process is None or transport is None:
+            raise ValueError("Invalid daemon process or transport provided.")
 
-        try:
-            # Open file objects for the pipes
-            # Use binary mode 'wb' and 'rb' for explicit encoding/decoding
-            # Buffering=0 for write pipe ensures flush works as expected? Or use line buffering (1)?
-            # Let's try unbuffered write (0) and default buffered read.
-            self.daemon_stdin = os.fdopen(daemon_stdin_fd, 'wb', buffering=0)
-            self.daemon_stdout = os.fdopen(daemon_stdout_fd, 'rb')
-        except Exception as e:
-            print(f"MANAGER_CLIENT: Error opening pipe FDs: {e}", file=sys.stderr)
-            # Attempt cleanup if objects were partially created
-            if self.daemon_stdin: self.daemon_stdin.close()
-            if self.daemon_stdout: self.daemon_stdout.close()
-            # We still have the FDs, but can't use them. Close them too?
-            # Python usually closes FDs when file objects are GC'd, but explicit is safer.
-            try: os.close(daemon_stdin_fd) # Close original FDs if fdopen failed
-            except OSError: pass
-            try: os.close(daemon_stdout_fd)
-            except OSError: pass
-            raise ZfsClientCommunicationError(f"Failed to open pipe file objects: {e}") from e
-
+        print(f"MANAGER_CLIENT: Initialized with {transport.get_type()} transport", file=sys.stderr)
         print("MANAGER_CLIENT: Starting reader thread...", file=sys.stderr)
         self.reader_thread = threading.Thread(target=self._reader_thread_target, daemon=True)
         self.reader_thread.start()
@@ -102,23 +90,23 @@ class ZfsManagerClient:
             return self.request_id_counter
 
     def _reader_thread_target(self):
-        """Target function for the thread reading responses from the daemon's stdout."""
+        """Target function for the thread reading responses from the daemon via transport."""
         print("MANAGER_CLIENT: Reader thread started.", file=sys.stderr)
         while not self.shutdown_event.is_set():
             try:
                 # Check if there's data to read using select with a short timeout
                 # This allows checking the shutdown_event periodically
-                ready_to_read, _, _ = select.select([self.daemon_stdout.fileno()], [], [], 0.2)
+                ready_to_read, _, _ = select.select([self.transport.fileno()], [], [], 0.2)
 
                 if not ready_to_read:
                     continue # Timeout, loop back to check shutdown_event
 
                 # Data is available, read a line
-                line_bytes = self.daemon_stdout.readline()
+                line_bytes = self.transport.receive_line()
 
                 if not line_bytes:
-                    # EOF reached - daemon likely exited or closed stdout
-                    print("MANAGER_CLIENT: Reader thread detected EOF. Daemon likely closed pipe.", file=sys.stderr)
+                    # EOF reached - daemon likely exited or closed connection
+                    print("MANAGER_CLIENT: Reader thread detected EOF. Daemon likely closed connection.", file=sys.stderr)
                     self._communication_error = ZfsClientCommunicationError("Daemon connection closed (EOF).")
                     break # Exit reader loop
 
@@ -219,12 +207,11 @@ class ZfsManagerClient:
                 self.pending_requests[request_id] = response_queue
 
             #print(f"MANAGER_CLIENT: Sending ReqID={request_id}, Cmd={command}", file=sys.stderr)
-            self.daemon_stdin.write(request_json_bytes)
-            self.daemon_stdin.flush()
+            self.transport.send_line(request_json_bytes)
 
         except (OSError, BrokenPipeError) as e:
             # Correct indentation for except blocks
-            print(f"MANAGER_CLIENT: Error writing to daemon stdin: {e}", file=sys.stderr)
+            print(f"MANAGER_CLIENT: Error writing to daemon: {e}", file=sys.stderr)
             self._communication_error = ZfsClientCommunicationError(f"Failed to write to daemon: {e}")
             with self.request_lock:
                 self.pending_requests.pop(request_id, None)
@@ -426,16 +413,14 @@ class ZfsManagerClient:
         except Exception as e:
              print(f"MANAGER_CLIENT: Ignored error during optional shutdown command: {e}", file=sys.stderr)
 
-        # 3. Close pipes (this signals EOF/broken pipe to daemon/reader)
-        print("MANAGER_CLIENT: Closing pipes...", file=sys.stderr)
-        if self.daemon_stdin:
-            try: self.daemon_stdin.close()
-            except OSError as e: print(f"MANAGER_CLIENT: Error closing daemon stdin pipe: {e}", file=sys.stderr)
-            self.daemon_stdin = None
-        if self.daemon_stdout:
-            try: self.daemon_stdout.close()
-            except OSError as e: print(f"MANAGER_CLIENT: Error closing daemon stdout pipe: {e}", file=sys.stderr)
-            self.daemon_stdout = None
+        # 3. Close transport (this signals EOF/broken connection to daemon/reader)
+        print("MANAGER_CLIENT: Closing transport...", file=sys.stderr)
+        if self.transport:
+            try: 
+                self.transport.close()
+            except OSError as e: 
+                print(f"MANAGER_CLIENT: Error closing transport: {e}", file=sys.stderr)
+            self.transport = None
 
         # 4. Join reader thread
         if self.reader_thread and self.reader_thread.is_alive():
