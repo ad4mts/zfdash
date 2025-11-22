@@ -20,8 +20,8 @@ import socket
 from abc import ABC, abstractmethod
 from typing import Optional
 
-# Import socket helpers (these are safe - no privilege escalation code)
-from ipc_client import check_socket_in_use
+# Import socket helpers (shared utilities - no privilege escalation code)
+from ipc_helpers import check_socket_in_use
 
 
 class ServerTransport(ABC):

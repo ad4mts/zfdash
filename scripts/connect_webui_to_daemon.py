@@ -30,12 +30,8 @@ if _src_dir not in sys.path:
     sys.path.insert(0, _src_dir)
 
 from paths import get_daemon_socket_path
-from ipc_client import (
-    SocketTransport, 
-    LineBufferedTransport,
-    connect_to_unix_socket,
-    wait_for_ready_signal
-)
+from ipc_client import SocketTransport, LineBufferedTransport
+from ipc_helpers import connect_to_unix_socket, wait_for_ready_signal
 from zfs_manager import ZfsManagerClient
 
 
