@@ -40,6 +40,100 @@ daemon_log_file_path = None # Store the determined log path
 # Removed handle_signal function
 # Removed handle_connection function
 
+should_shutdown = False
+
+def run_command_loop(transport):
+    global should_shutdown, target_uid
+    
+    while not should_shutdown:
+        try:
+            line = transport.receive_line()
+            if not line:  # EOF
+                print("DAEMON: Client disconnected (EOF)", file=sys.stderr)
+                break
+            
+            if not line.strip():
+                continue
+            
+            print(f"DAEMON: Received line: {line.strip()}", file=sys.stderr)
+            response = {}
+            request_id = None
+            
+            try:
+                request = json.loads(line)
+                command = request.get("command")
+                args = request.get("args", [])
+                kwargs = request.get("kwargs", {})
+                meta = request.get("meta", {})
+                request_id = meta.get("request_id")
+                log_enabled = meta.get("log_enabled", False)
+                current_command_uid = target_uid
+
+                if command == "shutdown_daemon":
+                    print("DAEMON: Received shutdown command.", file=sys.stderr)
+                    response = {"status": "success", "data": "Daemon shutting down gracefully."}
+                    response["meta"] = {"request_id": request_id}
+                    try:
+                        transport.send_line(json.dumps(response))
+                    except (BrokenPipeError, OSError):
+                        pass
+                    should_shutdown = True
+                    return
+
+                elif command == "change_password":
+                    print(f"DAEMON: Handling command '{command}'...", file=sys.stderr)
+                    username = kwargs.get("username")
+                    new_password = kwargs.get("new_password")
+                    if not username or not new_password:
+                        print(f"DAEMON: Error - change_password requires 'username' and 'new_password' in kwargs.", file=sys.stderr)
+                        response = {"status": "error", "error": "Missing username or new_password parameter for change_password"}
+                    else:
+                        try:
+                            success = update_user_password(username, new_password)
+                            if success:
+                                response = {"status": "success", "data": "Password updated successfully."}
+                            else:
+                                response = {"status": "error", "error": "Password update failed. Check daemon logs."}
+                        except Exception as e:
+                            print(f"DAEMON: Error executing command '{command}': {e}\n{traceback.format_exc()}", file=sys.stderr)
+                            response = {"status": "error", "error": f"Daemon execution error during password change: {e}", "details": traceback.format_exc()}
+
+                elif command in zfs_manager_core.COMMAND_MAP:
+                    func = zfs_manager_core.COMMAND_MAP[command]
+                    try:
+                        result_data = func(*args, **kwargs, _log_enabled=log_enabled, _user_uid=current_command_uid)
+                        response = {"status": "success", "data": result_data}
+                    except ZfsCommandError as zfs_err:
+                        print(f"DAEMON: ZfsCommandError for command '{command}': {zfs_err}", file=sys.stderr)
+                        response = {"status": "error", "error": str(zfs_err), "details": zfs_err.stderr}
+                    except Exception as e:
+                        print(f"DAEMON: Error executing command '{command}': {e}\n{traceback.format_exc()}", file=sys.stderr)
+                        response = {"status": "error", "error": f"Daemon execution error: {e}", "details": traceback.format_exc()}
+                else:
+                    print(f"DAEMON: Unknown command received: {command}", file=sys.stderr)
+                    response = {"status": "error", "error": f"Unknown command: {command}"}
+
+            except json.JSONDecodeError as json_err:
+                print(f"DAEMON: JSON Decode Error: {json_err}. Invalid line received: {line.strip()}", file=sys.stderr)
+                response = {"status": "error", "error": f"Invalid JSON request: {json_err}", "details": line.strip()}
+            except Exception as e:
+                print(f"DAEMON: Error processing request: {e}\n{traceback.format_exc()}", file=sys.stderr)
+                response = {"status": "error", "error": f"Daemon request processing error: {e}", "details": traceback.format_exc()}
+
+            response["meta"] = {"request_id": request_id}
+
+            if response:
+                try:
+                    transport.send_line(json.dumps(response))
+                    print(f"DAEMON: Sent response for ReqID={request_id}, Cmd='{command if 'command' in locals() else 'unknown'}'", file=sys.stderr)
+                except (BrokenPipeError, OSError) as e:
+                    print(f"DAEMON: Client gone during response: {e}", file=sys.stderr)
+                    break
+
+        except Exception as e:
+            print(f"DAEMON: Unexpected error in command loop: {e}", file=sys.stderr)
+            break
+
 def main():
     """Main daemon execution function, communicating via stdin/stdout pipes."""
     global target_uid, target_gid, daemon_log_file_path
@@ -113,141 +207,53 @@ def main():
                 gid=target_gid
             )
             transport_mode = f"Socket: {args.listen_socket}"
+            
+            print(f"DAEMON: Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", file=sys.stderr)
+            
+            # Socket Accept Loop
+            try:
+                while not should_shutdown:
+                    print("DAEMON: Waiting for client connection...", file=sys.stderr)
+                    try:
+                        transport.accept_connection()
+                        print("DAEMON: Client connected", file=sys.stderr)
+                        
+                        transport.send_line(json.dumps({"status": "ready"}))
+                        print("DAEMON: Sent ready signal to client", file=sys.stderr)
+                        
+                        run_command_loop(transport)
+                        print("DAEMON: Client session ended", file=sys.stderr)
+                        
+                    except KeyboardInterrupt:
+                        raise
+                    except Exception as e:
+                        print(f"DAEMON: Error in client session: {e}", file=sys.stderr)
+                        # Continue to accept next client unless shutdown
+            finally:
+                transport.close()
+
         else:
             # Pipe mode (stdin/stdout)
             print("DAEMON: Using pipe transport (stdin/stdout)", file=sys.stderr)
             transport = PipeServerTransport()
             transport_mode = "Pipe (stdin/stdout)"
-        
-        print(f"DAEMON: Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", file=sys.stderr)
-        
-        # Wait for client connection (blocks for socket, no-op for pipes)
-        transport.accept_connection()
-        print("DAEMON: Client connected", file=sys.stderr)
-        
-        # Send ready signal (daemon-specific protocol handshake)
-        transport.send_line(json.dumps({"status": "ready"}))
-        print("DAEMON: Sent ready signal to client", file=sys.stderr)
+            
+            print(f"DAEMON: Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", file=sys.stderr)
+            
+            try:
+                transport.accept_connection()
+                transport.send_line(json.dumps({"status": "ready"}))
+                run_command_loop(transport)
+            finally:
+                transport.close()
         
     except KeyboardInterrupt:
         print("\nDAEMON: Interrupted by user (Ctrl+C), shutting down...", file=sys.stderr)
-        transport.close()
-        sys.exit(0)
     except Exception as e:
-        print(f"DAEMON: Failed to setup transport: {e}", file=sys.stderr)
+        print(f"DAEMON: Failed to setup transport or fatal error: {e}", file=sys.stderr)
         sys.exit(1)
-
-    # --- Command Loop (Simplified with transport) ---
-    try:
-        while True:
-            line = transport.receive_line()
-            if not line or not line.strip():  # EOF or empty line
-                if not line:  # EOF - client disconnected
-                    print("DAEMON: Client disconnected (EOF)", file=sys.stderr)
-                    break
-                continue  # Skip empty lines
-            
-            print(f"DAEMON: Received line: {line.strip()}", file=sys.stderr)
-            response = {}
-            request_id = None  # Initialize request_id for this request
-            try:
-                request = json.loads(line)
-                command = request.get("command")
-                args = request.get("args", [])
-                kwargs = request.get("kwargs", {})
-                # --- Extract meta info ---
-                meta = request.get("meta", {})
-                request_id = meta.get("request_id") # Get request ID
-                log_enabled = meta.get("log_enabled", False)
-                current_command_uid = target_uid
-                # --------------------------
-
-                if command == "shutdown_daemon":
-                    print("DAEMON: Received shutdown command. Preparing to exit.", file=sys.stderr)
-                    response = {"status": "success", "data": "Daemon shutting down gracefully."}
-                    # Write final response before exiting
-                    response["meta"] = {"request_id": request_id}  # Add meta with request_id
-                    try:
-                        transport.send_line(json.dumps(response))
-                        print("DAEMON: Shutdown response sent successfully.", file=sys.stderr)
-                    except (BrokenPipeError, OSError) as e:
-                        # Client may have already closed - that's OK for shutdown
-                        print(f"DAEMON: Client disconnected before shutdown response: {e}", file=sys.stderr)
-                    print("DAEMON: Exiting cleanly after shutdown command.", file=sys.stderr)
-                    sys.exit(0)
-
-                # --- ADD: Handle Change Password Command ---
-                elif command == "change_password":
-                    print(f"DAEMON: Handling command '{command}'...", file=sys.stderr)
-                    username = kwargs.get("username")
-                    new_password = kwargs.get("new_password")
-                    if not username or not new_password:
-                        print(f"DAEMON: Error - change_password requires 'username' and 'new_password' in kwargs.", file=sys.stderr)
-                        response = {"status": "error", "error": "Missing username or new_password parameter for change_password"}
-                    else:
-                        try:
-                            success = update_user_password(username, new_password)
-                            if success:
-                                response = {"status": "success", "data": "Password updated successfully."}
-                            else:
-                                # update_user_password logs specifics
-                                response = {"status": "error", "error": "Password update failed. Check daemon logs."}
-                        except Exception as e:
-                            print(f"DAEMON: Error executing command '{command}': {e}\n{traceback.format_exc()}", file=sys.stderr)
-                            response = {"status": "error", "error": f"Daemon execution error during password change: {e}", "details": traceback.format_exc()}
-                # --- END ADD ---
-
-                elif command in zfs_manager_core.COMMAND_MAP:
-                    func = zfs_manager_core.COMMAND_MAP[command]
-                    try:
-                        result_data = func(*args, **kwargs, _log_enabled=log_enabled, _user_uid=current_command_uid)
-                        response = {"status": "success", "data": result_data}
-                    except ZfsCommandError as zfs_err:
-                        print(f"DAEMON: ZfsCommandError for command '{command}': {zfs_err}", file=sys.stderr)
-                        response = {"status": "error", "error": str(zfs_err), "details": zfs_err.stderr}
-                    except Exception as e:
-                        print(f"DAEMON: Error executing command '{command}': {e}\n{traceback.format_exc()}", file=sys.stderr)
-                        response = {"status": "error", "error": f"Daemon execution error: {e}", "details": traceback.format_exc()}
-                else:
-                    print(f"DAEMON: Unknown command received: {command}", file=sys.stderr)
-                    response = {"status": "error", "error": f"Unknown command: {command}"}
-
-            except json.JSONDecodeError as json_err:
-                print(f"DAEMON: JSON Decode Error: {json_err}. Invalid line received: {line.strip()}", file=sys.stderr)
-                response = {"status": "error", "error": f"Invalid JSON request: {json_err}", "details": line.strip()}
-            except Exception as e:
-                print(f"DAEMON: Error processing request: {e}\n{traceback.format_exc()}", file=sys.stderr)
-                response = {"status": "error", "error": f"Daemon request processing error: {e}", "details": traceback.format_exc()}
-
-            # --- Add request_id to meta in all responses ---
-            response["meta"] = {"request_id": request_id}
-
-            # --- Send Response ---
-            if response:
-                try:
-                    transport.send_line(json.dumps(response))
-                    print(f"DAEMON: Sent response for ReqID={request_id}, Cmd='{command if 'command' in request else 'unknown'}'", file=sys.stderr)
-                except Exception as e:
-                    print(f"DAEMON: Error sending response: {e}. Response was: {response}", file=sys.stderr)
-                    print("DAEMON: Exiting due to write error.", file=sys.stderr)
-                    sys.exit(1)
-
-    except EOFError:
-        print("DAEMON: EOF received on input stream (parent likely closed connection). Exiting.", file=sys.stderr)
-    except KeyboardInterrupt:
-        print("DAEMON: KeyboardInterrupt received. Exiting.", file=sys.stderr)
-    except Exception as e:
-        # Catch any unexpected errors in the main loop
-        print(f"DAEMON: Fatal error in main loop: {e}", file=sys.stderr)
-        traceback.print_exc(file=sys.stderr)
     finally:
         print("DAEMON: Exiting main function.", file=sys.stderr)
-        # Cleanup transport (handles socket file removal automatically)
-        try:
-            transport.close()
-            print("DAEMON: Transport closed successfully", file=sys.stderr)
-        except Exception as e:
-            print(f"DAEMON: Error closing transport: {e}", file=sys.stderr)
 
 
 if __name__ == "__main__":

@@ -427,7 +427,9 @@ def connect_to_unix_socket(socket_path: str,
     
     # Timeout reached
     raise TimeoutError(
-        f"Could not connect to socket within {timeout} seconds at {socket_path}"
+        f"Could not connect to socket within {timeout} seconds at {socket_path}. "
+        f"If the daemon is running, another client may be actively connected (sequential mode). "
+        f"Wait for the other client to disconnect, or increase --timeout."
     )
 
 

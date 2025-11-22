@@ -5,9 +5,19 @@ Connect the WebUI to an already-running ZfDash daemon socket.
 This script does NOT attempt to launch a daemon. It expects a daemon
 to be listening on the Unix socket (default: paths.get_daemon_socket_path(uid)).
 
+IMPORTANT: Socket mode daemons handle connections sequentially (one at a time).
+If another client is already connected, this script will wait in queue until
+that client disconnects. Use --timeout to control how long to wait.
+
 Usage:
+    # Start daemon:
     sudo python src/main.py --daemon --uid 1000 --gid 1000 --listen-socket /run/user/1000/zfdash.sock
+    
+    # Connect WebUI:
     python scripts/connect_webui_to_daemon.py --socket /run/user/1000/zfdash.sock --host 127.0.0.1 --port 5001
+    
+    # Connect additional WebUI (waits for first to disconnect):
+    python scripts/connect_webui_to_daemon.py --socket /run/user/1000/zfdash.sock --host 127.0.0.1 --port 5002 --timeout 30
 """
 import os
 import sys
@@ -111,8 +121,15 @@ def main():
         sys.exit(2)
 
     # Connect and wait for ready signal
+    print(f"CONNECT: Note - Daemon accepts connections sequentially. If another client is connected,")
+    print(f"CONNECT: this will wait up to {args.timeout}s for that client to disconnect.", file=sys.stderr)
     try:
         buffered = connect_to_existing_daemon(socket_path, timeout=args.timeout)
+    except TimeoutError as e:
+        print(f"CONNECT: Connection timeout - {e}", file=sys.stderr)
+        print(f"CONNECT: Another client may be actively using the daemon.", file=sys.stderr)
+        print(f"CONNECT: Try again after the other client disconnects, or use --timeout <seconds> to wait longer.", file=sys.stderr)
+        sys.exit(3)
     except Exception as e:
         print(f"CONNECT: Failed to connect: {e}", file=sys.stderr)
         sys.exit(3)

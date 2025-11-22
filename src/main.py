@@ -35,15 +35,19 @@ if __name__ == "__main__":
 
     # --- Argument Parsing ---
     parser = argparse.ArgumentParser(description="ZfDash ZFS Manager")
-    parser.add_argument('--daemon', action='store_true', help="Run the background daemon process (requires --uid and --gid).")
-    parser.add_argument('--uid', type=int, help="User ID for daemon to target (required with --daemon).")
-    parser.add_argument('--gid', type=int, help="Group ID for daemon to target (required with --daemon).")
-    parser.add_argument('--listen-socket', type=str, metavar='PATH', help="[Daemon] Create and listen on Unix socket at PATH (daemon server mode).")
-    parser.add_argument('--socket', action='store_true', help="[Client] Use Unix sockets instead of pipes for IPC (experimental).")
-    parser.add_argument('--web', '-w', action='store_true', help="Run the Web UI interface.")
-    parser.add_argument('--host', default='127.0.0.1', help="Host for the Web UI server (default: 127.0.0.1).")
-    parser.add_argument('--port', '-p', default=5001, type=int, help="Port for the Web UI server (default: 5001).")
-    parser.add_argument('--debug', action='store_true', help="Enable debug mode for Web UI server.")
+
+    # Client / UI options
+    parser.add_argument('--web', '-w', action='store_true', help='[Client] Run the Web UI (serve the web interface).')
+    parser.add_argument('--host', default='127.0.0.1', help='[Client] Host/IP to bind the Web UI server (default: 127.0.0.1).')
+    parser.add_argument('--port', '-p', default=5001, type=int, help='[Client] Port to bind the Web UI server (default: 5001).')
+    parser.add_argument('--debug', action='store_true', help='[Client] Enable debug mode for the Web UI server (verbose logging).')
+    parser.add_argument('--socket', action='store_true', help='[Client] Use Unix socket IPC instead of pipes, and launch daemon automatically (experimental).')
+
+    # Daemon options (placed at end for clarity)
+    parser.add_argument('--listen-socket', type=str, metavar='PATH', help='[Daemon] Create and listen on a Unix socket at PATH (daemon server mode).')
+    parser.add_argument('--daemon', action='store_true', help='[Daemon] Run the background daemon process (requires --uid and --gid).')
+    parser.add_argument('--uid', type=int, help='[Daemon] Target user ID for daemon operations (required with --daemon).')
+    parser.add_argument('--gid', type=int, help='[Daemon] Target group ID for daemon operations (required with --daemon).')
 
     # Filter out platform-specific launcher arguments when frozen (for future macOS .app bundle support)
     main_args = sys.argv[1:]

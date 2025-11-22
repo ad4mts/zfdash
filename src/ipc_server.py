@@ -212,6 +212,22 @@ class SocketServerTransport(ServerTransport):
         # Create and bind socket
         self._setup_socket()
     
+    def _close_client(self) -> None:
+        """Close current client connection if any."""
+        if self.client_file is not None:
+            try:
+                self.client_file.close()
+            except Exception:
+                pass
+            self.client_file = None
+        
+        if self.client_socket is not None:
+            try:
+                self.client_socket.close()
+            except Exception:
+                pass
+            self.client_socket = None
+
     def _setup_socket(self) -> None:
         """Create socket, bind, and set permissions."""
         # Check if socket is already in use by another daemon
@@ -241,7 +257,9 @@ class SocketServerTransport(ServerTransport):
             # Set ownership to target user
             os.chown(self.socket_path, self.uid, self.gid)
             
-            # Start listening (queue size 1)
+            # Start listening (queue size 1 - allows one pending connection while processing current client)
+            # Note: With queue=1, if a client is actively connected, a 2nd client can connect() but will
+            # wait in queue until the 1st client's session ends. Queue=0 would reject immediately with ECONNREFUSED.
             self.server_socket.listen(1)
             
         except Exception as e:
@@ -266,10 +284,25 @@ class SocketServerTransport(ServerTransport):
         if self.server_socket is None:
             raise RuntimeError("Socket not initialized")
         
-        self.client_socket, _ = self.server_socket.accept()
+        # Close any previous client connection
+        self._close_client()
         
-        # Create file-like object with line buffering for easier I/O
-        self.client_file = self.client_socket.makefile('rw', buffering=1, encoding='utf-8', errors='replace')
+        try:
+            client_socket, _ = self.server_socket.accept()
+            
+            # Create file-like object with line buffering for easier I/O
+            client_file = client_socket.makefile('rw', buffering=1, encoding='utf-8', errors='replace')
+            
+            self.client_socket = client_socket
+            self.client_file = client_file
+        except Exception as e:
+            # Cleanup partial connection on error
+            if 'client_socket' in locals():
+                try:
+                    client_socket.close()
+                except Exception:
+                    pass
+            raise OSError(f"Failed to accept connection: {e}") from e
     
     def receive_line(self) -> str:
         """
@@ -312,19 +345,7 @@ class SocketServerTransport(ServerTransport):
         This is idempotent and safe to call multiple times.
         """
         # Close client connection
-        if self.client_file is not None:
-            try:
-                self.client_file.close()
-            except Exception:
-                pass
-            self.client_file = None
-        
-        if self.client_socket is not None:
-            try:
-                self.client_socket.close()
-            except Exception:
-                pass
-            self.client_socket = None
+        self._close_client()
         
         # Close server socket
         if self.server_socket is not None:
