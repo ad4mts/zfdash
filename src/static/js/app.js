@@ -1191,7 +1191,9 @@ function renderPropertyGroup(keys, props, isEditable) {
 
         // Allow inherit if source is 'local' or 'received'
         // Do not show inherit button if propData is undefined (it's already inherited/default)
-        if (propData && (source === 'local' || source === 'received')) {
+        // Pool properties cannot be inherited (zpool has no inherit command)
+        const isPoolProperty = currentSelection?.obj_type === 'pool' && POOL_LEVEL_PROPERTIES.has(key);
+        if (propData && (source === 'local' || source === 'received') && !isPoolProperty) {
             const inheritBtn = document.createElement('button');
             inheritBtn.className = 'btn properties-table-btn inherit-btn'; // *** RESTORED ORIGINAL CLASS ***
             inheritBtn.innerHTML = '<i class="bi bi-arrow-down-left-circle"></i>';
@@ -1703,8 +1705,8 @@ window.EDITABLE_PROPERTIES_WEB = {
     'relatime': { internalName: 'relatime', displayName: 'Relative Access Time', editor: 'combobox', options: ['inherit', 'on', 'off'] },
     'readonly': { internalName: 'readonly', displayName: 'Read Only', editor: 'combobox', options: ['inherit', 'on', 'off'] },
     'dedup': { internalName: 'dedup', displayName: 'Deduplication', editor: 'combobox', options: ['inherit', 'on', 'off', 'verify', 'sha256', 'sha512', 'skein', 'edonr'], readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
-    'sharenfs': { internalName: 'sharenfs', displayName: 'NFS Share Options', editor: 'lineedit', readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
-    'sharesmb': { internalName: 'sharesmb', displayName: 'SMB Share Options', editor: 'lineedit', readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
+    'sharenfs': { internalName: 'sharenfs', displayName: 'NFS Share', editor: 'combobox', options: ['inherit', 'off', 'on'], readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
+    'sharesmb': { internalName: 'sharesmb', displayName: 'SMB Share', editor: 'combobox', options: ['inherit', 'off', 'on'], readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
     'logbias': { internalName: 'logbias', displayName: 'Log Bias', editor: 'combobox', options: ['inherit', 'latency', 'throughput'], readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
     'sync': { internalName: 'sync', displayName: 'Sync Policy', editor: 'combobox', options: ['inherit', 'standard', 'always', 'disabled'], readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
     'volblocksize': { internalName: 'volblocksize', displayName: 'Volume Block Size', editor: 'combobox', options: ['inherit'] + Array.from({length: 17-9+1}, (_, i) => `${2**(i+9)}K`) + ['1M'], readOnlyFunc: (obj) => !(obj?.obj_type === 'volume') },
@@ -1712,8 +1714,16 @@ window.EDITABLE_PROPERTIES_WEB = {
     'cachefile': { internalName: 'cachefile', displayName: 'Cache File', editor: 'lineedit', readOnlyFunc: (obj) => obj?.obj_type !== 'pool' },
     'bootfs': { internalName: 'bootfs', displayName: 'Boot FS', editor: 'lineedit', readOnlyFunc: (obj) => obj?.obj_type !== 'pool' },
     'failmode': { internalName: 'failmode', displayName: 'Fail Mode', editor: 'combobox', options: ['wait', 'continue', 'panic'], readOnlyFunc: (obj) => obj?.obj_type !== 'pool' },
-    // Add autotrim, autoreplace etc. if backend supports them via 'set'
+    'autotrim': { internalName: 'autotrim', displayName: 'Auto Trim', editor: 'combobox', options: ['on', 'off'], readOnlyFunc: (obj) => obj?.obj_type !== 'pool' },
+    'autoreplace': { internalName: 'autoreplace', displayName: 'Auto Replace', editor: 'combobox', options: ['on', 'off'], readOnlyFunc: (obj) => obj?.obj_type !== 'pool' },
 };
+
+// Define which properties use zpool set/inherit (pool-level only)
+const POOL_LEVEL_PROPERTIES = new Set([
+    'comment', 'cachefile', 'bootfs', 'failmode', 'autoreplace', 'autotrim',
+    'delegation', 'autoexpand', 'listsnapshots', 'readonly', 'multihost', 
+    'compatibility'
+]);
 
 // --- Define AUTO_SNAPSHOT_PROPS here, right before use ---
 const AUTO_SNAPSHOT_PROPS = [
@@ -1790,9 +1800,9 @@ function handleEditProperty(propName, currentValue, editInfo) {
                   const inputElement = document.getElementById('prop-edit-input');
                   const newValue = inputElement.value.trim();
 
-                  // --- START MODIFICATION: Handle inherit for auto-snapshot combo ---
-                  if (editInfo.editor === 'combobox' && newValue === '-' && AUTO_SNAPSHOT_PROPS.includes(propName)) {
-                        // If it's an auto-snapshot prop and '-' is selected, trigger inherit instead of set
+                  // --- Handle inherit for properties with '-' option ---
+                  if (editInfo.editor === 'combobox' && newValue === '-') {
+                        // If '-' is selected, trigger inherit instead of set
                         actionModal.hide(); // Hide current modal
                         // Use a slight delay to ensure modal is hidden before potential confirmation dialog from inherit
                         setTimeout(() => handleInheritProperty(propName), 100); 
@@ -1815,8 +1825,13 @@ function handleEditProperty(propName, currentValue, editInfo) {
 
                   // Execute action
                   actionModal.hide(); // Hide modal before executing
+                  
+                  // Route to pool command only if it's a pool AND a pool-level property
+                  const isPoolProperty = currentSelection.obj_type === 'pool' && POOL_LEVEL_PROPERTIES.has(propName);
+                  const setAction = isPoolProperty ? 'set_pool_property' : 'set_dataset_property';
+                  
                   executeAction(
-                      'set_dataset_property',
+                      setAction,
                       [currentSelection.name, propName, newValue],
                       {},
                       `Property '${propName}' set successfully.`
@@ -1827,6 +1842,14 @@ function handleEditProperty(propName, currentValue, editInfo) {
 
 function handleInheritProperty(propName) {
     if (!currentSelection) return;
+    
+    // Pool properties cannot be inherited (zpool has no inherit command)
+    const isPoolProperty = currentSelection.obj_type === 'pool' && POOL_LEVEL_PROPERTIES.has(propName);
+    if (isPoolProperty) {
+        showErrorAlert("Cannot Inherit", `Pool property '${propName}' cannot be inherited. Pool properties can only be set to specific values.`);
+        return;
+    }
+    
     executeAction(
         'inherit_dataset_property',
         [currentSelection.name, propName],

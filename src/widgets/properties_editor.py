@@ -25,6 +25,13 @@ import traceback
 from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
 
 
+# Define which properties use zpool set/inherit (pool-level only)
+POOL_LEVEL_PROPERTIES = {
+    'comment', 'cachefile', 'bootfs', 'failmode', 'autoreplace', 'autotrim',
+    'delegation', 'autoexpand', 'listsnapshots', 'readonly', 'multihost', 
+    'compatibility'
+}
+
 # Define which properties are commonly editable
 EDITABLE_PROPERTIES = {
     'mountpoint': ('mountpoint', 'Mount Point', 'lineedit', None, None),
@@ -36,8 +43,8 @@ EDITABLE_PROPERTIES = {
     'relatime': ('relatime', 'Relative Access Time', 'combobox', ['inherit', 'on', 'off'], None),
     'readonly': ('readonly', 'Read Only', 'combobox', ['inherit', 'on', 'off'], None),
     'dedup': ('dedup', 'Deduplication', 'combobox', ['inherit', 'on', 'off', 'verify', 'sha256', 'sha512', 'skein', 'edonr'], lambda obj: isinstance(obj, Snapshot)),
-    'sharenfs': ('sharenfs', 'NFS Share Options', 'lineedit', None, lambda obj: isinstance(obj, Snapshot)),
-    'sharesmb': ('sharesmb', 'SMB Share Options', 'lineedit', None, lambda obj: isinstance(obj, Snapshot)),
+    'sharenfs': ('sharenfs', 'NFS Share', 'combobox', ['inherit', 'off', 'on'], lambda obj: isinstance(obj, Snapshot)),
+    'sharesmb': ('sharesmb', 'SMB Share', 'combobox', ['inherit', 'off', 'on'], lambda obj: isinstance(obj, Snapshot)),
     'logbias': ('logbias', 'Log Bias', 'combobox', ['inherit', 'latency', 'throughput'], lambda obj: isinstance(obj, Snapshot)),
     'sync': ('sync', 'Sync Policy', 'combobox', ['inherit', 'standard', 'always', 'disabled'], lambda obj: isinstance(obj, Snapshot)),
     'volblocksize': ('volblocksize', 'Volume Block Size', 'combobox', ['inherit'] + [f'{2**i}K' for i in range(9, 18)] + ['1M'], lambda obj: not (isinstance(obj, Dataset) and obj.obj_type == 'volume')),
@@ -305,8 +312,10 @@ class PropertiesEditor(QWidget):
             )
             h_layout.addWidget(edit_button)
 
-            # Only show Inherit button if source is specifically 'local'
-            if source_comp == 'local':
+            # Only show Inherit button if source is 'local' AND it's not a pool property
+            # (pool properties cannot be inherited - zpool has no inherit command)
+            is_pool_property = prop_name in POOL_LEVEL_PROPERTIES and isinstance(self._current_object, Pool)
+            if source_comp == 'local' and not is_pool_property:
                 inherit_button = QPushButton("Inherit")
                 inherit_button.setToolTip(f"Reset '{display_name}' to inherited value")
                 inherit_button.clicked.connect(

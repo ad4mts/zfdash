@@ -446,6 +446,26 @@ def list_all_datasets_snapshots(*, _log_enabled=False, _user_uid=-1, **kwargs) -
 @adapt_common_kwargs
 def get_all_properties_with_sources(obj_name: str, *, _log_enabled=False, _user_uid=-1, **kwargs) -> Dict[str, Dict[str, str]]:
     properties = {}
+    
+    # Detect if this is a pool (no '/' in name) and fetch pool properties
+    is_pool = '/' not in obj_name
+    if is_pool:
+        # Fetch pool properties using zpool get
+        pool_builder = ZpoolCommandBuilder('get').script().parsable().output_props(['name','property','value','source'])._add_args('all', obj_name)
+        retcode, stdout, stderr = pool_builder.run(_log_enabled=_log_enabled, _user_uid=_user_uid)
+        if retcode != 0: 
+            raise ZfsCommandError(f"Failed to get pool properties for '{obj_name}'.", pool_builder.build(), stderr, retcode)
+        
+        for line_num, line in enumerate(stdout.strip().split('\n'), 1):
+            if not line: continue
+            try:
+                _name, prop, value, source = line.strip().split('\t', 3)
+                properties[prop] = {'value': value, 'source': source}
+            except ValueError:
+                err_msg = f"Could not parse pool property line {line_num}. Expected 4 tab-separated values."
+                print(f"DAEMON_CORE: Error: {err_msg} Line: '{line}'", file=sys.stderr)
+    
+    # Fetch dataset properties using zfs get (works for pools and datasets)
     builder = ZfsCommandBuilder('get').script().parsable().output_props(['name','property','value','source']).target('all').target(obj_name)
     retcode, stdout, stderr = builder.run(_log_enabled=_log_enabled, _user_uid=_user_uid)
     if retcode != 0: raise ZfsCommandError(f"Failed to get properties for '{obj_name}'.", builder.build(), stderr, retcode)
@@ -454,7 +474,7 @@ def get_all_properties_with_sources(obj_name: str, *, _log_enabled=False, _user_
         if not line: continue
         try:
             _name, prop, value, source = line.strip().split('\t', 3)
-            # Normalize source: '-' means local or default, treat as None for simplicity? Or keep '-'? Let's keep '-' for now.
+            # Dataset properties override pool properties if both exist (shouldn't happen, but just in case)
             properties[prop] = {'value': value, 'source': source} # Source can be '-', 'local', 'inherited from X', 'default'
         except ValueError:
             err_msg = f"Could not parse property line {line_num}. Expected 4 tab-separated values."
@@ -586,6 +606,16 @@ def inherit_dataset_property(full_dataset_name: str, prop_name: str, *, _log_ena
     builder = ZfsCommandBuilder('inherit').target(prop_name).target(full_dataset_name)
     retcode, stdout, stderr = builder.run(_log_enabled=_log_enabled, _user_uid=_user_uid)
     if retcode != 0: raise ZfsCommandError(f"Failed to inherit property '{prop_name}' for '{full_dataset_name}'.", builder.build(), stderr, retcode)
+
+@adapt_common_kwargs
+def set_pool_property(pool_name: str, prop_name: str, prop_value: str, *, _log_enabled=False, _user_uid=-1, **kwargs):
+    # Basic validation
+    if not prop_name or '=' in prop_name: raise ZfsCommandError(f"Invalid property name: '{prop_name}'")
+    if not isinstance(prop_value, str): raise ZfsCommandError(f"Invalid property value type: {type(prop_value).__name__}")
+
+    builder = ZpoolCommandBuilder('set')._add_args(f"{prop_name}={prop_value}", pool_name)
+    retcode, stdout, stderr = builder.run(_log_enabled=_log_enabled, _user_uid=_user_uid)
+    if retcode != 0: raise ZfsCommandError(f"Failed to set property '{prop_name}' for pool '{pool_name}'.", builder.build(), stderr, retcode)
 
 @adapt_common_kwargs
 def mount_dataset(full_dataset_name: str, *, _log_enabled=False, _user_uid=-1, **kwargs):
@@ -1049,6 +1079,7 @@ COMMAND_MAP = {
     "rename_dataset": rename_dataset,
     "set_dataset_property": set_dataset_property,
     "inherit_dataset_property": inherit_dataset_property,
+    "set_pool_property": set_pool_property,
     "mount_dataset": mount_dataset,
     "unmount_dataset": unmount_dataset,
     "promote_dataset": promote_dataset,

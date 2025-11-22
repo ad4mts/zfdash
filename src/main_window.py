@@ -1084,14 +1084,33 @@ class MainWindow(QMainWindow):
 
     @Slot(str, str, str)
     def _set_property_action(self, obj_name: str, prop_name: str, prop_value: str):
+        # Import the pool-level properties list
+        from widgets.properties_editor import POOL_LEVEL_PROPERTIES
+        
+        # Route to pool command only if it's a pool AND a pool-level property
+        if isinstance(self._current_selection, Pool) and prop_name in POOL_LEVEL_PROPERTIES:
+            action_name = "set_pool_property"
+        else:
+            action_name = "set_dataset_property"
+        
         self._run_worker_task(
             self.zfs_client.execute_generic_action,
-            "set_dataset_property", f"Property '{prop_name}' set on '{obj_name}'.", obj_name, prop_name, prop_value,
+            action_name, f"Property '{prop_name}' set on '{obj_name}'.", obj_name, prop_name, prop_value,
             op_name=f"Setting {prop_name} on {obj_name}"
         )
 
     @Slot(str, str)
     def _inherit_property_action(self, obj_name: str, prop_name: str):
+        # Import the pool-level properties list
+        from widgets.properties_editor import POOL_LEVEL_PROPERTIES
+        
+        # Pool properties cannot be inherited (zpool has no inherit command)
+        if isinstance(self._current_selection, Pool) and prop_name in POOL_LEVEL_PROPERTIES:
+            QMessageBox.warning(self, "Cannot Inherit", 
+                              f"Pool property '{prop_name}' cannot be inherited. Pool properties can only be set to specific values.",
+                              QMessageBox.StandardButton.Ok)
+            return
+        
         self._run_worker_task(
             self.zfs_client.execute_generic_action,
             "inherit_dataset_property", f"Property '{prop_name}' inherited on '{obj_name}'.", obj_name, prop_name,
