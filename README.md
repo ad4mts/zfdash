@@ -102,7 +102,7 @@ sudo docker run -d --name zfdash \
   --device=/dev/zfs:/dev/zfs \
   -v zfdash_config:/root/.config/ZfDash \
   -v zfdash_data:/opt/zfdash/data \
-  -v /etc:/host-etc:ro \  # For ZFS hostid compatibility
+  -v /etc:/host-etc:ro \
   -p 5001:5001 \
   --restart unless-stopped \
   ad4mts/zfdash:latest
