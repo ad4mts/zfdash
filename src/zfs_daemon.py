@@ -143,10 +143,16 @@ def main():
     parser.add_argument('--uid', required=True, type=int, help="Real User ID of the GUI/WebUI process owner")
     parser.add_argument('--gid', required=True, type=int, help="Real Group ID of the GUI/WebUI process owner")
     parser.add_argument('--daemon', action='store_true', help="Flag indicating daemon mode (for main.py)")
-    parser.add_argument('--listen-socket', type=str, help="Unix socket path to create and listen on (if not provided, uses stdin/stdout pipes)")
+    parser.add_argument('--listen-socket', type=str, nargs='?', const='', help="Unix socket path to create and listen on (if not provided, uses stdin/stdout pipes). If flag present without path, uses default from get_daemon_socket_path(uid)")
     args = parser.parse_args()
     target_uid = args.uid
     target_gid = args.gid
+    
+    # Handle default socket path if --listen-socket flag present without path
+    if args.listen_socket == '':
+        from paths import get_daemon_socket_path
+        args.listen_socket = get_daemon_socket_path(target_uid)
+        print(f"DAEMON: Using default socket path: {args.listen_socket}", file=sys.stderr)
 
     # --- Setup stderr logging: Write to BOTH terminal and log file ---
     original_stderr = sys.stderr
