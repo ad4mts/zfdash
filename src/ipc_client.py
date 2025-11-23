@@ -23,6 +23,7 @@ import shutil
 from paths import get_daemon_socket_path
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
+import constants
 
 # Import shared socket helpers (no privilege escalation code)
 from ipc_helpers import (
@@ -164,6 +165,7 @@ class SocketTransport(DaemonTransport):
             Tuple of (pid, uid, gid) or None if not available
         """
         try:
+            # linux-only: SO_PEERCRED is Linux-specific socket option
             # SO_PEERCRED returns struct ucred { pid_t pid; uid_t uid; gid_t gid; }
             creds = self.socket.getsockopt(socket.SOL_SOCKET, socket.SO_PEERCRED, 
                                           struct.calcsize('3i'))
@@ -246,7 +248,7 @@ def _find_privilege_escalation_tool() -> Optional[str]:
     if os.getuid() == 0:
         return None  # Already root, no escalation needed
     
-    # Linux: pkexec (PolicyKit)
+    # Linux: pkexec (PolicyKit)  # linux-only: pkexec/PolicyKit is Linux-specific
     pkexec = shutil.which("pkexec")
     if pkexec:
         return pkexec
@@ -295,7 +297,7 @@ def _build_daemon_command(daemon_path: str, uid: int, gid: int,
     tool_name = os.path.basename(escalation_tool)
     
     if tool_name == "pkexec":
-        # Linux PolicyKit
+        # Linux PolicyKit  # linux-only: pkexec is Linux-specific
         return [escalation_tool] + base_cmd
     
     elif tool_name == "doas":
@@ -310,6 +312,32 @@ def _build_daemon_command(daemon_path: str, uid: int, gid: int,
         # Unknown tool, try direct execution
         return [escalation_tool] + base_cmd
 
+
+
+def launch_daemon(use_socket: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
+    """
+    Launch privileged daemon with auto-detected path and user context.
+    
+    Args:
+        use_socket: If True, use Unix socket IPC instead of pipes
+    
+    Returns:
+        Tuple of (subprocess.Popen, LineBufferedTransport)
+    
+    Raises:
+        RuntimeError: If daemon launch fails or privilege escalation not available
+        TimeoutError: If daemon doesn't send ready signal
+        OSError: If pipe/socket creation fails
+    """
+    from paths import DAEMON_SCRIPT_PATH, DAEMON_IS_SCRIPT
+    
+    uid = os.getuid()
+    gid = os.getgid()
+    
+    if not os.path.exists(DAEMON_SCRIPT_PATH):
+        raise RuntimeError(f"Daemon path not found: {DAEMON_SCRIPT_PATH}")
+    
+    return launch_daemon_process(DAEMON_SCRIPT_PATH, uid, gid, DAEMON_IS_SCRIPT, use_socket)
 
 
 def launch_daemon_process(daemon_path: str, uid: int, gid: int, is_script: bool = False, use_socket: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
@@ -403,7 +431,8 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
     
     # Connect to socket with retry and process monitoring
     try:
-        client_sock = connect_to_unix_socket(socket_path, timeout=10.0, check_process=process)
+        # Use IPC_LAUNCH_CONNECT_TIMEOUT and not IPC_CONNECT_TIMEOUT: This allows extra time for auth (polkit/sudo)
+        client_sock = connect_to_unix_socket(socket_path, timeout=constants.IPC_LAUNCH_CONNECT_TIMEOUT, check_process=process)
         print(f"IPC: Connected to daemon socket at {socket_path}")
         
         # Wrap socket in transport
@@ -427,7 +456,7 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
         if process and process.poll() is None:
             try:
                 process.terminate()
-                process.wait(timeout=1)
+                process.wait(timeout=constants.TERMINATE_SHORT_TIMEOUT)
             except Exception:
                 pass
         raise
@@ -546,7 +575,7 @@ def _launch_daemon_with_pipes(daemon_path: str, uid: int, gid: int, is_script: b
         if process and process.poll() is None:
             try:
                 process.terminate()
-                process.wait(timeout=1)
+                process.wait(timeout=constants.TERMINATE_SHORT_TIMEOUT)
             except Exception:
                 pass
         

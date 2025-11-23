@@ -186,6 +186,7 @@ class PoolEditorWidget(QWidget):
         # Regex to capture lines *without* state/error columns (likely VDEV groups)
         group_re = re.compile(r'^(\s+)(\S+.*)')
         # Regex to identify potential device paths/names more broadly
+        # linux-only: device paths like '/dev/sd*' and '/dev/nvme*' are Linux-specific naming conventions; other OSes may differ
         device_pattern_re = re.compile(r'^(/dev/\S+|ata-|wwn-|scsi-|nvme-|usb-|dm-|zd\d+|[a-z]+[0-9]+|gpt/.*|disk/by-.*)', re.IGNORECASE)
         # Regex for standard VDEV group names
         vdev_group_patterns = {
@@ -598,6 +599,7 @@ class PoolEditorWidget(QWidget):
 
         existing_device = sel_data['device_path'] # This should be the actual path now
         if not existing_device:
+             # linux-only: '/dev/sdx' is a Linux block device naming convention; other OSes may use different naming
              QMessageBox.warning(self, "Invalid Selection", "Select the specific disk device you want to attach another device to (e.g., /dev/sdx).")
              return
 

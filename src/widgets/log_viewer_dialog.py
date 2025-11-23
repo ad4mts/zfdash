@@ -90,7 +90,9 @@ class LogViewerDialog(QDialog):
                  # Scroll to the bottom
                  self.text_edit.verticalScrollBar().setValue(self.text_edit.verticalScrollBar().maximum())
         except PermissionError:
-            self.text_edit.setText(f"Permission denied reading log file:\n'{log_path}'\n\n(Check permissions on /run/user/{os.getuid()}/ or the log file itself)")
+            # Display parent folder instead of hard-coded runtime locations (platform-agnostic)
+            parent = os.path.dirname(log_path) or log_path
+            self.text_edit.setText(f"Permission denied reading log file:\n'{log_path}'\n\n(Check permissions on '{parent}' or the log file itself)")
         except IOError as e:
             self.text_edit.setText(f"Error reading log file '{log_path}':\n{e}")
         except Exception as e:

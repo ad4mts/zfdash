@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # --- START OF FILE src/zfs_daemon.py (Refactored for Pipe IPC) ---
 import sys
 import os
@@ -6,7 +7,7 @@ import traceback
 import argparse
 # Removed socket, signal, threading, time, pwd, stat imports
 
-from paths import DAEMON_STDERR_LOG
+from paths import DAEMON_STDERR_FILENAME, get_daemon_log_file_path
 
 # SECURITY: Only import server-side transport classes.
 # This module contains NO daemon launching or privilege escalation code.
@@ -25,7 +26,10 @@ try:
 except ImportError as e:
     print(f"DAEMON: Error - config_manager or required function not found: {e}!", file=sys.stderr)
     # Define dummy functions if import fails
-    def get_daemon_log_file_path(uid): return f"/tmp/zfdash-daemon.log.{uid}.err"
+    def get_daemon_log_file_path(uid, log_name=None):
+        if log_name is None:
+            return f"/tmp/zfdash-daemon.log.err"
+        return f"/tmp/{log_name}.err"
     def update_user_password(u, p): print("DAEMON: ERROR - Dummy update_user_password called!", file=sys.stderr); return False
     def create_default_credentials_if_missing(): print("DAEMON: ERROR - Dummy create_default_credentials_if_missing called!", file=sys.stderr)
 
@@ -139,7 +143,7 @@ def main():
     global target_uid, target_gid, daemon_log_file_path
 
     parser = argparse.ArgumentParser(description="ZFS GUI Background Daemon")
-    # These arguments are expected to be passed via pkexec by daemon_utils.py
+    # These arguments are expected to be passed via privilege escalation (pkexec/doas/sudo) by daemon_utils.py
     parser.add_argument('--uid', required=True, type=int, help="Real User ID of the GUI/WebUI process owner")
     parser.add_argument('--gid', required=True, type=int, help="Real Group ID of the GUI/WebUI process owner")
     parser.add_argument('--daemon', action='store_true', help="Flag indicating daemon mode (for main.py)")
@@ -171,12 +175,19 @@ def main():
                 except: pass
     
     try:
-        try: os.remove(DAEMON_STDERR_LOG)  # Remove old log (avoid permission errors)
+        # Compute path for daemon stderr logs using centralized helper; use the
+        # target UID (args.uid) so stderr/log files are colocated with the
+        # user's runtime directory alongside sockets/logs.
+        stderr_log_path = get_daemon_log_file_path(target_uid, DAEMON_STDERR_FILENAME)
+        try: os.remove(stderr_log_path)  # Remove old log (avoid permission errors)
         except: pass
-        log_file = open(DAEMON_STDERR_LOG, 'w', buffering=1, encoding='utf-8', errors='replace')
-        os.chmod(DAEMON_STDERR_LOG, 0o666)  # Readable by all for debugging
+        log_file = open(stderr_log_path, 'w', buffering=1, encoding='utf-8', errors='replace')
+        try:
+            os.chmod(stderr_log_path, 0o666)  # Readable by all for debugging
+        except Exception:
+            pass
         sys.stderr = Tee(original_stderr, log_file)  # Send stderr to both terminal and file
-        print(f"DAEMON: Logging stderr to {DAEMON_STDERR_LOG} + terminal", file=sys.stderr)
+        print(f"DAEMON: Logging stderr to {stderr_log_path} + terminal", file=sys.stderr)
     except Exception as e:
         print(f"DAEMON: Logging stderr setup failed: {e}", file=original_stderr)
     # --- End logging setup ---

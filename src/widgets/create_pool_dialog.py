@@ -393,6 +393,7 @@ if __name__ == '__main__':
     class MockZFSManager:
         def list_block_devices(self):
             # Return devices with display_name formatted
+            # linux-only: this sample uses Linux device names ('/dev/sd*', '/dev/nvme*') - other OSes may have different device paths
             devs = [
                  {'name': '/dev/sda', 'size_str': '100G', 'type': 'disk', 'label': 'SSD1'},
                  {'name': '/dev/sdb', 'size_str': '100G', 'type': 'disk', 'label': 'SSD2'},

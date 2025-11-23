@@ -254,6 +254,7 @@ class SocketServerTransport(ServerTransport):
             # Set permissions: 0660 (rw-rw----)
             os.chmod(self.socket_path, 0o660)
             
+            # linux-only: setting socket file owner/group and permissions depends on POSIX permissions
             # Set ownership to target user
             os.chown(self.socket_path, self.uid, self.gid)
             

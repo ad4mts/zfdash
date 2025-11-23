@@ -94,9 +94,9 @@ class ZfsManagerClient:
         print("MANAGER_CLIENT: Reader thread started.", file=sys.stderr)
         while not self.shutdown_event.is_set():
             try:
-                # Check if there's data to read using select with a short timeout
+            # Check if there's data to read using select with a short timeout
                 # This allows checking the shutdown_event periodically
-                ready_to_read, _, _ = select.select([self.transport.fileno()], [], [], 0.2)
+                ready_to_read, _, _ = select.select([self.transport.fileno()], [], [], constants.READER_SELECT_TIMEOUT)
 
                 if not ready_to_read:
                     continue # Timeout, loop back to check shutdown_event
@@ -176,7 +176,7 @@ class ZfsManagerClient:
                     print(f"MANAGER_CLIENT: Warning: Response queue full when notifying error for request_id {req_id}", file=sys.stderr)
             self.pending_requests.clear() # Clear pending requests after notification
 
-    def _send_request(self, command: str, *args, timeout: float = 60.0, **kwargs) -> Dict[str, Any]:
+    def _send_request(self, command: str, *args, timeout: float = constants.CLIENT_REQUEST_TIMEOUT, **kwargs) -> Dict[str, Any]:
         """Sends a command to the daemon and waits for a response."""
         if self.shutdown_event.is_set() or self._communication_error:
             raise self._communication_error or ZfsClientCommunicationError("Client is shut down or in error state.")
@@ -262,7 +262,7 @@ class ZfsManagerClient:
     def get_all_zfs_data(self) -> List[Pool]:
         """Fetches all data via the daemon and builds the hierarchy."""
         # Correct indentation for the whole method
-        timeout = 120.0
+        timeout = constants.CLIENT_ACTION_TIMEOUT
         try:
             response_pools = self._send_request("list_pools", timeout=timeout)
             response_items = self._send_request("list_all_datasets_snapshots", timeout=timeout)
@@ -341,11 +341,11 @@ class ZfsManagerClient:
     def _run_action(self, command: str, *args, success_msg: str, **kwargs) -> Tuple[bool, str]:
         """
         Helper method to run an action command via daemon.
-    Returns (True, success_msg) on success, potentially appending daemon data.
+        Returns (True, success_msg) on success, potentially appending daemon data.
         Raises ZfsCommandError or ZfsClientCommunicationError on failure.
         """
         # Determine appropriate timeout (can be passed via kwargs)
-        timeout = kwargs.pop('timeout', 120.0) # Default long timeout for actions
+        timeout = kwargs.pop('timeout', constants.CLIENT_ACTION_TIMEOUT) # Default long timeout for client-side actions
 
         response = self._send_request(command, *args, timeout=timeout, **kwargs)
         # Success is implied if _send_request didn't raise an exception
@@ -364,7 +364,7 @@ class ZfsManagerClient:
     def list_importable_pools(self, search_dirs: Optional[List[str]] = None) -> Tuple[bool, str, List[Dict[str, str]]]:
         try:
             kwargs = {"search_dirs": search_dirs} if search_dirs is not None else {}
-            response = self._send_request("list_importable_pools", **kwargs, timeout=120.0)
+            response = self._send_request("list_importable_pools", **kwargs, timeout=constants.LIST_IMPORTABLE_POOLS_TIMEOUT)
             return True, "", response.get("data", [])
         except ZfsCommandError as e:
             return False, str(e), []
@@ -373,7 +373,7 @@ class ZfsManagerClient:
 
     def list_block_devices(self) -> List[Dict[str, Any]]:
         try:
-            response = self._send_request("list_block_devices", timeout=60.0)
+            response = self._send_request("list_block_devices", timeout=constants.CLIENT_REQUEST_TIMEOUT)
             return response.get("data", [])
         except (ZfsCommandError, ZfsClientCommunicationError, TimeoutError) as e:
             print(f"MANAGER_CLIENT: Error listing block devices: {e}", file=sys.stderr)
@@ -386,7 +386,7 @@ class ZfsManagerClient:
         try:
             # Send the command but don't necessarily wait for a reply if the daemon
             # exits quickly. The `close` method handles actual process termination.
-            _ = self._send_request("shutdown_daemon", timeout=5.0)
+            _ = self._send_request("shutdown_daemon", timeout=constants.SHUTDOWN_REQUEST_TIMEOUT)
             # Even if _send_request raises TimeoutError, we might consider it success
             # if the goal is just to signal shutdown.
             return True, "Shutdown command sent."
@@ -425,7 +425,7 @@ class ZfsManagerClient:
         # 4. Join reader thread
         if self.reader_thread and self.reader_thread.is_alive():
             print("MANAGER_CLIENT: Joining reader thread...", file=sys.stderr)
-            self.reader_thread.join(timeout=2.0)
+            self.reader_thread.join(timeout=constants.THREAD_JOIN_TIMEOUT)
             if self.reader_thread.is_alive():
                 print("MANAGER_CLIENT: Warning: Reader thread did not exit cleanly.", file=sys.stderr)
         self.reader_thread = None
@@ -435,13 +435,13 @@ class ZfsManagerClient:
             print(f"MANAGER_CLIENT: Terminating daemon process (PID: {self.daemon_process.pid})...", file=sys.stderr)
             try:
                 self.daemon_process.terminate() # Send SIGTERM
-                self.daemon_process.wait(timeout=5.0) # Wait for termination
+                self.daemon_process.wait(timeout=constants.TERMINATE_TIMEOUT) # Wait for termination
                 print(f"MANAGER_CLIENT: Daemon process terminated (Exit code: {self.daemon_process.returncode}).", file=sys.stderr)
             except subprocess.TimeoutExpired:
                 print("MANAGER_CLIENT: Timeout waiting for daemon termination, attempting kill...", file=sys.stderr)
                 try:
                     self.daemon_process.kill() # Send SIGKILL
-                    self.daemon_process.wait(timeout=2.0)
+                    self.daemon_process.wait(timeout=constants.KILL_TIMEOUT)
                     print(f"MANAGER_CLIENT: Daemon process killed (Exit code: {self.daemon_process.returncode}).", file=sys.stderr)
                 except Exception as e:
                     print(f"MANAGER_CLIENT: Error killing daemon process: {e}", file=sys.stderr)

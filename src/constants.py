@@ -54,4 +54,25 @@ AUTO_SNAPSHOT_SORT_ORDER = [
 DEFAULT_DAEMON_COMMAND_TIMEOUT = 120  # Default timeout for daemon commands in seconds
 DEFAULT_LOGGING_ENABLED = False       # Default state for logging feature (disabled by default)
 
+# --- Timeout related constants ---
+# Timeouts used across client<->daemon IPC and internal thread/process management
+# NOTE: Keep values in sync with current behavior to avoid changing runtime characteristics
+# --- IPC Timeouts
+IPC_READY_TIMEOUT = 60             # Default timeout for waiting daemon 'ready' signal (seconds)
+IPC_CONNECT_TIMEOUT = 10.0         # Default timeout for connecting to daemon socket (seconds)
+IPC_LAUNCH_CONNECT_TIMEOUT = IPC_READY_TIMEOUT  # Timeout when connecting to a socket created by a freshly-launched daemon (allows authentication/polkit time)
+# --- Client Timeouts
+CLIENT_REQUEST_TIMEOUT = 60.0      # Default timeout for a standard client request/response roundtrip (seconds)
+CLIENT_ACTION_TIMEOUT = 120.0      # Default timeout for long-running client actions/requests (seconds)
+LIST_IMPORTABLE_POOLS_TIMEOUT = CLIENT_ACTION_TIMEOUT  # Timeout when searching for importable pools
+SHUTDOWN_REQUEST_TIMEOUT = 5.0     # Timeout for shutdown request to daemon (seconds)
+# --- Thread/Process/Poll Timeouts..etc
+THREAD_JOIN_TIMEOUT = 2.0          # Timeout for joining threads during shutdown (seconds)
+TERMINATE_TIMEOUT = 5.0 # Timeout to wait for process to terminate after SIGTERM (seconds)
+TERMINATE_SHORT_TIMEOUT = 1.0  # Short grace time after terminate() for cleanup
+KILL_TIMEOUT = 2.0    # Timeout to wait for process to terminate after SIGKILL (seconds)
+POLL_INTERVAL = 0.1                # Generic short poll interval used for retry loops (seconds)
+READER_SELECT_TIMEOUT = 0.2        # Timeout used in select() in reader thread loop in client to check read responses from daemon (seconds)
+READY_SELECT_TIMEOUT = 0.1         # Timeout used in select() in wait_for_ready_signal
+
 # --- END OF FILE constants.py ---

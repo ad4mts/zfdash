@@ -778,6 +778,7 @@ class MainWindow(QMainWindow):
                 "operation involving a child dataset.\n\n"
                 "Troubleshooting Steps:\n"
                 "1. Try `Refresh All Data`.\n"
+                # linux-only: the following command hint (`sudo umount -l`) is Linux/Unix-specific; macOS/BSD may require different commands
                 "2. Check system mounts (`mount | grep <dataset>`). Try `sudo umount -l <mountpoint>`.\n"
                 "3. Try forcefully destroying the problematic child dataset mentioned in the error (if safe).\n"
                 "4. Try exporting and re-importing the entire pool (`zpool export/import <poolname>`).\n\n"

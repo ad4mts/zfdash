@@ -50,9 +50,11 @@ def save_config(config: dict):
             uid = os.getuid()
             gid = os.getgid()
             if os.path.exists(config_dir) and os.stat(config_dir).st_uid != uid:
-                 os.chown(config_dir, uid, gid)
+                # linux-only: attempting to chown to the UID/GID of the current user; POSIX call which may behave differently on non-Linux systems
+                os.chown(config_dir, uid, gid)
             if os.path.exists(config_path) and os.stat(config_path).st_uid != uid:
-                 os.chown(config_path, uid, gid)
+                # linux-only: change ownership to user UID/GID; may be no-op or different on some OSes
+                os.chown(config_path, uid, gid)
         except OSError as chown_e:
              print(f"CONFIG: Warning: Could not set ownership on config dir/file: {chown_e}", file=sys.stderr)
 
@@ -117,8 +119,10 @@ def _write_credentials(credentials: dict) -> bool:
             json.dump(credentials, f, indent=4)
 
         # Ensure correct permissions before renaming
-        os.chmod(temp_path, 0o644) # RW for root, R for group/others
+        os.chmod(temp_path, 0o644) # RW for owner, R for group/others
+        # linux-only: this assumes root-owned credential files (chown to 0/0); behavior or conventions may differ on other OSes
         os.chown(temp_path, 0, 0) # Owner: root, Group: root
+        # linux-only: setting owner root:root via os.chown assumes POSIX
 
         # Replace original file
         os.replace(temp_path, CREDENTIALS_FILE_PATH)

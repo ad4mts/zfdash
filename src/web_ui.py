@@ -104,6 +104,7 @@ try:
             os.chmod(FLASK_KEY_PERSISTENT_PATH, 0o644)
             # Ensure ownership is root:root (should be by default as container runs as root)
             try:
+                # linux-only: ensure ownership root:root for key file; in container scenarios this is typical, but may differ on other OSes
                 os.chown(FLASK_KEY_PERSISTENT_PATH, 0, 0)
             except OSError as chown_err: # Catch potential permission issues if chown isn't allowed (unlikely for root)
                 print(f"WARNING: Could not set ownership on {FLASK_KEY_PERSISTENT_PATH}: {chown_err}", file=sys.stderr)

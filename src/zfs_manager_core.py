@@ -23,15 +23,11 @@ except ImportError as e:
     raise e # Or sys.exit(1)
 
 # --- Find ZFS/ZPOOL Executables ---
-def _find_executable(name, paths=['/usr/sbin', '/sbin', '/usr/bin', '/bin']):
-    for path_dir in paths:
-        full_path = os.path.join(path_dir, name)
-        if os.path.exists(full_path) and os.access(full_path, os.X_OK):
-            return full_path
-    return None
+# Use centralized helper from paths.py (search PATH and common platform locations)
+from paths import find_executable
 
-ZFS_CMD_PATH = _find_executable("zfs")
-ZPOOL_CMD_PATH = _find_executable("zpool")
+ZFS_CMD_PATH = find_executable("zfs")
+ZPOOL_CMD_PATH = find_executable("zpool")
 
 # --- Error Classes ---
 class ZfsError(Exception):
@@ -201,6 +197,7 @@ def _run_command(
                          try:
                               # Set permissions to rw-rw---- (user=rw, group=rw, others=no)
                               os.chmod(log_path, stat.S_IRUSR | stat.S_IWUSR | stat.S_IRGRP | stat.S_IWGRP)
+                              # linux-only: setting owner via os.chown(user_uid, -1) and fs perms is POSIX; behavior may differ on macOS/BSD
                               os.chown(log_path, user_uid, -1) # Keep group same as daemon
                          except OSError as perm_e: print(f"DAEMON_CORE: Warning: Could not set permissions/owner on log file {log_path}: {perm_e}", file=sys.stderr)
 
@@ -503,8 +500,9 @@ def _validate_vdev_spec(vdev_spec: Dict[str, Any], context: str) -> Dict[str, An
     validated_devices = []
     for i, dev in enumerate(devices):
         if not isinstance(dev, str) or not dev.strip():
-             raise ZfsCommandError(f"Invalid device path at index {i} in {context} for type '{vdev_type}': Must be a non-empty string.")
+            raise ZfsCommandError(f"Invalid device path at index {i} in {context} for type '{vdev_type}': Must be a non-empty string.")
         # Basic check for plausible device paths (can be expanded)
+        # linux-only: device paths under '/dev/' follow Linux naming conventions (e.g., /dev/sd*, /dev/nvme*); non-Linux systems may use different device paths
         if not dev.startswith('/dev/'):
             print(f"DAEMON_CORE: Warning: Device path '{dev}' in {context} doesn't start with /dev/. Proceeding cautiously.", file=sys.stderr)
             # Depending on strictness, could raise ZfsCommandError here
@@ -771,8 +769,13 @@ def export_pool(pool_name: str, force: bool = False, *, _log_enabled=False, _use
 # --- Block Device Listing (Using lsblk JSON) ---
 @adapt_common_kwargs
 def list_block_devices(*, _log_enabled=False, _user_uid=-1, **kwargs) -> List[Dict[str, Any]]:
-    """Lists available block devices using lsblk JSON output for robustness."""
-    lsblk_path = _find_executable("lsblk", ['/usr/bin', '/bin'])
+    """Lists available block devices using lsblk JSON output for robustness.
+
+    linux-only: Uses Linux-specific external command 'lsblk' which is not
+    available on macOS or some BSD systems. The behavior below expects lsblk
+    JSON output format and Linux device names like '/dev/sda', '/dev/nvme...'.
+    """
+    lsblk_path = find_executable("lsblk", ['/usr/bin', '/bin'])  # linux-only: lsblk is Linux-specific
     if not lsblk_path:
         print(f"DAEMON_CORE: Error: 'lsblk' command not found. Cannot list block devices.", file=sys.stderr)
         return [] # Cannot proceed without lsblk
@@ -838,6 +841,7 @@ def list_block_devices(*, _log_enabled=False, _user_uid=-1, **kwargs) -> List[Di
                     'pkname': pkname,
                     'is_zfs_member': is_zfs_member,
                     'is_directly_blocked': is_directly_blocked,
+                    # linux-only: Linux device parent path assumption under /dev (used to link pkname to device path)
                     'parent_path': f"/dev/{pkname}" if pkname else None # Precompute parent path
                  }
                  all_blk_devices.append(dev_info)
@@ -916,6 +920,7 @@ def detach_device(pool_name: str, device: str, *, _log_enabled=False, _user_uid=
 @adapt_common_kwargs
 def replace_device(pool_name: str, old_device: str, new_device: Optional[str] = None, *, _log_enabled=False, _user_uid=-1, **kwargs):
     builder = ZpoolCommandBuilder('replace').pool(pool_name).device(old_device)
+    # linux-only: 'new_device' values like '/dev/...' refer to Linux device paths under /dev
     # new_device can be None (auto-replace from spare) or "" (mark for replacement) or "/dev/..."
     if new_device is not None:
         builder.device(new_device)

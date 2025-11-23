@@ -17,6 +17,8 @@ import time
 import subprocess
 from typing import Optional, TYPE_CHECKING
 
+import constants
+
 if TYPE_CHECKING:
     from ipc_client import LineBufferedTransport
 
@@ -88,7 +90,7 @@ def check_and_remove_stale_socket(socket_path: str) -> bool:
 
 
 def connect_to_unix_socket(socket_path: str,
-                          timeout: float = 10.0,
+                          timeout: float = constants.IPC_CONNECT_TIMEOUT,
                           check_process: Optional[subprocess.Popen] = None) -> socket.socket:
     """
     Connect to Unix domain socket with retry logic and optional process monitoring.
@@ -135,10 +137,10 @@ def connect_to_unix_socket(socket_path: str,
                     except Exception:
                         pass
                     client_sock = None
-                time.sleep(0.1)
+                time.sleep(constants.POLL_INTERVAL)
         else:
             # Socket not created yet - retry
-            time.sleep(0.1)
+            time.sleep(constants.POLL_INTERVAL)
 
     # Timeout reached
     raise TimeoutError(
@@ -150,7 +152,7 @@ def connect_to_unix_socket(socket_path: str,
 
 def wait_for_ready_signal(transport: 'LineBufferedTransport',
                           process: Optional[subprocess.Popen] = None,
-                          timeout: int = 60) -> None:
+                          timeout: int = constants.IPC_READY_TIMEOUT) -> None:
     """
     Wait for daemon to send ready signal via transport.
 
@@ -184,7 +186,7 @@ def wait_for_ready_signal(transport: 'LineBufferedTransport',
                     )
 
             # Check for data with select (non-blocking check)
-            readable, _, _ = select.select([transport.fileno()], [], [], 0.1)
+            readable, _, _ = select.select([transport.fileno()], [], [], constants.READY_SELECT_TIMEOUT)
 
             if readable:
                 try:
@@ -226,7 +228,7 @@ def wait_for_ready_signal(transport: 'LineBufferedTransport',
                     else:
                         raise RuntimeError(f"Error reading from daemon: {e}")
 
-        # Timeout reached
+    # Timeout reached
         raise TimeoutError(f"Daemon did not send ready signal within {timeout} seconds.")
 
     except Exception:

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # --- START OF FILE src/main.py ---
 import sys
 import os
@@ -7,8 +8,9 @@ import argparse # Import argparse
 from typing import Optional
 
 # Import new dependencies
-import daemon_utils
+from ipc_client import launch_daemon
 from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
+import constants
 from paths import IS_FROZEN
 
 
@@ -34,9 +36,33 @@ def _show_startup_error(title, message):
 if __name__ == "__main__":
 
     # --- Argument Parsing ---
+    class RawDefaultsHelpFormatter(argparse.ArgumentDefaultsHelpFormatter, argparse.RawDescriptionHelpFormatter):
+        pass
+
+    usage_str = (
+        "%(prog)s [-h] [-w] [--host HOST] [-p PORT] [--debug] [--socket] [--connect-socket [PATH]]\n"
+        "   or: %(prog)s --daemon --uid UID --gid GID [--listen-socket [PATH]]\n"
+        "   or: %(prog)s --connect-socket [PATH]  # Connect to existing daemon\n"
+    )
+
     parser = argparse.ArgumentParser(
+        usage=usage_str,
         description="ZfDash ZFS Manager",
-        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+        formatter_class=RawDefaultsHelpFormatter,
+        epilog=(
+            "Examples:\n"
+            "  Run GUI with auto-launched daemon (default):\n"
+            "    python3 src/main.py\n\n"
+            "  Run Web UI (auto-launch daemon):\n"
+            "    python3 src/main.py --web\n\n"
+            "  Connect GUI/Web to existing daemon socket (default path):\n"
+            "    python3 src/main.py --connect-socket\n\n"
+            "  Connect to explicit daemon socket path:\n"
+            "    python3 src/main.py --web --connect-socket /run/user/1000/zfdash.sock\n\n"
+            # linux-only: the example above uses '/run/user/1000' which follows systemd/XDG runtime dir layout; other OSes may use different paths
+            "  Start the daemon manually (run as root or with privilege escalation):\n"
+            "    sudo python3 src/main.py --daemon --uid $(id -u) --gid $(id -g) --listen-socket\n"
+        ),
     )
 
     # Client / UI options (grouped)
@@ -93,8 +119,8 @@ if __name__ == "__main__":
     daemon_process = None
 
     if args.daemon:
-        # --- Daemon Mode --- (Launched via pkexec, this handles its own args)
-        # The daemon is now expected to be launched via pkexec by daemon_utils.
+        # --- Daemon Mode --- (Launched via privilege escalation, this handles its own args)
+        # The daemon is now expected to be launched via privilege escalation (pkexec/doas/sudo) by daemon_utils.
         # This direct daemon launch logic is kept in case it's needed for debugging
         # but normal operation (GUI/Web) will launch it indirectly.
         if args.uid is None or args.gid is None:
@@ -137,10 +163,10 @@ if __name__ == "__main__":
                     raise FileNotFoundError(f"Socket does not exist: {socket_path}")
                 
                 # Connect to socket
-                client_sock = connect_to_unix_socket(socket_path, timeout=10.0, check_process=None)
+                client_sock = connect_to_unix_socket(socket_path, timeout=constants.IPC_CONNECT_TIMEOUT, check_process=None)
                 transport = SocketTransport(client_sock)
                 buffered = LineBufferedTransport(transport)
-                wait_for_ready_signal(buffered, process=None, timeout=10)
+                wait_for_ready_signal(buffered, process=None, timeout=constants.IPC_CONNECT_TIMEOUT)
                 
                 print(f"MAIN: Successfully connected to daemon socket.", file=sys.stderr)
                 
@@ -160,6 +186,7 @@ if __name__ == "__main__":
                 print("MAIN: ZFS Manager client created. Proceeding with UI launch.", file=sys.stderr)
                 
             except Exception as e:
+                # linux-only: sudo and $(id -u) shell syntax in error message
                 _show_startup_error(f"{mode} Connection Error", 
                                   f"Failed to connect to daemon socket:\n{e}\n\nMake sure the daemon is running:\n"
                                   f"sudo python3 src/main.py --daemon --uid $(id -u) --gid $(id -g) --listen-socket {socket_path}")
@@ -168,18 +195,15 @@ if __name__ == "__main__":
             # Launch own daemon (existing code)
             print(f"MAIN: {mode} mode requested. Launching dedicated daemon...", file=sys.stderr)
             try:
-                # Launch the daemon using daemon_utils
-                # This call now blocks until the daemon is ready or fails/times out
-                print("MAIN: Calling daemon_utils.launch_daemon()...", file=sys.stderr)
-                daemon_process, transport = daemon_utils.launch_daemon(use_socket=args.socket)
-                print(f"MAIN: daemon_utils.launch_daemon() returned successfully (PID: {daemon_process.pid}). Creating client...", file=sys.stderr)
+                print("MAIN: Launching daemon...", file=sys.stderr)
+                daemon_process, transport = launch_daemon(use_socket=args.socket)
+                print(f"MAIN: Daemon launched successfully (PID: {daemon_process.pid}). Creating client...", file=sys.stderr)
 
                 # Create the ZFS Manager Client instance
                 zfs_manager_client = ZfsManagerClient(daemon_process, transport)
 
                 print("MAIN: ZFS Manager client created. Proceeding with UI launch.", file=sys.stderr)
             except (RuntimeError, TimeoutError, ValueError) as e:
-                # Catch specific errors from daemon_utils.launch_daemon
                 _show_startup_error(f"{mode} Startup Error", f"Failed to launch or connect to the ZFS daemon:\n{e}\n\nPlease check system logs or Polkit permissions.")
                 sys.exit(1) # Exit after showing the error
             except ImportError as e:
@@ -223,7 +247,7 @@ if __name__ == "__main__":
                      print("MAIN: Terminating daemon process due to early exit...", file=sys.stderr)
                      try:
                          daemon_process.terminate()
-                         daemon_process.wait(timeout=2)
+                         daemon_process.wait(timeout=constants.TERMINATE_TIMEOUT)
                      except: pass # Ignore errors during cleanup
             print("MAIN: Exiting.", file=sys.stderr)
 
