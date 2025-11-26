@@ -253,22 +253,25 @@ def _find_privilege_escalation_tool() -> Optional[str]:
     if pkexec:
         return pkexec
     
-    # FreeBSD/OpenBSD: doas
-    doas = shutil.which("doas")
-    if doas:
-        return doas
-    
     # Fallback: sudo (less desirable, no GUI prompt)
     sudo = shutil.which("sudo")
     if sudo:
         return sudo
+    
+    # FreeBSD/OpenBSD if there is no sudo: doas
+    doas = shutil.which("doas")
+    if doas:
+        return doas
+    
+
     
     return None
 
 
 def _build_daemon_command(daemon_path: str, uid: int, gid: int, 
                          escalation_tool: Optional[str] = None,
-                         is_script: bool = False) -> list:
+                         is_script: bool = False,
+                         allow_tty_prompt: bool = False) -> list:
     """
     Build the command array to launch the daemon.
     
@@ -278,6 +281,7 @@ def _build_daemon_command(daemon_path: str, uid: int, gid: int,
         gid: Group ID to pass to daemon
         escalation_tool: Path to privilege escalation tool or None
         is_script: True if daemon_path is a Python script (needs interpreter)
+        allow_tty_prompt: If True, allow escalation tools to prompt on TTY (no -n for sudo)
     
     Returns:
         Command list suitable for subprocess.Popen
@@ -300,13 +304,18 @@ def _build_daemon_command(daemon_path: str, uid: int, gid: int,
         # Linux PolicyKit  # linux-only: pkexec is Linux-specific
         return [escalation_tool] + base_cmd
     
+    elif tool_name == "sudo":
+        # Fallback sudo - use -n (non-interactive) only if we can't prompt on TTY
+        if allow_tty_prompt:
+            return [escalation_tool] + base_cmd  # Allow password prompt on TTY
+        else:
+            return [escalation_tool, '-n'] + base_cmd  # -n = non-interactive (pipe mode)
+    
     elif tool_name == "doas":
         # FreeBSD/OpenBSD doas
         return [escalation_tool] + base_cmd
     
-    elif tool_name == "sudo":
-        # Fallback sudo (will prompt in terminal, not GUI)
-        return [escalation_tool, '-n'] + base_cmd  # -n = non-interactive
+
     
     else:
         # Unknown tool, try direct execution
@@ -411,17 +420,32 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
     # Check for stale socket and remove it, or raise if daemon already running
     check_and_remove_stale_socket(socket_path)
     
+    # Determine if we can allow TTY prompts (for sudo password, etc.)
+    allow_tty = sys.stdin.isatty()
+    
     # Build daemon command with --listen-socket argument
-    cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script)
+    cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script, allow_tty_prompt=allow_tty)
     cmd.extend(['--listen-socket', socket_path])
     print(f"IPC: Command: {' '.join(cmd)}")
     
     # Launch daemon (it will create and listen on socket)
     try:
+        # If the caller runs attached to a TTY (e.g. interactive terminal),
+        # keep both stdin and stdout inherited (None) so escalation tools like sudo
+        # can prompt for credentials and display messages. Only do this for socket mode:
+        # pipe mode relies on pipes and must not inherit these.
+        if allow_tty:
+            stdin_arg = None  # inherit parent's stdin/tty
+            stdout_arg = None # inherit parent's stdout/tty
+            print("IPC: Detected caller TTY; inheriting stdin and stdout for daemon (socket mode).")
+        else:
+            stdin_arg = subprocess.DEVNULL
+            stdout_arg = subprocess.DEVNULL
+
         process = subprocess.Popen(
             cmd,
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.DEVNULL,
+            stdin=stdin_arg,
+            stdout=stdout_arg,
             stderr=subprocess.DEVNULL,
             env=os.environ.copy(),
         )
@@ -430,6 +454,7 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
         raise RuntimeError(f"Failed to launch daemon process: {e}") from e
     
     # Connect to socket with retry and process monitoring
+    client_sock = None  # Initialize before try block to avoid UnboundLocalError
     try:
         # Use IPC_LAUNCH_CONNECT_TIMEOUT and not IPC_CONNECT_TIMEOUT: This allows extra time for auth (polkit/sudo)
         client_sock = connect_to_unix_socket(socket_path, timeout=constants.IPC_LAUNCH_CONNECT_TIMEOUT, check_process=process)

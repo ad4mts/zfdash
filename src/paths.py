@@ -3,11 +3,21 @@
 #
 # Use `get_user_runtime_dir(uid)` to resolve per-UID runtime directories in a
 # consistent manner across the project.
+#
+# NOTE on XDG_RUNTIME_DIR and the socket path mismatch problem:
+# ---------------------------------------------------------------
+# We intentionally DO NOT use XDG_RUNTIME_DIR for socket/runtime path resolution.
+# 
+# The problem: XDG_RUNTIME_DIR is a per-user, per-session environment variable.
+# - Daemon runs as root (uid=0) → sees XDG_RUNTIME_DIR=/run/user/0 (or unset)
+# - WebUI runs as regular user → sees XDG_RUNTIME_DIR=/run/user/1000
+# - Result: daemon listens on one path, client tries to connect to another → mismatch!
 
 import sys
 import os
 import platform
 import shutil
+import tempfile
 from pathlib import Path
 
 # Deployment detection
@@ -102,57 +112,101 @@ def get_daemon_socket_path(uid: int) -> str:
 def get_user_runtime_dir(uid: int) -> str:
     """Return a canonical runtime directory path for a given user id.
 
-    Resolve the correct per-user runtime directory in a few steps:
-    - If XDG_RUNTIME_DIR is set in the environment and the directory exists and
-      is owned by the given uid, return it.
-    - Otherwise, if /run/user/{uid} exists, return that.
-    - Fallback to /tmp.
+    This function uses DETERMINISTIC, platform-specific paths that do NOT depend
+    on environment variables like XDG_RUNTIME_DIR. This ensures both daemon (root)
+    and client (user) resolve to the same path for a given UID.
+
+    Resolution order by platform:
+    - Linux: /run/user/{uid} → /var/run/user/{uid} → /tmp/zfdash-runtime-{uid}
+    - FreeBSD: /var/run/user/{uid} → /tmp/zfdash-runtime-{uid}
+    - Windows: {tempdir}/zfdash-runtime-{uid} (using tempfile.gettempdir())
+    - macOS/Other: /tmp/zfdash-runtime-{uid} → {tempdir}/zfdash-runtime-{uid}
 
     Args:
         uid: The UID for which to resolve the runtime dir
 
     Returns:
-        str: Absolute path to a suitable runtime directory (or /tmp as a fallback)
+        str: Absolute path to a suitable runtime directory
     """
     if uid < 0:
         return RUNTIME_FALLBACK_DIR
 
-    # Prefer XDG_RUNTIME_DIR if it is owned by the target user
-    xdg = os.environ.get('XDG_RUNTIME_DIR')
-    if xdg and os.path.isdir(xdg):
-        try:
-            #IMPORTANT: check if owend by user uid; 
-            # in case the daemon is running as root (/run/user/0 is not owen by the targetuid
-            # > fall back to /run/user/(uid) to match --connect-socket default path of main.py
-            if os.stat(xdg).st_uid == uid: 
-                return xdg
-        except Exception:
-            # Ignore stat errors; we'll fall back below
-            pass
+    system = platform.system()
+    per_user_subdir = f"{RUNTIME_PER_USER_PREFIX}{uid}"
 
-    # linux-only: Prefer systemd/XDG runtime dir layout '/run/user/{uid}' on Linux systems
-    runtime_dir = f"/run/user/{uid}"
-    if os.path.isdir(runtime_dir):
-        return runtime_dir
+    if system == 'Linux':
+        # Linux: prefer systemd-style /run/user/{uid}, then /var/run/user/{uid}
+        candidates = [
+            f"/run/user/{uid}",
+            f"/var/run/user/{uid}",  # Some older/non-systemd systems
+        ]
+        for candidate in candidates:
+            if os.path.isdir(candidate):
+                return candidate
+        # Fallback: create per-user dir under /tmp
+        return _create_fallback_runtime_dir(RUNTIME_FALLBACK_DIR, per_user_subdir, uid)
 
-    # Last resort - create a secure per-UID directory under /tmp and return it.
-    # This avoids collisions and makes ownership explicit.
-    per_user_dir = os.path.join(RUNTIME_FALLBACK_DIR, f"{RUNTIME_PER_USER_PREFIX}{uid}")
+    elif 'BSD' in system:  # FreeBSD, OpenBSD, NetBSD, etc.
+        # BSD: /var/run/user/{uid} is common on FreeBSD with pam_runtime_dir
+        candidates = [
+            f"/var/run/user/{uid}",
+        ]
+        for candidate in candidates:
+            if os.path.isdir(candidate):
+                return candidate
+        # Fallback: create per-user dir under /tmp
+        return _create_fallback_runtime_dir(RUNTIME_FALLBACK_DIR, per_user_subdir, uid)
+
+    elif system == 'Windows':
+        # Windows (educational only; no stable openzfs support yet in windows): Use the system temp directory (typically C:\Users\<user>\AppData\Local\Temp)
+        temp_base = tempfile.gettempdir()
+        return _create_fallback_runtime_dir(temp_base, per_user_subdir, uid)
+
+    elif system == 'Darwin':  # macOS
+        # macOS: TMPDIR is per-user (e.g., /var/folders/xx/xxxxx/T/) so it has the
+        # same mismatch problem as XDG_RUNTIME_DIR - daemon and client would get
+        # different paths. Instead, use /tmp (symlink to /private/tmp) which is
+        # shared and accessible by all users, with a per-UID subdirectory.
+        if os.path.isdir('/tmp'):
+            return _create_fallback_runtime_dir('/tmp', per_user_subdir, uid)
+        # Ultimate fallback - but this may cause mismatch issues
+        temp_base = tempfile.gettempdir()
+        return _create_fallback_runtime_dir(temp_base, per_user_subdir, uid)
+
+    else:
+        # Unknown platform: try /tmp first, then tempfile.gettempdir()
+        if os.path.isdir('/tmp'):
+            return _create_fallback_runtime_dir('/tmp', per_user_subdir, uid)
+        temp_base = tempfile.gettempdir()
+        return _create_fallback_runtime_dir(temp_base, per_user_subdir, uid)
+
+
+def _create_fallback_runtime_dir(base_dir: str, subdir_name: str, uid: int) -> str:
+    """Create a per-user fallback runtime directory with proper permissions.
+
+    Args:
+        base_dir: Base directory (e.g., /tmp)
+        subdir_name: Subdirectory name (e.g., zfdash-runtime-1000)
+        uid: Target user ID for ownership
+
+    Returns:
+        str: Path to the created directory, or base_dir on failure
+    """
+    per_user_dir = os.path.join(base_dir, subdir_name)
     try:
         os.makedirs(per_user_dir, mode=0o700, exist_ok=True)
-        # If running as root, try to chown the directory to the target UID:GID (best effort)
-        if os.geteuid() == 0:
+        # If running as root, try to chown the directory to the target UID (best effort)
+        # This ensures the user can access their runtime dir even if root created it (webui/gui can access logs/socket)
+        if platform.system() != 'Windows' and os.geteuid() == 0:
             try:
-                # Set ownership to uid:uid (gid unknown here; safe to set to uid)
-                # linux-only: POSIX chown
                 os.chown(per_user_dir, uid, uid)
-            except PermissionError:
+            except (PermissionError, OSError):
                 # If we can't chown, leave as-is. Best-effort only.
                 pass
         return per_user_dir
     except Exception:
-        # If creation fails for any reason, fallback to /tmp string to maintain previous behavior
-        return RUNTIME_FALLBACK_DIR
+        # If creation fails, return base_dir as last resort
+        return base_dir
 
 
 # Export list for module
@@ -165,7 +219,8 @@ __all__ = [
     'USER_CONFIG_DIR', 'USER_CONFIG_FILE_PATH',
     'DAEMON_SCRIPT_PATH', 'DAEMON_IS_SCRIPT', 'DAEMON_STDERR_FILENAME',
     'RUNTIME_FALLBACK_DIR',
-    'get_daemon_log_file_path', 'get_viewer_log_file_path', 'get_daemon_socket_path', 'get_user_runtime_dir', 'find_executable'
+    'get_daemon_log_file_path', 'get_viewer_log_file_path', 'get_daemon_socket_path',
+    'get_user_runtime_dir', '_create_fallback_runtime_dir', 'find_executable'
 ]
 
 

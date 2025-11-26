@@ -148,10 +148,11 @@ def main():
     parser.add_argument('--gid', required=True, type=int, help="Real Group ID of the GUI/WebUI process owner")
     parser.add_argument('--daemon', action='store_true', help="Flag indicating daemon mode (for main.py)")
     parser.add_argument('--listen-socket', type=str, nargs='?', const='', help="Unix socket path to create and listen on (if not provided, uses stdin/stdout pipes). If flag present without path, uses default from get_daemon_socket_path(uid)")
+    parser.add_argument('--debug', action='store_true', help="Enable debug output to both terminal and log file")
     args = parser.parse_args()
     target_uid = args.uid
     target_gid = args.gid
-    
+
     # Handle default socket path if --listen-socket flag present without path
     if args.listen_socket == '':
         from paths import get_daemon_socket_path
@@ -160,7 +161,7 @@ def main():
 
     # --- Setup stderr logging: Write to BOTH terminal and log file ---
     original_stderr = sys.stderr
-    
+
     # Simple wrapper that writes to multiple destinations
     class Tee:
         def __init__(self, *files):
@@ -173,7 +174,7 @@ def main():
             for f in self.files:
                 try: f.flush()
                 except: pass
-    
+
     try:
         # Compute path for daemon stderr logs using centralized helper; use the
         # target UID (args.uid) so stderr/log files are colocated with the
@@ -186,8 +187,14 @@ def main():
             os.chmod(stderr_log_path, 0o666)  # Readable by all for debugging
         except Exception:
             pass
-        sys.stderr = Tee(original_stderr, log_file)  # Send stderr to both terminal and file
-        print(f"DAEMON: Logging stderr to {stderr_log_path} + terminal", file=sys.stderr)
+        # Enable Tee if --debug flag is present
+        ENABLE_TEE = args.debug
+        if ENABLE_TEE:
+            sys.stderr = Tee(original_stderr, log_file)  # Send stderr to both terminal and file
+            print(f"DAEMON: Logging stderr to {stderr_log_path} + terminal", file=sys.stderr)
+        else:
+            # Send stderr to file only; avoid printing to user's terminal.
+            sys.stderr = log_file
     except Exception as e:
         print(f"DAEMON: Logging stderr setup failed: {e}", file=original_stderr)
     # --- End logging setup ---
