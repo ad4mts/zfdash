@@ -67,7 +67,12 @@ jobs:
             ${{ env.REGISTRY_GHCR }}/${{ env.IMAGE_NAME_GHCR }}
             ${{ steps.prep_dockerhub.outputs.image_name }}
           tags: |
-            # set latest tag for default branch
+            # On git tag push (v1.2.3 or v1.2.3-beta), generate Docker tag from version
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            # Fallback: use raw git tag name (e.g. v1.8.4-beta)
+            type=ref,event=tag
+            # set latest tag for default branch only
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
