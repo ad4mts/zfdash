@@ -141,9 +141,7 @@ body.logged-in #app-section { display: flex; } /* Main app section is flex colum
 /* Attributes set in index.html: class="bg-light border-bottom px-3 py-1 flex-shrink-0" */
 z-index: 1020; /* Below navbar, above main content */
 }
-#tabs-panel .nav-tabs {
-/* border-bottom: 0 !important; */ /* Removed border in index.html */
-}
+
 #tabs-panel .nav-link {
     font-size: 0.9rem;
     padding: 0.5rem 0.8rem;
@@ -229,9 +227,6 @@ z-index: 1020; /* Below navbar, above main content */
     padding: 0.6rem 1rem;
     border-bottom: 1px solid var(--app-border-color);
 }
-.card-body { /* Used for Tree Container */
-    /* Attributes set in index.html: class="card-body flex-grow-1 overflow-auto p-2" */
-}
 
 /* --- Tree View Styling --- */
 #zfs-tree-container {
@@ -277,7 +272,6 @@ position: relative; /* Needed for Bootstrap tabs */
 /* --- Content inside Tabs (Scrolling handled by wrappers) --- */
 
 /* Properties Tab */
-#properties-tab-pane .flex-shrink-0 { /* Header bar */ }
 #properties-tab-pane .table-responsive { /* Scrollable area */
 flex-grow: 1; /* Take remaining space */
 overflow-y: auto; /* Scroll vertically */
@@ -356,7 +350,6 @@ overflow-y: auto; /* Scroll vertically */
 }
 
 /* Snapshots Tab */
-#snapshots-tab-pane .flex-shrink-0 { /* Header/Button bar */ }
 #snapshots-tab-pane .table-responsive { /* Scrollable area */
 flex-grow: 1; /* Take remaining space */
 overflow-y: auto; /* Scroll vertically */
@@ -366,7 +359,6 @@ overflow-y: auto; /* Scroll vertically */
 #snapshots-table tbody tr.table-active { background-color: var(--app-selected-bg); color: var(--app-selected-text); font-weight: 500; }
 
 /* Pool Status Tab */
-#pool-status-tab-pane .flex-shrink-0 { /* Header bar */ }
 #pool-status-tab-pane > .flex-grow-1 { /* Wrapper for pre - THIS needs to grow */
 flex-grow: 1; /* Take remaining space */
 overflow-y: auto; /* Make THIS div scroll */
@@ -381,7 +373,6 @@ margin-bottom: 0; /* Needed if inside scrolling div */
 }
 
 /* Pool Edit Tab */
-#pool-edit-tab-pane .flex-shrink-0 { /* Header/Button bar */ }
 #pool-edit-tree-container { /* Scrollable area */
 font-family: var(--bs-font-monospace); font-size: 0.85rem;
 flex-grow: 1; /* Take remaining space */
@@ -436,7 +427,6 @@ border-top: 1px solid var(--app-border-color); /* Add top border */
 /* --- END: Modern Pool Edit Tree Styling --- */
 
 /* Encryption Tab */
-#encryption-tab-pane .flex-shrink-0 { /* Header/Button bar */ }
 #encryption-tab-pane .enc-info-container { /* Scrollable area */
 flex-grow: 1; /* Take remaining space */
 overflow-y: auto; /* Scroll vertically */
@@ -1255,3 +1245,211 @@ tr.editable-property {
 #encryption-tab-pane .enc-info-table + div .btn {
     margin-bottom: 0.25rem;
 }
+
+/* --- Dashboard Tab Styles --- */
+.dashboard-container {
+    background-color: var(--app-bg);
+}
+
+.dashboard-header-card {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 12px;
+    padding: 1.5rem;
+    color: white;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+}
+
+.dashboard-name {
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: white;
+    margin: 0;
+    word-break: break-all;
+}
+
+.dashboard-type-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    background-color: rgba(255, 255, 255, 0.2);
+    color: white;
+    backdrop-filter: blur(4px);
+}
+
+.dashboard-type-badge.pool { background-color: rgba(106, 100, 232, 0.9); }
+.dashboard-type-badge.dataset { background-color: rgba(33, 150, 243, 0.9); }
+.dashboard-type-badge.volume { background-color: rgba(156, 39, 176, 0.9); }
+.dashboard-type-badge.snapshot { background-color: rgba(96, 125, 139, 0.9); }
+
+.dashboard-health-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: white;
+    background-color: #4CAF50;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.dashboard-health-badge.online { background-color: #4CAF50; }
+.dashboard-health-badge.degraded { background-color: #ff9800; }
+.dashboard-health-badge.faulted { background-color: #f44336; }
+.dashboard-health-badge.offline { background-color: #9e9e9e; }
+.dashboard-health-badge.unavail { background-color: #f44336; }
+.dashboard-health-badge.mounted { background-color: #4CAF50; }
+.dashboard-health-badge.unmounted { background-color: #9e9e9e; }
+
+.dashboard-health-badge i {
+    font-size: 0.5rem;
+}
+
+.dashboard-card {
+    background-color: var(--app-pane-bg);
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    border: 1px solid var(--app-border-color);
+    transition: box-shadow 0.2s ease;
+}
+
+.dashboard-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.dashboard-card-title {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: var(--app-text-color);
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--app-border-color);
+    display: flex;
+    align-items: center;
+}
+
+.dashboard-card-title i {
+    color: var(--app-primary-color);
+    font-size: 1rem;
+}
+
+/* Storage Progress Bars */
+.storage-bar-wrapper {
+    margin-bottom: 0.5rem;
+}
+
+.storage-bar-label {
+    font-weight: 500;
+    font-size: 0.85rem;
+    color: var(--app-text-color);
+}
+
+.storage-bar-percent {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--app-text-color);
+}
+
+.storage-progress {
+    border-radius: 12px;
+    background: linear-gradient(180deg, #e8ecf0 0%, #d8dce0 50%, #e8ecf0 100%);
+    overflow: hidden;
+    border: 2px solid #a8b0bc;
+    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
+    height: 24px;
+}
+
+.storage-progress .progress-bar {
+    border-radius: 10px;
+    transition: width 0.6s ease, background 0.3s ease;
+    background: linear-gradient(180deg, #81C784 0%, #4CAF50 50%, #388E3C 100%);
+    margin: 2px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+}
+
+.storage-progress .progress-bar.warning {
+    background: linear-gradient(180deg, #ffb74d 0%, #ff9800 50%, #f57c00 100%);
+}
+
+.storage-progress .progress-bar.danger {
+    background: linear-gradient(180deg, #ef5350 0%, #f44336 50%, #e53935 100%);
+}
+
+.storage-progress .progress-bar.info {
+    background: linear-gradient(180deg, #64B5F6 0%, #2196F3 50%, #1976D2 100%);
+}
+
+.storage-details {
+    font-size: 0.8rem;
+}
+
+/* Info Table Styles */
+.info-table {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 0.35rem 0;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+.info-row:last-child {
+    border-bottom: none;
+}
+
+.info-label {
+    color: var(--app-text-muted);
+    font-size: 0.85rem;
+    flex-shrink: 0;
+    margin-right: 1rem;
+}
+
+.info-value {
+    color: var(--app-text-color);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-align: right;
+    word-break: break-all;
+}
+
+.info-value.success { color: #4CAF50; }
+.info-value.warning { color: #ff9800; }
+.info-value.danger { color: #f44336; }
+.info-value.info { color: #2196F3; }
+.info-value.muted { color: var(--app-text-muted); }
+
+/* Responsive adjustments for dashboard */
+@media (max-width: 768px) {
+    .dashboard-header-card {
+        padding: 1rem;
+    }
+    
+    .dashboard-name {
+        font-size: 1.25rem;
+    }
+    
+    .dashboard-card {
+        padding: 1rem;
+    }
+    
+    .info-row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .info-value {
+        text-align: left;
+        margin-top: 0.25rem;
+    }
+}
+

@@ -28,6 +28,7 @@ try:
     from widgets.pool_editor_widget import PoolEditorWidget
     from widgets.import_pool_dialog import ImportPoolDialog
     from widgets.encryption_widget import EncryptionWidget
+    from widgets.dashboard_widget import DashboardWidget
     import utils
     import config_manager
     from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
@@ -61,6 +62,7 @@ class MainWindow(QMainWindow):
         self._action_in_progress = False
 
         # Tab indices
+        self.dashboard_tab_index = -1
         self.properties_tab_index = -1
         self.snapshots_tab_index = -1
         self.pool_status_tab_index = -1
@@ -74,6 +76,7 @@ class MainWindow(QMainWindow):
         self.tree_view: Optional[QTreeView] = None
         self.tree_model: Optional[ZfsTreeModel] = None
         self.details_tabs: Optional[QTabWidget] = None
+        self.dashboard_widget: Optional[DashboardWidget] = None
         self.properties_widget: Optional[PropertiesEditor] = None
         self.snapshots_widget: Optional[SnapshotsWidget] = None
         self.pool_status_text: Optional[QPlainTextEdit] = None
@@ -274,6 +277,14 @@ class MainWindow(QMainWindow):
         self.details_tabs.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         # Set minimum width for details pane to indirectly limit tree pane expansion
         self.details_tabs.setMinimumWidth(400)
+
+        # Dashboard tab (first tab - overview)
+        self.dashboard_widget = DashboardWidget()
+        self.dashboard_widget.status_message.connect(self._update_status_bar)
+        dashboard_icon = QIcon.fromTheme("dashboard", QIcon.fromTheme("view-statistics", QIcon.fromTheme("utilities-system-monitor")))
+        self.dashboard_tab_index = self.details_tabs.addTab(
+            self.dashboard_widget, dashboard_icon, "Dashboard"
+        )
 
         # Pass zfs_client to child widgets that need it
         self.properties_widget = PropertiesEditor(zfs_client=self.zfs_client)
@@ -591,7 +602,7 @@ class MainWindow(QMainWindow):
 
     def _update_details_view(self, selected_object: Optional[ZfsObject]):
         """Update the content and enabled state of the details tabs."""
-        if not all([self.details_tabs, self.properties_widget, self.snapshots_widget,
+        if not all([self.details_tabs, self.dashboard_widget, self.properties_widget, self.snapshots_widget,
                     self.pool_status_text, self.pool_editor_widget, self.encryption_widget]):
             print("Warning: Details view update skipped, widgets not ready.")
             return
@@ -601,6 +612,10 @@ class MainWindow(QMainWindow):
         is_encrypted_dataset = is_dataset_or_vol and getattr(selected_object, 'is_encrypted', False)
 
         # --- Enable/disable tabs based on selection type ---
+        # Dashboard is always enabled
+        self.details_tabs.setTabEnabled(
+            self.dashboard_tab_index, True
+        )
         self.details_tabs.setTabEnabled(
             self.properties_tab_index, selected_object is not None
         )
@@ -618,6 +633,7 @@ class MainWindow(QMainWindow):
         )
 
         # --- Update content of each widget ---
+        self.dashboard_widget.set_object(selected_object)
         self.properties_widget.set_object(selected_object)
         self.snapshots_widget.set_dataset(selected_object if is_dataset_or_vol else None)
         pool_status = getattr(selected_object, 'status_details', '') if is_pool else ""
@@ -635,19 +651,9 @@ class MainWindow(QMainWindow):
         """Switches to the most relevant enabled tab based on the selected object type."""
         if not self.details_tabs: return
 
-        is_pool = isinstance(selected_object, Pool)
-        is_dataset_or_vol = isinstance(selected_object, Dataset)
-        is_encrypted_dataset = is_dataset_or_vol and getattr(selected_object, 'is_encrypted', False)
-
-        # Check tabs in preferred order and if they are currently enabled
-        if is_encrypted_dataset and self.details_tabs.isTabEnabled(self.encryption_tab_index):
-            self.details_tabs.setCurrentIndex(self.encryption_tab_index)
-        elif is_pool and self.details_tabs.isTabEnabled(self.pool_editor_tab_index): # Prioritize editor for pools?
-            self.details_tabs.setCurrentIndex(self.pool_editor_tab_index)
-        elif is_pool and self.details_tabs.isTabEnabled(self.pool_status_tab_index):
-            self.details_tabs.setCurrentIndex(self.pool_status_tab_index)
-        elif is_dataset_or_vol and self.details_tabs.isTabEnabled(self.snapshots_tab_index):
-            self.details_tabs.setCurrentIndex(self.snapshots_tab_index)
+        # Dashboard is always a safe default since it's always enabled
+        if self.details_tabs.isTabEnabled(self.dashboard_tab_index):
+            self.details_tabs.setCurrentIndex(self.dashboard_tab_index)
         elif self.details_tabs.isTabEnabled(self.properties_tab_index):
             self.details_tabs.setCurrentIndex(self.properties_tab_index)
         else:

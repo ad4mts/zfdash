@@ -685,32 +685,38 @@ async function fetchAndRenderData() {
                 const tabInstance = bootstrap.Tab.getOrCreateInstance(tabToActivate);
                 if (tabInstance) tabInstance.show(); // Ensure instance exists before showing
             } else {
-                // Fallback to properties tab if previous tab is gone/disabled
-                const propertiesTab = document.getElementById('properties-tab-button');
-                // Ensure properties tab itself is enabled before showing
-                if (propertiesTab && !propertiesTab.disabled) {
-                    const propertiesInstance = bootstrap.Tab.getOrCreateInstance(propertiesTab);
-                    if (propertiesInstance) propertiesInstance.show();
-                } else if (document.getElementById('details-tab').querySelector('.nav-link:not(.disabled)')) {
-                    // If properties also disabled, try activating the *first available* enabled tab
-                    const firstEnabledTab = document.getElementById('details-tab').querySelector('.nav-link:not(.disabled)');
-                    if(firstEnabledTab) {
-                        const firstEnabledInstance = bootstrap.Tab.getOrCreateInstance(firstEnabledTab);
-                        if(firstEnabledInstance) firstEnabledInstance.show();
+                // Fallback to dashboard tab first, then properties
+                const dashboardTab = document.getElementById('dashboard-tab-button');
+                if (dashboardTab && !dashboardTab.disabled) {
+                    const dashboardInstance = bootstrap.Tab.getOrCreateInstance(dashboardTab);
+                    if (dashboardInstance) dashboardInstance.show();
+                } else {
+                    const propertiesTab = document.getElementById('properties-tab-button');
+                    // Ensure properties tab itself is enabled before showing
+                    if (propertiesTab && !propertiesTab.disabled) {
+                        const propertiesInstance = bootstrap.Tab.getOrCreateInstance(propertiesTab);
+                        if (propertiesInstance) propertiesInstance.show();
+                    } else if (document.getElementById('details-tab').querySelector('.nav-link:not(.disabled)')) {
+                        // If properties also disabled, try activating the *first available* enabled tab
+                        const firstEnabledTab = document.getElementById('details-tab').querySelector('.nav-link:not(.disabled)');
+                        if(firstEnabledTab) {
+                            const firstEnabledInstance = bootstrap.Tab.getOrCreateInstance(firstEnabledTab);
+                            if(firstEnabledInstance) firstEnabledInstance.show();
+                        }
                     }
                 }
             }
         } catch(tabError) {
             console.error("Error restoring active tab:", tabError);
-            // Attempt to activate properties tab as a last resort
+            // Attempt to activate dashboard tab as a last resort
             try {
-                const propertiesTab = document.getElementById('properties-tab-button');
-                if (propertiesTab && !propertiesTab.disabled) {
-                    const propertiesInstance = bootstrap.Tab.getOrCreateInstance(propertiesTab);
-                    if (propertiesInstance) propertiesInstance.show();
+                const dashboardTab = document.getElementById('dashboard-tab-button');
+                if (dashboardTab && !dashboardTab.disabled) {
+                    const dashboardInstance = bootstrap.Tab.getOrCreateInstance(dashboardTab);
+                    if (dashboardInstance) dashboardInstance.show();
                 }
             } catch (fallbackError) {
-                console.error("Error activating fallback properties tab:", fallbackError);
+                console.error("Error activating fallback dashboard tab:", fallbackError);
             }
         }
 
@@ -821,6 +827,8 @@ function clearSelection() {
     zfsTree.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
     // Persist cleared selection
     saveSelectionToStorage();
+    // Clear dashboard
+    renderDashboard(null);
     // --- START REVISED: Hide the tab content area ---
     if (detailsTabContent) {
         detailsTabContent.style.visibility = 'hidden'; // Hide the tab content
@@ -1016,6 +1024,348 @@ function formatSize(value) { // Changed parameter name from bytes for clarity
 
 // --- Rendering Functions ---
 
+// --- Dashboard Rendering Functions ---
+function renderDashboard(obj) {
+    const dashboardName = document.getElementById('dashboard-name');
+    const dashboardTypeBadge = document.getElementById('dashboard-type-badge');
+    const dashboardHealthBadge = document.getElementById('dashboard-health-badge');
+    const dashboardHealthText = document.getElementById('dashboard-health-text');
+    const primaryStorageWrapper = document.getElementById('primary-storage-wrapper');
+    const secondaryStorageWrapper = document.getElementById('secondary-storage-wrapper');
+    const generalInfo = document.getElementById('dashboard-general-info');
+    const configInfo = document.getElementById('dashboard-config-info');
+    const statsInfo = document.getElementById('dashboard-stats-info');
+    const systemInfo = document.getElementById('dashboard-system-info');
+
+    // Reset to default state
+    if (!obj) {
+        if (dashboardName) dashboardName.textContent = 'Select a pool or dataset';
+        if (dashboardTypeBadge) dashboardTypeBadge.style.display = 'none';
+        if (dashboardHealthBadge) dashboardHealthBadge.style.display = 'none';
+        clearStorageBar('primary');
+        if (secondaryStorageWrapper) secondaryStorageWrapper.style.display = 'none';
+        if (generalInfo) generalInfo.innerHTML = '<div class="info-row"><span class="info-label"></span><span class="info-value muted">Select an item from the tree to view its dashboard</span></div>';
+        if (configInfo) configInfo.innerHTML = '<div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>';
+        if (statsInfo) statsInfo.innerHTML = '<div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>';
+        renderSystemInfo(systemInfo);
+        return;
+    }
+
+    const isPool = obj.obj_type === 'pool';
+    const isDataset = obj.obj_type === 'dataset';
+    const isVolume = obj.obj_type === 'volume';
+    const isSnapshot = obj.obj_type === 'snapshot';
+
+    // Set name
+    if (dashboardName) dashboardName.textContent = obj.name;
+
+    // Set type badge
+    if (dashboardTypeBadge) {
+        let typeText = obj.obj_type.toUpperCase();
+        let typeClass = obj.obj_type;
+        dashboardTypeBadge.textContent = typeText;
+        dashboardTypeBadge.className = 'dashboard-type-badge ' + typeClass;
+        dashboardTypeBadge.style.display = 'inline-block';
+    }
+
+    // Set health/status badge
+    if (dashboardHealthBadge && dashboardHealthText) {
+        if (isPool) {
+            const health = (obj.health || 'UNKNOWN').toUpperCase();
+            dashboardHealthText.textContent = health;
+            dashboardHealthBadge.className = 'dashboard-health-badge ' + health.toLowerCase();
+            dashboardHealthBadge.style.display = 'inline-flex';
+        } else if (isDataset) {
+            const mounted = obj.is_mounted;
+            dashboardHealthText.textContent = mounted ? 'MOUNTED' : 'UNMOUNTED';
+            dashboardHealthBadge.className = 'dashboard-health-badge ' + (mounted ? 'mounted' : 'unmounted');
+            dashboardHealthBadge.style.display = 'inline-flex';
+        } else {
+            dashboardHealthBadge.style.display = 'none';
+        }
+    }
+
+    // Render storage bars
+    if (isPool) {
+        renderStorageBar('primary', obj.alloc || 0, obj.size || 0, 'Pool Capacity');
+        if (secondaryStorageWrapper) secondaryStorageWrapper.style.display = 'none';
+    } else if (isDataset || isVolume) {
+        const total = (obj.used || 0) + (obj.available || 0);
+        renderStorageBar('primary', obj.used || 0, total, 'Space Used');
+        if (obj.referenced && obj.referenced > 0) {
+            renderStorageBar('secondary', obj.referenced, total, 'Referenced Data');
+            if (secondaryStorageWrapper) secondaryStorageWrapper.style.display = 'block';
+        } else {
+            if (secondaryStorageWrapper) secondaryStorageWrapper.style.display = 'none';
+        }
+    } else if (isSnapshot) {
+        renderStorageBar('primary', obj.used || 0, obj.referenced || obj.used || 0, 'Snapshot Size');
+        if (secondaryStorageWrapper) secondaryStorageWrapper.style.display = 'none';
+    } else {
+        clearStorageBar('primary');
+        if (secondaryStorageWrapper) secondaryStorageWrapper.style.display = 'none';
+    }
+
+    // Render info cards based on type
+    if (isPool) {
+        renderPoolDashboardInfo(obj, generalInfo, configInfo, statsInfo);
+    } else if (isDataset || isVolume) {
+        renderDatasetDashboardInfo(obj, generalInfo, configInfo, statsInfo);
+    } else if (isSnapshot) {
+        renderSnapshotDashboardInfo(obj, generalInfo, configInfo, statsInfo);
+    }
+
+    // System info
+    renderSystemInfo(systemInfo, obj);
+}
+
+function renderStorageBar(prefix, used, total, label) {
+    const labelEl = document.getElementById(`${prefix}-storage-label`);
+    const percentEl = document.getElementById(`${prefix}-storage-percent`);
+    const barEl = document.getElementById(`${prefix}-storage-bar`);
+    const usedEl = document.getElementById(`${prefix}-storage-used`);
+    const freeEl = document.getElementById(`${prefix}-storage-free`);
+    const totalEl = document.getElementById(`${prefix}-storage-total`);
+
+    if (!barEl) return;
+
+    let percentage = 0;
+    let free = 0;
+
+    if (total > 0) {
+        percentage = Math.min(100, Math.round((used / total) * 100));
+        free = Math.max(0, total - used);
+    }
+
+    if (labelEl) labelEl.textContent = label;
+    if (percentEl) percentEl.textContent = `${percentage}%`;
+
+    barEl.style.width = `${percentage}%`;
+    barEl.setAttribute('aria-valuenow', percentage);
+
+    // Color coding based on usage
+    barEl.classList.remove('warning', 'danger', 'info');
+    if (prefix === 'secondary') {
+        barEl.classList.add('info');
+    } else if (percentage >= 90) {
+        barEl.classList.add('danger');
+    } else if (percentage >= 75) {
+        barEl.classList.add('warning');
+    }
+
+    if (usedEl) usedEl.textContent = `Used: ${formatSize(used)}`;
+    if (freeEl) freeEl.textContent = `Free: ${formatSize(free)}`;
+    if (totalEl) totalEl.textContent = `Total: ${formatSize(total)}`;
+}
+
+function clearStorageBar(prefix) {
+    const labelEl = document.getElementById(`${prefix}-storage-label`);
+    const percentEl = document.getElementById(`${prefix}-storage-percent`);
+    const barEl = document.getElementById(`${prefix}-storage-bar`);
+    const usedEl = document.getElementById(`${prefix}-storage-used`);
+    const freeEl = document.getElementById(`${prefix}-storage-free`);
+    const totalEl = document.getElementById(`${prefix}-storage-total`);
+
+    if (labelEl) labelEl.textContent = 'Storage';
+    if (percentEl) percentEl.textContent = '0%';
+    if (barEl) {
+        barEl.style.width = '0%';
+        barEl.setAttribute('aria-valuenow', 0);
+        barEl.classList.remove('warning', 'danger', 'info');
+    }
+    if (usedEl) usedEl.textContent = 'Used: -';
+    if (freeEl) freeEl.textContent = 'Free: -';
+    if (totalEl) totalEl.textContent = 'Total: -';
+}
+
+function createInfoRow(label, value, valueClass = '') {
+    const classAttr = valueClass ? ` class="info-value ${valueClass}"` : ' class="info-value"';
+    return `<div class="info-row"><span class="info-label">${label}</span><span${classAttr}>${value}</span></div>`;
+}
+
+function renderPoolDashboardInfo(pool, generalInfo, configInfo, statsInfo) {
+    const props = pool.properties || {};
+    const health = (pool.health || 'UNKNOWN').toUpperCase();
+    const healthClass = health === 'ONLINE' ? 'success' : (health === 'DEGRADED' ? 'warning' : 'danger');
+
+    // General Info
+    if (generalInfo) {
+        generalInfo.innerHTML = 
+            createInfoRow('Name:', pool.name) +
+            createInfoRow('Health:', health, healthClass) +
+            createInfoRow('GUID:', pool.guid || '-') +
+            createInfoRow('Version:', props.version || '-') +
+            createInfoRow('Altroot:', props.altroot || '-');
+    }
+
+    // Config Info
+    if (configInfo) {
+        configInfo.innerHTML = 
+            createInfoRow('Deduplication:', pool.dedup || 'off') +
+            createInfoRow('Fragmentation:', pool.frag || '-') +
+            createInfoRow('Capacity:', pool.cap || '-') +
+            createInfoRow('Autotrim:', props.autotrim || '-') +
+            createInfoRow('Autoexpand:', props.autoexpand || '-') +
+            createInfoRow('Failmode:', props.failmode || '-');
+    }
+
+    // Stats Info
+    if (statsInfo) {
+        const numDatasets = countDatasetsInPool(pool);
+        const numSnapshots = countSnapshotsInPool(pool);
+        statsInfo.innerHTML = 
+            createInfoRow('Total Size:', formatSize(pool.size)) +
+            createInfoRow('Allocated:', formatSize(pool.alloc)) +
+            createInfoRow('Free:', formatSize(pool.free)) +
+            createInfoRow('Datasets:', numDatasets) +
+            createInfoRow('Snapshots:', numSnapshots);
+    }
+}
+
+function renderDatasetDashboardInfo(dataset, generalInfo, configInfo, statsInfo) {
+    const props = dataset.properties || {};
+
+    // General Info
+    if (generalInfo) {
+        generalInfo.innerHTML = 
+            createInfoRow('Name:', dataset.name) +
+            createInfoRow('Pool:', dataset.pool_name || '-') +
+            createInfoRow('Type:', (dataset.obj_type || 'dataset').charAt(0).toUpperCase() + (dataset.obj_type || 'dataset').slice(1)) +
+            createInfoRow('Mountpoint:', dataset.mountpoint || '-') +
+            createInfoRow('Mounted:', dataset.is_mounted ? 'Yes' : 'No', dataset.is_mounted ? 'success' : 'muted');
+    }
+
+    // Config Info
+    if (configInfo) {
+        let configHtml = 
+            createInfoRow('Compression:', props.compression || '-') +
+            createInfoRow('Dedup:', props.dedup || '-') +
+            createInfoRow('Atime:', props.atime || '-') +
+            createInfoRow('Sync:', props.sync || '-') +
+            createInfoRow('Record Size:', props.recordsize || '-');
+
+        if (dataset.is_encrypted) {
+            configHtml += createInfoRow('Encrypted:', 'Yes', 'danger') +
+                         createInfoRow('Key Status:', props.keystatus || '-');
+        } else {
+            configHtml += createInfoRow('Encrypted:', 'No');
+        }
+        configInfo.innerHTML = configHtml;
+    }
+
+    // Stats Info
+    if (statsInfo) {
+        const numChildren = dataset.children ? dataset.children.length : 0;
+        const numSnapshots = dataset.snapshots ? dataset.snapshots.length : 0;
+        let statsHtml = 
+            createInfoRow('Used:', formatSize(dataset.used)) +
+            createInfoRow('Available:', formatSize(dataset.available)) +
+            createInfoRow('Referenced:', formatSize(dataset.referenced)) +
+            createInfoRow('Child Datasets:', numChildren) +
+            createInfoRow('Snapshots:', numSnapshots);
+
+        const quota = props.quota;
+        const refquota = props.refquota;
+        if (quota && quota !== 'none' && quota !== '-' && quota !== '0') {
+            statsHtml += createInfoRow('Quota:', quota);
+        }
+        if (refquota && refquota !== 'none' && refquota !== '-' && refquota !== '0') {
+            statsHtml += createInfoRow('Ref Quota:', refquota);
+        }
+        statsInfo.innerHTML = statsHtml;
+    }
+}
+
+function renderSnapshotDashboardInfo(snapshot, generalInfo, configInfo, statsInfo) {
+    const props = snapshot.properties || {};
+
+    // Extract snapshot name
+    const snapName = snapshot.name.includes('@') ? snapshot.name.split('@')[1] : snapshot.name;
+    const parentDs = snapshot.name.includes('@') ? snapshot.name.split('@')[0] : '-';
+
+    // General Info
+    if (generalInfo) {
+        generalInfo.innerHTML = 
+            createInfoRow('Snapshot:', snapName) +
+            createInfoRow('Dataset:', parentDs) +
+            createInfoRow('Pool:', snapshot.pool_name || '-') +
+            createInfoRow('Created:', snapshot.creation_time || '-');
+    }
+
+    // Config Info
+    if (configInfo) {
+        configInfo.innerHTML = 
+            createInfoRow('Clones:', props.clones || '-') +
+            createInfoRow('Defer Destroy:', props.defer_destroy || '-') +
+            createInfoRow('Hold Tags:', props.userrefs || '-');
+    }
+
+    // Stats Info
+    if (statsInfo) {
+        statsInfo.innerHTML = 
+            createInfoRow('Used:', formatSize(snapshot.used)) +
+            createInfoRow('Referenced:', formatSize(snapshot.referenced));
+    }
+}
+
+function renderSystemInfo(systemInfo, obj = null) {
+    if (!systemInfo) return;
+
+    // Basic system info (platform detection happens server-side, we show generic info)
+    let html = createInfoRow('Application:', 'ZfDash Web UI');
+
+    if (obj && obj.obj_type === 'pool' && obj.properties) {
+        const zfsVersion = obj.properties.version;
+        if (zfsVersion && zfsVersion !== '-') {
+            html += createInfoRow('ZFS Version:', zfsVersion);
+        }
+    }
+
+    systemInfo.innerHTML = html;
+}
+
+function countDatasetsInPool(pool) {
+    let count = 0;
+    if (pool.children) {
+        pool.children.forEach(child => {
+            count += 1 + countDatasetsRecursive(child);
+        });
+    }
+    return count;
+}
+
+function countDatasetsRecursive(dataset) {
+    let count = 0;
+    if (dataset.children) {
+        dataset.children.forEach(child => {
+            count += 1 + countDatasetsRecursive(child);
+        });
+    }
+    return count;
+}
+
+function countSnapshotsInPool(pool) {
+    let count = 0;
+    if (pool.children) {
+        pool.children.forEach(child => {
+            count += countSnapshotsRecursive(child);
+        });
+    }
+    return count;
+}
+
+function countSnapshotsRecursive(dataset) {
+    let count = dataset.snapshots ? dataset.snapshots.length : 0;
+    if (dataset.children) {
+        dataset.children.forEach(child => {
+            count += countSnapshotsRecursive(child);
+        });
+    }
+    return count;
+}
+
+// --- End Dashboard Rendering Functions ---
+
 async function renderDetails(obj) { // Made async
     if (!obj) {
         // If called with null obj after showing content, clear title and potentially show placeholder again or a message
@@ -1028,6 +1378,8 @@ async function renderDetails(obj) { // Made async
              console.warn("renderDetails: detailsTabContent element not found when clearing!");
         }
         // --- END REVISED ---
+        // Clear dashboard
+        renderDashboard(null);
         console.warn("renderDetails called with null object.");
         return; // Exit early if no object
     }
@@ -1053,6 +1405,10 @@ async function renderDetails(obj) { // Made async
     const isDatasetOrVol = isDataset || isVolume;
     const isEncrypted = obj.is_encrypted;
 
+    // Dashboard is always enabled
+    const dashboardTabButton = document.getElementById('dashboard-tab-button');
+    if (dashboardTabButton) dashboardTabButton.disabled = false;
+
     // Always enable properties tab if an object is selected
     document.getElementById('properties-tab-button').disabled = false;
 
@@ -1063,6 +1419,9 @@ async function renderDetails(obj) { // Made async
     document.getElementById('encryption-tab-button').disabled = !isEncrypted; // Only enable if actually encrypted
 
     // --- Clear/Populate Tab Content ---
+    // Render dashboard first (always available)
+    renderDashboard(obj);
+
     // Properties (handled below by fetching)
     renderProperties(null, true); // Show loading state
 

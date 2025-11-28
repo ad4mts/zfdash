@@ -9,7 +9,7 @@ Central location for constants used across the ZFS manager modules.
 ZPOOL_PROPS = [
     'name', 'size', 'alloc', 'free', 'frag', 'cap', 'dedup', 'health', 'guid',
     'altroot', 'bootfs', 'cachefile', 'comment', 'failmode', 'listsnapshots',
-    'version', 'readonly', 'feature@encryption'
+    'version', 'readonly', 'feature@encryption', 'autotrim', 'autoexpand', 'autoreplace'
 ]
 
 # Used for 'zfs list -t filesystem,volume -o ...'
@@ -17,7 +17,7 @@ ZFS_DATASET_PROPS = [
     'name', 'type', 'used', 'available', 'referenced', 'mountpoint', 'quota', 'reservation',
     'recordsize', 'compression', 'atime', 'relatime', 'readonly', 'volsize',
     'volblocksize', 'dedup', 'encryption', 'keystatus', 'keyformat', 'keylocation', 'pbkdf2iters',
-    'mounted', 'origin', 'creation', 'logicalused', 'logicalreferenced'
+    'mounted', 'origin', 'creation', 'logicalused', 'logicalreferenced', 'sync'
 ]
 
 # Used for 'zfs list -t snapshot -o ...'

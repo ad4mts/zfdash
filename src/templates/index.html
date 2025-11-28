@@ -101,7 +101,12 @@
              <!-- Tab Navigation -->
              <ul class="nav nav-tabs border-0" id="details-tab" role="tablist">
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="properties-tab-button" data-bs-toggle="tab" data-bs-target="#properties-tab-pane" type="button" role="tab" aria-controls="properties-tab-pane" aria-selected="true">
+                    <button class="nav-link active" id="dashboard-tab-button" data-bs-toggle="tab" data-bs-target="#dashboard-tab-pane" type="button" role="tab" aria-controls="dashboard-tab-pane" aria-selected="true">
+                        <i class="bi bi-speedometer2 me-1"></i>Dashboard
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="properties-tab-button" data-bs-toggle="tab" data-bs-target="#properties-tab-pane" type="button" role="tab" aria-controls="properties-tab-pane" aria-selected="false">
                         <i class="bi bi-list-ul me-1"></i>Properties
                     </button>
                 </li>
@@ -153,9 +158,108 @@
                     <!-- *** REMOVED inline style="visibility: hidden;" *** -->
                     <div class="tab-content flex-grow-1 overflow-hidden" id="details-tab-content">
 
+                        <!-- Dashboard Tab -->
+                        <div class="tab-pane fade show active d-flex flex-column" id="dashboard-tab-pane" role="tabpanel" aria-labelledby="dashboard-tab-button" tabindex="0">
+                            <div class="dashboard-container flex-grow-1 overflow-auto p-3">
+                                <!-- Header Card -->
+                                <div class="dashboard-header-card mb-3">
+                                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                        <div>
+                                            <h4 class="dashboard-name mb-1" id="dashboard-name">Select a pool or dataset</h4>
+                                            <span class="dashboard-type-badge" id="dashboard-type-badge" style="display: none;">POOL</span>
+                                        </div>
+                                        <div class="dashboard-health-badge" id="dashboard-health-badge" style="display: none;">
+                                            <i class="bi bi-circle-fill me-1"></i>
+                                            <span id="dashboard-health-text">ONLINE</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Storage Usage Card -->
+                                <div class="dashboard-card mb-3" id="dashboard-storage-card">
+                                    <h6 class="dashboard-card-title"><i class="bi bi-hdd me-2"></i>Storage Usage</h6>
+                                    <div class="storage-bars-container">
+                                        <!-- Primary Storage Bar -->
+                                        <div class="storage-bar-wrapper mb-3" id="primary-storage-wrapper">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="storage-bar-label" id="primary-storage-label">Pool Capacity</span>
+                                                <span class="storage-bar-percent" id="primary-storage-percent">0%</span>
+                                            </div>
+                                            <div class="progress storage-progress" style="height: 24px;">
+                                                <div class="progress-bar" id="primary-storage-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                            </div>
+                                            <div class="d-flex justify-content-between mt-1 storage-details">
+                                                <small class="text-muted" id="primary-storage-used">Used: -</small>
+                                                <small class="text-muted" id="primary-storage-free">Free: -</small>
+                                                <small class="text-muted" id="primary-storage-total">Total: -</small>
+                                            </div>
+                                        </div>
+                                        <!-- Secondary Storage Bar (for datasets) -->
+                                        <div class="storage-bar-wrapper" id="secondary-storage-wrapper" style="display: none;">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <span class="storage-bar-label" id="secondary-storage-label">Referenced Data</span>
+                                                <span class="storage-bar-percent" id="secondary-storage-percent">0%</span>
+                                            </div>
+                                            <div class="progress storage-progress" style="height: 24px;">
+                                                <div class="progress-bar bg-info" id="secondary-storage-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                                            </div>
+                                            <div class="d-flex justify-content-between mt-1 storage-details">
+                                                <small class="text-muted" id="secondary-storage-used">Referenced: -</small>
+                                                <small class="text-muted" id="secondary-storage-total">Total: -</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Info Cards Row -->
+                                <div class="row g-3 mb-3">
+                                    <!-- General Info Card -->
+                                    <div class="col-md-6">
+                                        <div class="dashboard-card h-100">
+                                            <h6 class="dashboard-card-title"><i class="bi bi-info-circle me-2"></i>General Information</h6>
+                                            <div class="info-table" id="dashboard-general-info">
+                                                <div class="info-row"><span class="info-label">Name:</span><span class="info-value">-</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- Configuration Card -->
+                                    <div class="col-md-6">
+                                        <div class="dashboard-card h-100">
+                                            <h6 class="dashboard-card-title"><i class="bi bi-gear me-2"></i>Configuration</h6>
+                                            <div class="info-table" id="dashboard-config-info">
+                                                <div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Stats Cards Row -->
+                                <div class="row g-3">
+                                    <!-- Statistics Card -->
+                                    <div class="col-md-6">
+                                        <div class="dashboard-card h-100">
+                                            <h6 class="dashboard-card-title"><i class="bi bi-bar-chart me-2"></i>Statistics</h6>
+                                            <div class="info-table" id="dashboard-stats-info">
+                                                <div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <!-- System Info Card -->
+                                    <div class="col-md-6">
+                                        <div class="dashboard-card h-100">
+                                            <h6 class="dashboard-card-title"><i class="bi bi-cpu me-2"></i>System Information</h6>
+                                            <div class="info-table" id="dashboard-system-info">
+                                                <div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Properties Tab -->
                         <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
-                        <div class="tab-pane fade show active d-flex flex-column" id="properties-tab-pane" role="tabpanel" aria-labelledby="properties-tab-button" tabindex="0">
+                        <div class="tab-pane fade d-flex flex-column" id="properties-tab-pane" role="tabpanel" aria-labelledby="properties-tab-button" tabindex="0">
                             <div class="p-3 pb-0 flex-shrink-0">
                                <h5 class="mb-0">Properties</h5>
                             </div>
