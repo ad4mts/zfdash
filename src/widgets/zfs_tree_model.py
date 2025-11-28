@@ -234,9 +234,13 @@ class ZfsTreeModel(QAbstractItemModel):
         return None
 
     # --- NEW Method ---
-    def find_index_by_path(self, path: str, parent: QModelIndex = QModelIndex()) -> QModelIndex:
-        """Recursively searches for an item with the given full name/path."""
+    def find_index_by_path(self, path: str, type_hint: Optional[str] = None, parent: QModelIndex = QModelIndex()) -> QModelIndex:
+        """Recursively searches for an item with the given full name/path.
+        If type_hint is provided, the search will prefer an exact match by both path and type.
+        Otherwise, the first matching name found will be returned (legacy behavior).
+        """
         rows = self.rowCount(parent)
+        first_name_match = None
         for row in range(rows):
             index = self.index(row, 0, parent)
             if not index.isValid(): continue # Skip invalid indexes
@@ -256,7 +260,17 @@ class ZfsTreeModel(QAbstractItemModel):
 
             # Check if the current item IS the one we're looking for
             if current_item_path == path:
-                return index
+                # If a type_hint is provided, prefer an exact type match
+                if type_hint:
+                    item_type = getattr(item, 'obj_type', None)
+                    if item_type == type_hint:
+                        return index
+                    else:
+                        # Keep searching for an exact match but note a firstNameMatch
+                        if first_name_match is None:
+                            first_name_match = index
+                else:
+                    return index
 
             # Recursively search children if the current item can have children in the tree
             # (Pools have datasets, Datasets have datasets/snapshots)
@@ -266,16 +280,25 @@ class ZfsTreeModel(QAbstractItemModel):
                 # Basic check: path starts with current item's path + '/' (for datasets)
                 # This avoids searching unrelated branches.
                 needs_recursion = False
-                if isinstance(item, Pool) and path.startswith(f"{item.name}/"):
-                     needs_recursion = True
-                elif isinstance(item, Dataset) and path.startswith(f"{item.name}/") or path.startswith(f"{item.name}@"):
+                if isinstance(item, Pool):
+                    # Recurse into pool if path starts with pool name (child datasets)
+                    # OR if path equals pool name AND we're looking for a non-pool type
+                    # (root dataset has the same name as the pool)
+                    if path.startswith(f"{item.name}/"):
+                        needs_recursion = True
+                    elif path == item.name and type_hint and type_hint != 'pool':
+                        needs_recursion = True
+                elif isinstance(item, Dataset) and (path.startswith(f"{item.name}/") or path.startswith(f"{item.name}@")):
                      needs_recursion = True
 
                 if needs_recursion:
-                    found_index = self.find_index_by_path(path, index) # Recurse using current item's index as parent
+                    found_index = self.find_index_by_path(path, type_hint, index) # Recurse using current item's index as parent
                     if found_index.isValid():
                         return found_index
 
+        # If we recorded a first-name-only match, return it as fallback
+        if first_name_match is not None and isinstance(first_name_match, QModelIndex):
+            return first_name_match
         return QModelIndex() # Not found in this branch
 
 # --- END OF FILE zfs_tree_model.py ---

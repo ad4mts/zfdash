@@ -44,6 +44,29 @@ const actionModalBody = document.getElementById('actionModalBody');
 const actionModalLabel = document.getElementById('actionModalLabel');
 const actionModalFooter = document.getElementById('actionModalFooter');
 const detailsTabContent = document.getElementById('details-tab-content'); // Added
+    
+    // Persist selection across refreshes
+    const SELECTED_SELECTION_KEY = 'zfdash_selected_item_v1';
+    try {
+        const storedSel = JSON.parse(localStorage.getItem(SELECTED_SELECTION_KEY) || 'null');
+        if (storedSel && storedSel.name && storedSel.obj_type) {
+            currentSelection = storedSel; // Will be used by renderTree to restore selection
+        }
+    } catch (e) {
+        console.warn('Failed to load selected item from localStorage:', e);
+    }
+    
+    function saveSelectionToStorage() {
+        try {
+            if (currentSelection) {
+                localStorage.setItem(SELECTED_SELECTION_KEY, JSON.stringify({ name: currentSelection.name, obj_type: currentSelection.obj_type }));
+            } else {
+                localStorage.removeItem(SELECTED_SELECTION_KEY);
+            }
+        } catch (e) {
+            console.warn('Failed to save selected item to localStorage:', e);
+        }
+    }
 
 
 // --- API Helper ---
@@ -149,6 +172,39 @@ async function apiCall(endpoint, method = 'GET', body = null) {
         // Re-throw the enriched error object (or the redirect error)
         throw error;
     }
+}
+
+// --- Persisted UI State ---
+// Maintain a set of expanded node paths (persist across refreshes using localStorage)
+const EXPANDED_NODES_KEY = 'zfdash_expanded_nodes_v1';
+let expandedNodePaths = new Set();
+try {
+    const stored = JSON.parse(localStorage.getItem(EXPANDED_NODES_KEY) || '[]');
+    if (Array.isArray(stored)) {
+        // Normalize stored entries to the new key format 'name::type' for backward compatibility
+        const normalized = stored.map(entry => {
+            entry = String(entry);
+            if (entry.includes('::')) return entry; // already in new format
+            // old store might just have 'name' only; convert to 'name::' (empty type)
+            return nodeStorageKey(entry, '');
+        });
+        expandedNodePaths = new Set(normalized);
+    }
+} catch (e) {
+    console.warn('Failed to load expanded nodes from localStorage:', e);
+    expandedNodePaths = new Set();
+}
+
+function saveExpandedNodes() {
+    try {
+        localStorage.setItem(EXPANDED_NODES_KEY, JSON.stringify(Array.from(expandedNodePaths)));
+    } catch (e) {
+        console.warn('Failed to save expanded nodes to localStorage', e);
+    }
+}
+
+function nodeStorageKey(name, objType) {
+    return `${name}::${objType || ''}`; // include obj_type for uniqueness between pool and dataset
 }
 
 // --- Action Helper ---
@@ -432,9 +488,12 @@ function buildTreeHtml(items, level = 0) {
             }
         }
 
+        // Determine if this node should be expanded according to user state
+    const nodeKey = nodeStorageKey(item.name, item.obj_type);
+    const isExpanded = expandedNodePaths.has(nodeKey);
         let toggleHtml = '';
         if (hasChildren) {
-            toggleHtml = `<i class="bi bi-caret-right-fill me-1 tree-toggle"></i>`;
+            toggleHtml = `<i class="bi ${isExpanded ? 'bi-caret-down-fill' : 'bi-caret-right-fill'} me-1 tree-toggle"></i>`;
         } else {
             toggleHtml = `<i class="bi bi-dot me-1 text-muted"></i>`; // Placeholder for alignment
         }
@@ -443,9 +502,9 @@ function buildTreeHtml(items, level = 0) {
         const displayName = isPool ? item.name : item.name.split('/').pop();
 
         // Add data attributes for easy selection and identification
-        html += `
+    html += `
         <li style="padding-left: ${indent}px;">
-        <div class="tree-item ${currentSelection?.name === item.name ? 'selected' : ''}"
+    <div class="tree-item ${(currentSelection?.name === item.name && currentSelection?.obj_type === item.obj_type) ? 'selected' : ''}"
         data-path="${item.name}"
         data-type="${item.obj_type}"
         title="${item.name} (${item.obj_type})">
@@ -455,7 +514,7 @@ function buildTreeHtml(items, level = 0) {
         ${item.is_encrypted ? '<i class="bi bi-lock-fill text-warning ms-1" title="Encrypted"></i>' : ''}
         ${item.is_mounted ? '<i class="bi bi-cloud-arrow-up-fill text-info ms-1" title="Mounted"></i>' : ''}
         </div>
-        ${hasChildren ? `<div class="tree-children" style="display: none;">${buildTreeHtml(item.children, level + 1)}</div>` : ''}
+    ${hasChildren ? `<div class="tree-children" style="display: ${isExpanded ? 'block' : 'none'};">${buildTreeHtml(item.children, level + 1)}</div>` : ''}
         </li>
         `;
     });
@@ -471,6 +530,8 @@ function renderTree(data) {
     zfsDataCache = data; // Store data
     const treeHtml = buildTreeHtml(data);
     zfsTree.innerHTML = treeHtml; // Set the HTML content
+    // Ensure no stray selected classes remain before restoration
+    zfsTree.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
 
     // Check if treeHtml is empty or indicates no pools
     if (!treeHtml || treeHtml.includes("No pools found")) {
@@ -518,6 +579,19 @@ function renderTree(data) {
                     if (childrenDiv && toggleIcon && childrenDiv.style.display !== 'block') { // Expand only if not already expanded
                         childrenDiv.style.display = 'block';
                         toggleIcon.classList.replace('bi-caret-right-fill', 'bi-caret-down-fill');
+                        // Persist expanded state for parent
+                        try {
+                            const parentItemDiv = parentLi.querySelector(':scope > .tree-item');
+                            const parentPath = parentItemDiv?.dataset?.path;
+                            const parentType = parentItemDiv?.dataset?.type;
+                            if (parentPath) {
+                                const parentKey = nodeStorageKey(parentPath, parentType);
+                                expandedNodePaths.add(parentKey);
+                                saveExpandedNodes();
+                            }
+                        } catch (e) {
+                            console.warn('Failed to persist expanded parent:', e);
+                        }
                     }
                     // Find the next parent `li` correctly
                     const parentUl = parentLi.parentElement; // This is the `ul.tree-children` or the root `ul`
@@ -575,6 +649,8 @@ async function fetchAndRenderData() {
                 //console.log(`Restoring selection: ${selectedPath} (Type: ${selectedType})`);
                 currentSelection = newSelection; // Update ref to new object
                 objectStillExists = true;
+                // Persist the restored selection
+                saveSelectionToStorage();
             } else {
                 //console.log(`Selection ${selectedPath} (Type: ${selectedType}) not found in new data cache.`);
             }
@@ -663,12 +739,28 @@ async function fetchAndRenderData() {
 function handleTreeToggle(event) {
     event.stopPropagation(); // Prevent item selection when clicking toggle
     const icon = event.target;
-    const childrenDiv = icon.closest('li').querySelector(':scope > .tree-children'); // Direct child
+    const li = icon.closest('li');
+    const childrenDiv = li.querySelector(':scope > .tree-children'); // Direct child
     if (childrenDiv) {
         const isVisible = childrenDiv.style.display === 'block';
         childrenDiv.style.display = isVisible ? 'none' : 'block';
         icon.classList.toggle('bi-caret-right-fill', isVisible);
         icon.classList.toggle('bi-caret-down-fill', !isVisible);
+        // Update expanded state set (use path of the tree-item under this li)
+        const treeItemDiv = li.querySelector(':scope > .tree-item');
+        const itemPath = treeItemDiv?.dataset?.path;
+        const itemType = treeItemDiv?.dataset?.type;
+        if (itemPath) {
+            const nodeKey = nodeStorageKey(itemPath, itemType);
+            if (!isVisible) {
+                // it is now visible (expanded)
+                expandedNodePaths.add(nodeKey);
+            } else {
+                // it is now hidden (collapsed)
+                expandedNodePaths.delete(nodeKey);
+            }
+            saveExpandedNodes();
+        }
     }
 }
 
@@ -681,11 +773,8 @@ async function handleTreeItemClick(event) { // Make async
         return;
     }
 
-    // Remove selection from previously selected item
-    const currentlySelected = zfsTree.querySelector('.tree-item.selected');
-    if (currentlySelected) {
-        currentlySelected.classList.remove('selected');
-    }
+    // Remove selection from any previously selected items (in case multiple are mistakenly selected)
+    zfsTree.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
 
     // Add selection to clicked item
     targetItem.classList.add('selected');
@@ -709,6 +798,8 @@ async function handleTreeItemClick(event) { // Make async
             await renderDetails(currentSelection);
             // Update actions *after* details are rendered
             updateActionStates();
+            // Persist selection to localStorage
+            saveSelectionToStorage();
         } catch(error) {
             console.error(`Error rendering details on click for ${path} (Type: ${type}):`, error);
             showErrorAlert("Detail Render Error", `Could not render details for ${path}.\n\nError: ${error.message}`);
@@ -727,10 +818,9 @@ function clearSelection() {
     currentProperties = null;
     currentPoolStatusText = null;
     currentPoolLayout = null;
-    const currentlySelected = zfsTree.querySelector('.tree-item.selected');
-    if (currentlySelected) {
-        currentlySelected.classList.remove('selected');
-    }
+    zfsTree.querySelectorAll('.tree-item.selected').forEach(el => el.classList.remove('selected'));
+    // Persist cleared selection
+    saveSelectionToStorage();
     // --- START REVISED: Hide the tab content area ---
     if (detailsTabContent) {
         detailsTabContent.style.visibility = 'hidden'; // Hide the tab content

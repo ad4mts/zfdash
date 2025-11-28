@@ -374,7 +374,7 @@ class MainWindow(QMainWindow):
             if self.tree_view.isExpanded(index):
                 item = self.tree_model.get_zfs_object(index)
                 if item:
-                    expanded_paths.append(item.name)
+                    expanded_paths.append(f"{item.name}::{getattr(item, 'obj_type', '')}")
                     # Recursively check children
                     self._get_expanded_children(index, expanded_paths)
         return expanded_paths
@@ -389,7 +389,7 @@ class MainWindow(QMainWindow):
             if self.tree_view.isExpanded(index):
                 item = self.tree_model.get_zfs_object(index)
                 if item:
-                    expanded_list.append(item.name)
+                    expanded_list.append(f"{item.name}::{getattr(item, 'obj_type', '')}")
                     self._get_expanded_children(index, expanded_list)
 
     def _restore_expanded_items(self, expanded_paths: List[str]):
@@ -398,10 +398,20 @@ class MainWindow(QMainWindow):
             return
 
         # No need to block signals here, done in the calling function
-        for path in expanded_paths:
-            index = self.tree_model.find_index_by_path(path)
-            if index.isValid():
-                self.tree_view.expand(index)
+        for path_key in expanded_paths:
+            if '::' in path_key:
+                real_path, type_hint = path_key.split('::', 1)
+            else:
+                real_path, type_hint = path_key, None
+            # Handle empty type_hint (e.g., from old format or pool)
+            if type_hint == '':
+                type_hint = None
+            try:
+                index = self.tree_model.find_index_by_path(real_path, type_hint)
+                if index.isValid():
+                    self.tree_view.expand(index)
+            except Exception as e:
+                print(f"Warning: Error expanding path '{real_path}': {e}", file=sys.stderr)
 
     @Slot()
     def refresh_all_data(self):
@@ -418,6 +428,7 @@ class MainWindow(QMainWindow):
 
         self._update_status_bar("Refreshing ZFS data...")
         selected_path = self._current_selection.name if self._current_selection else None
+        selected_type = getattr(self._current_selection, 'obj_type', None) if self._current_selection else None
         expanded_paths = self._get_expanded_items()
         current_tab_index = self.details_tabs.currentIndex()
 
@@ -430,16 +441,16 @@ class MainWindow(QMainWindow):
         self._worker = Worker(self.zfs_client.get_all_zfs_data)
         # Use lambda to ensure arguments are captured correctly at call time
         self._worker.result_ready.connect(
-            lambda result, sp=selected_path, ep=expanded_paths, cti=current_tab_index:
-                self._handle_refresh_result(result, sp, ep, cti)
+            lambda result, sp=selected_path, st=selected_type, ep=expanded_paths, cti=current_tab_index:
+                self._handle_refresh_result(result, sp, st, ep, cti)
         )
         self._worker.error_occurred.connect(self._handle_worker_error)
         self._worker.finished.connect(self._on_refresh_worker_finished)
         self._worker.start()
 
-    @Slot(object, str, list, int)
+    @Slot(object, str, str, list, int)
     def _handle_refresh_result(
-        self, pools_data, selected_path, expanded_paths, current_tab_index
+        self, pools_data, selected_path, selected_type, expanded_paths, current_tab_index
     ):
         """Process the data received from the refresh worker."""
         # --- Start of _handle_refresh_result ---
@@ -474,18 +485,23 @@ class MainWindow(QMainWindow):
             self._restore_expanded_items(expanded_paths)
 
             # 3. Find and restore selection
-            index_to_select = self.tree_model.find_index_by_path(selected_path) if selected_path else QModelIndex()
+            index_to_select = QModelIndex()
             restored_selection_obj = None
-            if index_to_select.isValid():
-                self.tree_view.setCurrentIndex(index_to_select)
-                # Explicitly ensure the selected item is scrolled to and visible
-                self.tree_view.scrollTo(index_to_select, QTreeView.ScrollHint.EnsureVisible)
-                # --- *********************** ---
-                restored_selection_obj = self.tree_model.get_zfs_object(index_to_select)
-               # print(f"Refresh: Restored selection to {restored_selection_obj.name}") # Debug
-            else:
+            try:
+                if selected_path:
+                    index_to_select = self.tree_model.find_index_by_path(selected_path, selected_type)
+                if index_to_select.isValid():
+                    self.tree_view.setCurrentIndex(index_to_select)
+                    # Explicitly ensure the selected item is scrolled to and visible
+                    self.tree_view.scrollTo(index_to_select, QTreeView.ScrollHint.EnsureVisible)
+                    restored_selection_obj = self.tree_model.get_zfs_object(index_to_select)
+                   # print(f"Refresh: Restored selection to {restored_selection_obj.name}") # Debug
+                else:
+                    self.tree_view.clearSelection()
+                   # print("Refresh: Selection cleared as previous path not found.") # Debug
+            except Exception as e:
+                print(f"Warning: Error restoring selection for '{selected_path}': {e}", file=sys.stderr)
                 self.tree_view.clearSelection()
-               # print("Refresh: Selection cleared as previous path not found.") # Debug
 
             # --- Unblock signals *before* manual state update ---
             # It's generally safer to unblock before triggering further UI updates

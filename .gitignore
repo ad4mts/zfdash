@@ -15,3 +15,6 @@ __pycache__/
 developer documentation/
 compose.override.yml
 **/docker-local-debug.sh
+release_tmp/
+*.tar.gz
+_ign-*
