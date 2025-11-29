@@ -1,0 +1,358 @@
+/* ============================================
+   UNIFIED BUTTON SYSTEM
+   ============================================ */
+
+/* --- Base App Button Styles --- */
+.btn-app {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.4rem 0.85rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--app-transition-fast);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.btn-app:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.btn-app i {
+    font-size: 0.9em;
+}
+
+/* --- Variants --- */
+
+/* Primary (Filled Purple) */
+.btn-app-primary {
+    background-color: var(--app-primary-color);
+    border-color: var(--app-primary-color);
+    color: #fff;
+}
+
+.btn-app-primary:hover:not(:disabled) {
+    background-color: var(--app-primary-darker);
+    border-color: var(--app-primary-darker);
+    color: #fff;
+    box-shadow: var(--app-shadow-sm);
+}
+
+.btn-app-primary:active:not(:disabled) {
+    background-color: var(--app-primary-darker);
+    transform: translateY(1px);
+}
+
+/* Secondary (Light with Purple border) */
+.btn-app-secondary {
+    background-color: #fff;
+    border-color: var(--app-primary-color);
+    color: var(--app-primary-color);
+}
+
+.btn-app-secondary:hover:not(:disabled) {
+    background-color: var(--app-primary-lighter);
+    color: var(--app-primary-color);
+}
+
+.btn-app-secondary:active:not(:disabled) {
+    background-color: var(--app-primary-color);
+    color: #fff;
+}
+
+/* Ghost (No background) */
+.btn-app-ghost {
+    background-color: transparent;
+    border-color: transparent;
+    color: var(--app-text-color);
+}
+
+.btn-app-ghost:hover:not(:disabled) {
+    background-color: var(--app-hover-bg);
+    color: var(--app-primary-color);
+}
+
+.btn-app-ghost:active:not(:disabled) {
+    background-color: var(--app-primary-lighter);
+}
+
+/* Danger (Red) */
+.btn-app-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: #fff;
+}
+
+.btn-app-danger:hover:not(:disabled) {
+    background-color: #bb2d3b;
+    border-color: #bb2d3b;
+    color: #fff;
+}
+
+/* Info (Cyan) */
+.btn-app-info {
+    background-color: #0dcaf0;
+    border-color: #0dcaf0;
+    color: #000;
+}
+
+.btn-app-info:hover:not(:disabled) {
+    background-color: #31d2f2;
+    border-color: #25cff2;
+    color: #000;
+}
+
+/* Dark */
+.btn-app-dark {
+    background-color: #212529;
+    border-color: #212529;
+    color: #fff;
+}
+
+.btn-app-dark:hover:not(:disabled) {
+    background-color: #424649;
+    border-color: #373b3e;
+    color: #fff;
+}
+
+/* Light Outline */
+.btn-app-light-outline {
+    background-color: transparent;
+    border: 1px solid #f8f9fa;
+    color: #f8f9fa;
+}
+
+.btn-app-light-outline:hover:not(:disabled) {
+    background-color: #f8f9fa;
+    color: #000;
+}
+
+/* Success (Green) */
+.btn-app-success {
+    background-color: #198754;
+    border-color: #198754;
+    color: #fff;
+}
+
+.btn-app-success:hover:not(:disabled) {
+    background-color: #157347;
+    border-color: #157347;
+    color: #fff;
+}
+
+/* Warning (Yellow) */
+.btn-app-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.btn-app-warning:hover:not(:disabled) {
+    background-color: #ffca2c;
+    border-color: #ffc720;
+    color: #212529;
+}
+
+/* --- Sizes --- */
+.btn-app-sm { font-size: 0.75rem; padding: 0.3rem 0.6rem; }
+.btn-app-lg { font-size: 1rem; padding: 0.6rem 1.2rem; }
+.btn-app-xs { font-size: 0.7rem; padding: 0.2rem 0.5rem; }
+
+/* --- Toggle Button Group --- */
+.btn-toggle-group {
+    display: inline-flex !important;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #dee2e6 !important;
+    background-color: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.btn-toggle-group .btn-toggle {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    font-size: 0.85rem !important;
+    font-weight: 500;
+    padding: 0.5rem 1rem !important;
+    border: none !important;
+    background-color: transparent !important;
+    color: #495057 !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-right: 1px solid #dee2e6 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+.btn-toggle-group .btn-toggle:last-child { border-right: none !important; }
+
+.btn-toggle-group .btn-toggle:hover:not(:disabled):not(.active) {
+    background-color: #f8f9fa !important;
+    color: var(--app-primary-color) !important;
+}
+
+.btn-toggle-group .btn-toggle.active {
+    background-color: var(--app-primary-color) !important;
+    color: #ffffff !important;
+}
+
+.btn-toggle-group .btn-toggle:disabled {
+    background-color: #e9ecef !important;
+    color: #adb5bd !important;
+    cursor: not-allowed;
+}
+
+/* --- Tab Pane Buttons (General) --- */
+#details-tab-content .tab-pane .btn {
+    transition: all 0.2s ease;
+    color: #fff;
+    border-radius: 6px;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+#details-tab-content .tab-pane .btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.4s ease;
+}
+
+#details-tab-content .tab-pane .btn:hover::before { left: 100%; }
+
+#details-tab-content .tab-pane .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+#details-tab-content .tab-pane .btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+#details-tab-content .tab-pane .btn:disabled {
+    opacity: 0.55 !important;
+    background-color: initial;
+    border-color: initial;
+    color: initial;
+}
+
+/* --- Specific Button Overrides (Unified Colors) --- */
+
+/* Primary Actions */
+#pool-edit-tab-pane #add-pool-vdev-button,
+#pool-edit-tab-pane #online-device-button,
+#pool-edit-tab-pane #attach-device-button,
+#encryption-tab-pane #load-key-button,
+#encryption-tab-pane #change-key-button {
+    background-color: var(--app-primary-color);
+    border-color: var(--app-primary-color);
+    color: #fff;
+}
+
+#pool-edit-tab-pane #add-pool-vdev-button:hover,
+#pool-edit-tab-pane #online-device-button:hover,
+#pool-edit-tab-pane #attach-device-button:hover,
+#encryption-tab-pane #load-key-button:hover,
+#encryption-tab-pane #change-key-button:hover {
+    background-color: var(--app-primary-darker);
+    border-color: var(--app-primary-darker);
+}
+
+/* Positive/Create Actions */
+#snapshots-tab-pane #create-snapshot-button,
+#pool-edit-tab-pane #replace-device-button {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+#snapshots-tab-pane #create-snapshot-button:hover,
+#pool-edit-tab-pane #replace-device-button:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+/* Secondary/Neutral Actions */
+#snapshots-tab-pane #clone-snapshot-button,
+#encryption-tab-pane #change-key-location-button,
+#pool-edit-tab-pane #detach-device-button,
+#pool-edit-tab-pane #split-pool-button {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: #fff;
+}
+
+#snapshots-tab-pane #clone-snapshot-button:hover,
+#encryption-tab-pane #change-key-location-button:hover,
+#pool-edit-tab-pane #detach-device-button:hover,
+#pool-edit-tab-pane #split-pool-button:hover {
+    background-color: #5a6268;
+    border-color: #545b62;
+}
+
+/* Warning Actions */
+#snapshots-tab-pane #rollback-snapshot-button,
+#pool-edit-tab-pane #offline-device-button,
+#encryption-tab-pane #unload-key-button {
+    background-color: var(--bs-warning);
+    border-color: var(--bs-warning);
+    color: #000;
+}
+
+#snapshots-tab-pane #rollback-snapshot-button:hover,
+#pool-edit-tab-pane #offline-device-button:hover,
+#encryption-tab-pane #unload-key-button:hover {
+    background-color: #ffca2c;
+    border-color: #ffc720;
+}
+
+/* Destructive Actions */
+#snapshots-tab-pane #delete-snapshot-button,
+#pool-edit-tab-pane #remove-pool-vdev-button {
+    background-color: var(--bs-danger);
+    border-color: var(--bs-danger);
+    color: #fff;
+}
+
+#snapshots-tab-pane #delete-snapshot-button:hover,
+#pool-edit-tab-pane #remove-pool-vdev-button:hover {
+    background-color: #c82333;
+    border-color: #bd2130;
+}
+
+/* Compact Buttons for Tabs */
+#snapshots-tab-pane .btn,
+#pool-edit-tab-pane .btn,
+#encryption-tab-pane .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+#encryption-tab-pane .btn {
+    padding: 0.2rem 0.4rem;
+    font-size: 0.75rem;
+    margin-right: 0.35rem;
+}
+
+#snapshots-tab-pane .btn i,
+#pool-edit-tab-pane .btn i,
+#encryption-tab-pane .btn i {
+    font-size: 0.8rem;
+    margin-right: 0.25rem;
+}

@@ -1,4 +1,16 @@
 # ZfDash Changelog
+## v1.8.7-Beta - upcoming
+*   **Web UI:** Improved Web UI visuals
+*   **Feature** Improved treeview selection.
+*   **Feature** Add default dashboard tab with infos about the selected item
+*   **Feature** Add zpool list -v and zpool iostat -v output to Pool Health Tab
+*   **Refractor** Refractor app.js into easy-to-maintain modules
+*   **Refractor** Refractor style.css into modules
+
+## v1.8.4-Beta
+*   **Feature** Add Socket-Mode for daemon<>client communication with an IPC abstraction layer.
+*   **Feature** Cross Platform runtime_dir and escalation (No hard blockers for Freebsd and macOS testing)
+*   **Fixes and improvements** Code refractors, improvements and bugfixes
 
 ## v1.8.0-Beta Privileged Container, Auto Snapshot Properties, Feedback
 

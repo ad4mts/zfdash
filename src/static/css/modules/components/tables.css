@@ -1,0 +1,293 @@
+/* --- Table Styles --- */
+
+/* Common Table Responsive Wrapper */
+.table-responsive {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+/* --- Properties Table --- */
+#properties-table {
+    border-collapse: separate;
+    border-spacing: 0;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+    margin-bottom: 1rem;
+}
+
+#properties-table thead {
+    background: linear-gradient(180deg, #f8f9fa 0%, #f1f3f5 100%);
+    border-bottom: 2px solid #e9ecef;
+}
+
+#properties-table th {
+    padding: 0.85rem 1rem;
+    font-weight: 600;
+    color: #495057;
+    border: none;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+#properties-table td {
+    padding: 0.65rem 1rem;
+    border-bottom: 1px solid #e9ecef;
+    vertical-align: middle;
+    transition: background-color 0.15s ease;
+}
+
+#properties-table tbody tr:hover td {
+    background-color: rgba(106, 100, 232, 0.04);
+}
+
+#properties-table tbody tr:last-child td { border-bottom: none; }
+
+/* Section headers */
+#properties-table tr.table-primary td,
+#properties-table tr.table-secondary td {
+    padding: 0.6rem 1rem;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    border-radius: 0;
+}
+
+#properties-table tr.table-primary {
+    background: linear-gradient(90deg, rgba(106, 100, 232, 0.12) 0%, rgba(106, 100, 232, 0.06) 100%);
+}
+
+#properties-table tr.table-secondary {
+    background: linear-gradient(90deg, rgba(108, 117, 125, 0.1) 0%, rgba(108, 117, 125, 0.05) 100%);
+}
+
+/* Spacer rows */
+#properties-table tr.table-light {
+    background-color: transparent;
+    border: none;
+}
+
+#properties-table tr.table-light td {
+    padding: 4px;
+    border: none;
+}
+
+/* Editable property rows */
+#properties-table tr.editable-property {
+    background-color: rgba(106, 100, 232, 0.03);
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+#properties-table tr.editable-property::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: transparent;
+    transition: background-color 0.2s ease;
+}
+
+#properties-table tr.editable-property:hover {
+    background-color: rgba(106, 100, 232, 0.08);
+}
+
+#properties-table tr.editable-property:hover::before {
+    background-color: var(--app-primary-color);
+}
+
+#properties-table .properties-table-btn { margin: 0 0.15rem; }
+
+#properties-table td:first-child {
+    font-weight: 500;
+    color: var(--app-text-color);
+}
+
+#properties-table thead.sticky-top {
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* Property Buttons */
+.properties-table-btn {
+    border-radius: 4px;
+    padding: 0.1rem 0.4rem;
+    transition: all 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    font-size: 0.85rem;
+}
+
+.properties-table-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.properties-table-btn.edit-btn {
+    background-color: #0d6efd;
+    color: white;
+    border: none;
+}
+
+.properties-table-btn.edit-btn:hover { background-color: #0b5ed7; }
+
+.properties-table-btn.inherit-btn {
+    background-color: #6c757d;
+    color: white;
+    border: none;
+}
+
+.properties-table-btn.inherit-btn:hover { background-color: #5a6268; }
+
+/* --- Snapshots Table --- */
+#snapshots-table { 
+    font-size: 0.85rem; 
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+#snapshots-table thead {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+}
+
+#snapshots-table thead th {
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    color: #495057;
+    border: none;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    background-color: #f8f9fa;
+    z-index: 1;
+}
+
+#snapshots-table tbody tr {
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #e9ecef;
+    border-left: 3px solid transparent;
+    border-radius: 6px;
+}
+
+#snapshots-table tbody td {
+    padding: 0.65rem 1rem;
+    vertical-align: middle;
+    border: none;
+}
+
+#snapshots-table tbody td:first-child {
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+}
+
+#snapshots-table tbody td:last-child {
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+
+/* Snapshot row hover */
+#snapshots-table tbody tr:hover:not(.table-active),
+#snapshots-table tbody tr:hover:not(.table-active) td { 
+    background-color: rgba(106, 100, 232, 0.15) !important;
+    cursor: pointer;
+}
+
+#snapshots-table tbody tr:hover:not(.table-active) {
+    border-left: 3px solid rgba(106, 100, 232, 0.4) !important;
+    box-shadow: 0 2px 8px rgba(106, 100, 232, 0.15);
+}
+
+/* Snapshot row selected */
+#snapshots-table tbody tr.table-active,
+#snapshots-table tbody tr.table-active:hover,
+.table > tbody > tr.table-active { 
+    background: linear-gradient(135deg, #6a64e8 0%, #5752d6 100%) !important;
+    color: #ffffff !important;
+    font-weight: 500;
+    border-left-color: #4a47c5;
+    box-shadow: 0 3px 10px rgba(106, 100, 232, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+#snapshots-table tbody tr.table-active td,
+#snapshots-table tbody tr.table-active:hover td,
+.table > tbody > tr.table-active > td {
+    color: #ffffff !important;
+    background: transparent !important;
+}
+
+#snapshots-table tbody tr.table-active:hover {
+    background: linear-gradient(135deg, #5752d6 0%, #4a47c5 100%) !important;
+    box-shadow: 0 4px 14px rgba(106, 100, 232, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+#snapshots-table tbody tr:nth-child(even):not(.table-active):not(:hover) {
+    background-color: rgba(0, 0, 0, 0.015);
+}
+
+/* Bootstrap Overrides for Snapshot Table Selection */
+.table-striped > tbody > tr.table-active,
+.table-hover > tbody > tr.table-active:hover,
+.table > tbody > tr.table-active,
+#snapshots-table > tbody > tr.table-active {
+    --bs-table-accent-bg: transparent !important;
+    --bs-table-bg: transparent !important;
+    background: linear-gradient(135deg, #6a64e8 0%, #5752d6 100%) !important;
+    color: #ffffff !important;
+}
+
+.table-striped > tbody > tr.table-active > *,
+.table-hover > tbody > tr.table-active:hover > *,
+.table > tbody > tr.table-active > *,
+#snapshots-table > tbody > tr.table-active > * {
+    --bs-table-accent-bg: transparent !important;
+    --bs-table-bg: transparent !important;
+    background: transparent !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+}
+
+/* --- Encryption Info Table --- */
+#encryption-tab-pane .enc-info-table { 
+    font-size: 0.85rem; 
+    width: 100%; 
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+#encryption-tab-pane .enc-info-table tr {
+    transition: background-color 0.15s ease;
+}
+
+#encryption-tab-pane .enc-info-table tr:hover {
+    background-color: rgba(106, 100, 232, 0.04);
+}
+
+#encryption-tab-pane .enc-info-table th { 
+    width: 160px; 
+    font-weight: 600; 
+    text-align: right; 
+    padding: 0.75rem 1rem 0.75rem 0.5rem; 
+    color: var(--app-text-muted); 
+    border: none; 
+    vertical-align: top;
+    border-bottom: 1px solid var(--app-border-color);
+}
+
+#encryption-tab-pane .enc-info-table td { 
+    border: none; 
+    vertical-align: top;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--app-border-color);
+    color: var(--app-text-color);
+    font-weight: 500;
+}
+
+#encryption-tab-pane .enc-info-table tr:last-child th,
+#encryption-tab-pane .enc-info-table tr:last-child td {
+    border-bottom: none;
+}

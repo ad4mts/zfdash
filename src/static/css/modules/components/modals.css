@@ -1,0 +1,191 @@
+/* --- Modal Styles --- */
+
+.modal-dialog { max-width: 600px; }
+.modal-dialog.modal-lg { max-width: 800px; }
+.modal-dialog.modal-xl { max-width: 1140px; }
+
+.modal-content {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.modal-header {
+    background: linear-gradient(135deg, var(--app-primary-color) 0%, #5752d6 100%);
+    color: white;
+    border-bottom: none;
+    padding: 1.25rem 1.5rem;
+}
+
+.modal-header .modal-title {
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.modal-header .btn-close {
+    filter: brightness(0) invert(1);
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.modal-header .btn-close:hover { opacity: 1; }
+
+.modal-body { 
+    max-height: 70vh; 
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid var(--app-border-color);
+    padding: 1rem 1.5rem;
+    background-color: #f8f9fa;
+}
+
+.modal-footer .btn {
+    border-radius: 6px;
+    padding: 0.5rem 1.25rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.modal-footer .btn:hover { transform: translateY(-1px); }
+
+/* --- Create Pool/Add VDEV Specific Modal Styling --- */
+#pool-available-devices, #pool-vdev-config .device-list-in-vdev { font-size: 0.85rem; }
+#pool-available-devices .list-group-item, #pool-vdev-list .list-group-item { padding: 0.3rem 0.6rem; cursor: pointer; }
+#pool-vdev-list .list-group-item { border: 1px solid #eee; background-color: #f8f9fa; margin-bottom: 0.25rem; }
+#pool-vdev-list .list-group-item .d-flex { padding-bottom: 0.2rem; margin-bottom: 0.2rem; border-bottom: 1px solid #eee; }
+#pool-vdev-list .pool-vdev-device-item { background-color: var(--app-pane-bg); border: none; padding-left: 0.8rem; margin-bottom: 1px; }
+
+#pool-available-devices .pool-device-item.active, 
+#pool-vdev-list .pool-vdev-item.active, 
+#pool-vdev-list .pool-vdev-device-item.active { 
+    background-color: var(--app-selected-bg); 
+    color: var(--app-selected-text); 
+    border-color: var(--app-primary-color); 
+}
+
+#pool-available-devices .pool-device-item:not(.active):hover, 
+#pool-vdev-list .pool-vdev-device-item:not(.active):hover { 
+    background-color: var(--app-hover-bg); 
+}
+
+#pool-vdev-list .pool-vdev-item.active > .d-flex { font-weight: bold; }
+
+/* Available Devices List */
+#pool-available-devices .pool-device-item:hover {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+
+#pool-available-devices .pool-device-item.active {
+    background-color: #cfe2ff;
+    color: #000;
+    border-color: #9ec5fe;
+}
+
+/* VDEV Type Headers */
+#pool-vdev-list .pool-vdev-item {
+    border: 1px solid #dee2e6;
+    border-radius: 0.3rem;
+    background-color: #fff;
+    transition: background-color 0.15s ease-in-out;
+    padding: 0;
+    margin-bottom: 0.5rem;
+}
+
+#pool-vdev-list .pool-vdev-item > div:first-child {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #dee2e6;
+}
+
+#pool-vdev-list .pool-vdev-item:hover > div:first-child {
+    background-color: #f8f9fa;
+    cursor: pointer;
+}
+
+#pool-vdev-list .pool-vdev-item.active {
+    background-color: #fff;
+    border-color: var(--app-primary-color);
+}
+
+#pool-vdev-list .pool-vdev-item.active > div:first-child {
+    background-color: #d6d4fa;
+    color: #000;
+    font-weight: 600;
+    border-bottom-color: var(--app-primary-color);
+}
+
+/* Child devices within active parent */
+#pool-vdev-list .pool-vdev-item.active .device-list-in-vdev {
+    display: block;
+    background-color: transparent;
+}
+
+#pool-vdev-list .pool-vdev-item.active .pool-vdev-device-item {
+    background-color: transparent;
+    color: var(--app-text-color);
+    border-color: transparent;
+    opacity: 1;
+    display: block;
+}
+
+#pool-vdev-list .pool-vdev-item.active .pool-vdev-device-item:hover {
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    cursor: pointer;
+}
+
+#pool-vdev-list .pool-vdev-item.active .pool-vdev-device-item.active {
+    background-color: #e0f1ff;
+    color: #000;
+    border-color: #9ec5fe;
+    font-weight: 500;
+}
+
+/* Individual devices within VDEV */
+#pool-vdev-list .device-list-in-vdev {
+    padding: 0.25rem 0.75rem 0.5rem 0.75rem;
+}
+
+#pool-vdev-list .pool-vdev-device-item {
+     transition: background-color 0.15s ease-in-out;
+     border: 1px solid transparent;
+     margin-bottom: 2px;
+     padding: 0.3rem 0.6rem;
+     border-radius: 0.2rem;
+}
+
+#pool-vdev-list .pool-vdev-device-item:hover {
+    background-color: #e9ecef;
+    border-color: #dee2e6;
+    cursor: pointer;
+}
+
+#pool-vdev-list .pool-vdev-device-item.active {
+    background-color: #e0f1ff;
+    color: #000;
+    border-color: #9ec5fe;
+    font-weight: 500;
+}
+
+/* Remove button within VDEV headers */
+#pool-vdev-list .pool-vdev-item .remove-vdev-btn {
+    z-index: 2;
+    background-color: transparent;
+    border: none;
+    color: var(--bs-danger);
+    padding: 0.2rem 0.4rem;
+    line-height: 1;
+    opacity: 0.7;
+    transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+#pool-vdev-list .pool-vdev-item .remove-vdev-btn:hover {
+    opacity: 1;
+    color: #a01324;
+}
+
+#pool-vdev-list .pool-vdev-item .remove-vdev-btn i { vertical-align: -0.1em; }

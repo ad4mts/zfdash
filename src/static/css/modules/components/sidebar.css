@@ -1,0 +1,88 @@
+/* --- Sidebar & Tree View Styles --- */
+
+/* Card Header */
+.card-header {
+    font-weight: 600;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--app-border-color);
+    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+    color: var(--app-text-color);
+    font-size: 0.95rem;
+    letter-spacing: 0.3px;
+}
+
+/* Tree View Container */
+#zfs-tree-container {
+    padding: 0.5rem;
+}
+
+.zfs-tree-view { font-size: 0.9rem; }
+.zfs-tree-view ul { padding-left: 0; margin-bottom: 0; }
+.zfs-tree-view li { list-style-type: none; }
+
+/* Tree Item - Base State */
+.tree-item { 
+    padding: 8px 12px; 
+    cursor: pointer; 
+    border-radius: 6px; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+    display: flex; 
+    align-items: center; 
+    margin-bottom: 3px; 
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    border-left-width: 3px;
+    position: relative;
+}
+
+/* Tree Item - Hover State */
+.tree-item:hover { 
+    background-color: rgba(106, 100, 232, 0.15) !important;
+    border-color: transparent;
+    border-left-color: rgba(106, 100, 232, 0.4) !important;
+    box-shadow: 0 2px 8px rgba(106, 100, 232, 0.15);
+}
+
+/* Tree Item - Active/Click State */
+.tree-item:active {
+    background-color: rgba(106, 100, 232, 0.15);
+}
+
+/* Tree Item - Selected State */
+.tree-item.selected { 
+    background: linear-gradient(135deg, var(--app-primary-color) 0%, #5752d6 100%);
+    color: var(--app-selected-text); 
+    font-weight: 500;
+    border-color: var(--app-primary-darker);
+    box-shadow: 0 3px 10px rgba(106, 100, 232, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.tree-item.selected:hover {
+    background: linear-gradient(135deg, #5752d6 0%, #4a47c5 100%);
+    box-shadow: 0 4px 14px rgba(106, 100, 232, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.tree-item.selected i, .tree-item.selected span.badge { color: var(--app-selected-text) !important; }
+.tree-item.selected span.badge.bg-light, .tree-item.selected span.badge.bg-white { 
+    background-color: rgba(255, 255, 255, 0.9) !important; 
+    color: var(--app-primary-color) !important;
+    font-weight: 600;
+}
+
+.tree-item i.bi { 
+    vertical-align: -0.125em; 
+    margin-right: 0.4rem;
+    font-size: 1.05em;
+}
+
+.tree-toggle { cursor: pointer; display: inline-block; width: 1em; flex-shrink: 0; }
+.tree-item-name { margin-left: 2px; flex-grow: 1; overflow: hidden; text-overflow: ellipsis; }
+.tree-item .badge { 
+    margin-left: 0.5rem; 
+    font-size: 0.75em; 
+    padding: 0.3em 0.55em;
+    border-radius: 4px;
+    font-weight: 600;
+}

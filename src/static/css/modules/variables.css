@@ -1,0 +1,38 @@
+/* -- Theme Variables -- */
+:root {
+    /* Colors */
+    --app-bg: #f0f2f5;
+    --app-pane-bg: #ffffff;
+    --app-border-color: #e8eaf0;
+    --app-text-color: #333b4d;
+    --app-text-muted: #7a869a;
+    
+    /* Primary Color System */
+    --app-primary-color: #6a64e8;
+    --app-primary-rgb: 106, 100, 232;
+    --app-primary-darker: #5752d6;
+    --app-primary-lighter: rgba(106, 100, 232, 0.1);
+    
+    /* State Colors */
+    --app-hover-bg: #eef0f8;
+    --app-selected-bg: var(--app-primary-color);
+    --app-selected-text: #ffffff;
+    
+    /* Shadows */
+    --app-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --app-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --app-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    
+    /* Transitions */
+    --app-transition-fast: 0.15s ease;
+    --app-transition-normal: 0.2s ease;
+    --app-transition-slow: 0.3s ease;
+    
+    /* Typography */
+    --bs-body-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+    --bs-font-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    
+    /* Bootstrap Overrides */
+    --bs-primary: var(--app-primary-color);
+    --bs-primary-rgb: var(--app-primary-rgb);
+}

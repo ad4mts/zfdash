@@ -1,0 +1,34 @@
+/* --- Global Base Styles --- */
+
+html, body {
+    height: 100%;
+    margin: 0;
+    font-family: var(--bs-body-font-family);
+    background-color: var(--app-bg);
+    color: var(--app-text-color);
+    font-size: 0.95rem;
+    overflow: hidden; /* Prevent scrolling on body by default */
+}
+
+/* Global Smooth Scroll */
+* {
+    scroll-behavior: smooth;
+}
+
+/* --- Global Focus States for Accessibility --- */
+*:focus-visible {
+    outline: 2px solid var(--app-primary-color);
+    outline-offset: 2px;
+}
+
+button:focus-visible,
+.btn:focus-visible {
+    outline: 2px solid var(--app-primary-color);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(106, 100, 232, 0.2);
+}
+
+/* --- Visibility Control --- */
+body.auth-loading #app-section { display: none; }
+body.logged-out #app-section { display: none; }
+body.logged-in #app-section { display: flex; }

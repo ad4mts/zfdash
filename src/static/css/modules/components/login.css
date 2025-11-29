@@ -1,0 +1,152 @@
+/* --- Login Page Styles --- */
+
+/* Apply to body tag with class="login-page" */
+body.login-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    background: linear-gradient(135deg, #667eea, #764ba2, #8a4f9c, #667eea);
+    background-size: 300% 300%;
+    background-attachment: fixed;
+    padding: 1rem;
+    animation: gradientShift 10s ease infinite;
+    overflow: hidden;
+    position: relative;
+}
+
+/* Noise overlay */
+body.login-page::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(rgba(180, 180, 180, 0.02) 50%, transparent 0), linear-gradient(90deg, rgba(180, 180, 180, 0.02) 50%, transparent 0);
+    background-size: 2px 2px;
+    opacity: 0.2;
+    pointer-events: none;
+    z-index: 1;
+}
+
+.login-wrapper {
+    width: 100%;
+    max-width: 420px;
+}
+
+.login-container.card {
+    background-color: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(5px);
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.15);
+    padding: 2.5rem;
+    transition: transform 0.1s linear, box-shadow 0.3s ease;
+    transform-style: preserve-3d;
+    will-change: transform;
+}
+
+.login-container.card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 15px 35px rgba(0, 0, 0, 0.2);
+}
+
+.login-header .app-icon {
+    font-size: 3.5rem;
+    color: var(--app-primary-color);
+    margin-bottom: 0.75rem;
+    display: block;
+}
+
+.login-header h1 {
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 0.25rem;
+}
+
+.login-header p { font-size: 0.95rem; }
+
+.login-body .form-label {
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    color: #555;
+}
+
+.login-body .form-control {
+    background-color: #f8f9fa;
+    border: 1px solid #ced4da;
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease, box-shadow 0.3s ease;
+}
+
+.login-body .form-control:focus {
+    border-color: var(--app-primary-color);
+    background-color: #fff;
+    box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.15),
+                0 0 15px rgba(var(--bs-primary-rgb), 0.4);
+    outline: none;
+}
+
+.login-body .btn-primary {
+    background-color: var(--app-primary-color);
+    border: none;
+    border-radius: 6px;
+    padding: 0.9rem 1rem;
+    font-weight: 600;
+    transition: background-color 0.2s ease, transform 0.1s ease;
+    position: relative;
+    overflow: hidden;
+    z-index: 1;
+}
+
+.login-body .btn-primary::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+    transition: left 0.5s cubic-bezier(0.23, 1, 0.32, 1);
+    z-index: -1;
+}
+
+.login-body .btn-primary:hover::before { left: 100%; }
+
+.login-body .btn-primary:hover {
+    background-color: #0b5ed7;
+    transform: translateY(-2px);
+}
+
+.login-body .btn-primary:active { transform: translateY(0); }
+
+/* Flash messages */
+.flash-messages .alert {
+    border-radius: 6px;
+    font-size: 0.85rem;
+}
+
+.login-page .flash-messages .alert .btn-close {
+    padding: 0.4rem;
+    opacity: 0.6;
+    transition: opacity 0.15s ease;
+    background: transparent var(--bs-btn-close-bg) center/0.8em auto no-repeat;
+    border: 0;
+    border-radius: 0.25rem;
+    width: 1.2em;
+    height: 1.2em;
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    z-index: 2;
+    filter: invert(0.5);
+}
+
+.login-page .flash-messages .alert .btn-close:hover {
+    opacity: 1;
+    filter: invert(0.2);
+    background-color: rgba(0,0,0,0.05);
+}

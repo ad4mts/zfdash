@@ -1,0 +1,301 @@
+/* --- Layout Styles --- */
+
+/* Main App Section */
+#app-section {
+    /* Attributes set in index.html: class="flex-grow-1 d-flex flex-column overflow-hidden" */
+    display: flex;
+}
+
+/* Tabs Panel */
+#tabs-panel {
+    z-index: 1020;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+#tabs-panel .nav-link {
+    font-size: 0.9rem;
+    padding: 0.6rem 1rem;
+    color: var(--app-text-muted);
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.2s ease;
+    border-radius: 6px 6px 0 0;
+    position: relative;
+}
+
+#tabs-panel .nav-link:not(.active):not(.disabled):hover {
+    color: var(--app-primary-color);
+    background-color: rgba(106, 100, 232, 0.06);
+    border-bottom-color: rgba(106, 100, 232, 0.4);
+}
+
+#tabs-panel .nav-link.active {
+    font-weight: 600;
+    color: var(--app-primary-color);
+    background-color: var(--app-pane-bg);
+    border-bottom-color: var(--app-primary-color);
+    opacity: 1;
+    box-shadow: 0 -2px 8px rgba(106, 100, 232, 0.1);
+}
+
+#tabs-panel .nav-link i { transition: transform 0.2s ease; }
+#tabs-panel .nav-link:hover i { transform: scale(1.1); }
+#tabs-panel .nav-link.active i { color: var(--app-primary-color); }
+
+#tabs-panel .nav-link.disabled {
+    color: #ced4da !important;
+    cursor: not-allowed;
+    background-color: transparent !important;
+    border-bottom-color: transparent !important;
+    opacity: 0.45;
+    pointer-events: none;
+}
+
+#tabs-panel .nav-link.disabled:hover {
+    opacity: 0.45 !important;
+    color: #ced4da !important;
+    border-bottom-color: transparent !important;
+}
+
+/* Content Area */
+#main-content-area {
+    background-color: #f8f9fa;
+    padding: 0.5rem;
+    gap: 0.5rem;
+    position: relative;
+    overflow: hidden;
+}
+
+#main-content-area .col-lg-4,
+#main-content-area .col-lg-8 {
+    background-color: var(--app-pane-bg);
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+}
+
+#main-content-area .col-lg-4:hover,
+#main-content-area .col-lg-8:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
+}
+
+/* Tab Content Container */
+#details-tab-content { position: relative; }
+
+.tab-pane {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.tab-pane:not(.active) { display: none !important; }
+
+/* Pool Status Tab */
+#pool-status-tab-pane > .flex-grow-1 {
+    flex-grow: 1;
+    overflow-y: auto;
+}
+
+#pool-status-content {
+    font-family: var(--bs-font-monospace);
+    font-size: 0.85rem;
+    white-space: pre;
+    border-radius: 0.25rem;
+    margin-bottom: 0;
+}
+
+/* Pool Edit Tab */
+#pool-edit-tree-container {
+    font-family: var(--bs-font-monospace);
+    font-size: 0.85rem;
+    flex-grow: 1;
+    overflow-y: auto;
+    border-top: 1px solid var(--app-border-color);
+}
+
+#pool-edit-tree-container ul { padding-left: 0; margin-bottom: 0; }
+
+#pool-edit-tree-container li.pool-edit-item {
+    list-style-type: none;
+    padding: 6px 10px;
+    cursor: pointer;
+    white-space: pre;
+    border-radius: 6px;
+    margin-bottom: 3px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+}
+
+#pool-edit-tree-container li.pool-edit-item:hover {
+    background-color: rgba(106, 100, 232, 0.08);
+    border-color: rgba(106, 100, 232, 0.2);
+    transform: translateX(2px);
+}
+
+#pool-edit-tree-container li.pool-edit-item.selected {
+    background: linear-gradient(135deg, rgba(106, 100, 232, 0.15) 0%, rgba(87, 82, 214, 0.2) 100%);
+    color: var(--app-text-color);
+    border-color: var(--app-primary-color);
+    box-shadow: 0 2px 8px rgba(106, 100, 232, 0.2), inset 0 0 0 1px rgba(106, 100, 232, 0.1);
+    user-select: none;
+    border-left: 3px solid var(--app-primary-color);
+}
+
+#pool-edit-tree-container li.pool-edit-item.selected:hover {
+    background: linear-gradient(135deg, rgba(106, 100, 232, 0.2) 0%, rgba(87, 82, 214, 0.25) 100%);
+}
+
+#pool-edit-tree-container li .badge {
+    font-family: var(--bs-body-font-family);
+    font-size: 0.7em;
+    padding: 0.3em 0.5em;
+    border-radius: 4px;
+    font-weight: 600;
+}
+
+#pool-edit-tree-container .pool-edit-children {
+    margin-left: 1rem;
+    border-left: 2px dashed rgba(106, 100, 232, 0.3);
+    padding-left: 0.5rem;
+}
+
+#pool-edit-tree-container li.pool-edit-item.selected .badge {
+    color: #000 !important;
+    background-color: rgba(255, 255, 255, 0.85) !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+
+#pool-edit-tree-container li.pool-edit-item .badge.float-end { font-weight: 600; }
+
+/* Encryption Tab */
+#encryption-tab-pane .enc-info-container {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+#encryption-tab-pane .enc-actions {
+    margin-top: 0.5rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+#encryption-tab-pane .enc-info-table + div .btn { margin-bottom: 0.25rem; }
+
+/* --- Responsive Layout Fixes --- */
+@media (max-width: 767.98px) {
+    html, body { overflow: auto !important; height: auto; }
+    #app-section { overflow: visible !important; height: auto; }
+    #main-content-area { overflow: visible; height: auto; padding-bottom: 1rem; }
+    #main-content-area > .row { height: auto !important; }
+    
+    #main-content-area .col-md-5,
+    #main-content-area .col-md-7 {
+        height: auto !important;
+        margin-bottom: 1rem;
+        display: block !important;
+    }
+    
+    #main-content-area .col-md-7 {
+        margin-bottom: 0;
+        min-height: 200px !important;
+    }
+    
+    .tab-pane {
+        height: auto !important;
+        overflow: visible !important;
+        display: block !important;
+        min-height: 150px !important;
+    }
+    
+    .tab-pane.active {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        height: auto !important;
+        min-height: 150px !important;
+        position: static !important;
+    }
+    
+    #details-tab-content {
+        overflow: visible !important;
+        height: auto !important;
+        min-height: 150px !important;
+    }
+    
+    #properties-tab-pane .table-responsive,
+    #snapshots-tab-pane .table-responsive,
+    #pool-edit-tree-container,
+    #encryption-tab-pane .enc-info-container,
+    #pool-status-tab-pane > .flex-grow-1 {
+        overflow-y: visible !important;
+        flex-grow: 0 !important;
+        height: auto !important;
+        max-height: none !important;
+        min-height: 50px !important;
+        display: block !important;
+    }
+    
+    #properties-tab-pane .table-responsive,
+    #snapshots-tab-pane .table-responsive {
+        overflow-x: auto;
+    }
+    
+    #properties-table thead.sticky-top,
+    #snapshots-table thead.sticky-top {
+        position: static !important;
+    }
+    
+    #encryption-tab-pane {
+        display: none !important;
+        height: auto !important;
+        min-height: 200px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        overflow: visible !important;
+        position: static !important;
+    }
+    
+    #encryption-tab-pane.active {
+        display: block !important;
+        height: auto !important;
+        min-height: 200px !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+        position: static !important;
+    }
+    
+    #encryption-tab-pane .enc-info-container {
+        display: block !important;
+        height: auto !important;
+        min-height: 150px !important;
+        overflow: visible !important;
+        position: static !important;
+        flex: none !important;
+        flex-grow: 0 !important;
+        flex-shrink: 1 !important;
+        padding: 1rem !important;
+    }
+    
+    #encryption-tab-pane .enc-info-table {
+        display: table !important;
+        width: 100% !important;
+        height: auto !important;
+        table-layout: fixed !important;
+        margin-bottom: 1rem !important;
+    }
+    
+    #encryption-tab-pane .enc-info-table th,
+    #encryption-tab-pane .enc-info-table td {
+        padding: 0.5rem !important;
+        vertical-align: top !important;
+        display: table-cell !important;
+    }
+    
+    .tab-pane:not(.active) { display: none !important; }
+}
