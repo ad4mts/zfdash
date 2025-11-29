@@ -278,11 +278,31 @@ export function clearSelection() {
     
     state.saveSelectionToStorage();
     
-    // Clear dashboard
+    // Clear dashboard (shows "Select a pool or dataset" message)
     renderDashboard(null);
     
-    // Hide the tab content area
-    setDetailsVisible(false);
+    // Show the tab content area with dashboard tab visible (like GUI does)
+    // instead of hiding it completely
+    setDetailsVisible(true);
+    
+    // Disable all tabs except dashboard when nothing is selected
+    document.getElementById('properties-tab-button').disabled = true;
+    document.getElementById('snapshots-tab-button').disabled = true;
+    document.getElementById('pool-status-tab-button').disabled = true;
+    document.getElementById('pool-edit-tab-button').disabled = true;
+    document.getElementById('encryption-tab-button').disabled = true;
+    
+    // Switch to dashboard tab
+    const dashboardTabButton = document.getElementById('dashboard-tab-button');
+    if (dashboardTabButton) {
+        dashboardTabButton.disabled = false;
+        try {
+            const tabInstance = bootstrap.Tab.getOrCreateInstance(dashboardTabButton);
+            if (tabInstance) tabInstance.show();
+        } catch (e) {
+            console.warn("Could not activate dashboard tab:", e);
+        }
+    }
     
     // Reset the title
     if (dom.detailsTitle) {

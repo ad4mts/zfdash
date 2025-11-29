@@ -18,19 +18,38 @@ import { renderEncryptionInfo } from './encryption.js';
  */
 export async function renderDetails(obj) {
     if (!obj) {
-        // If called with null obj after showing content, clear title and potentially show placeholder again
+        // If called with null obj, show the dashboard with "Select a pool or dataset" message
+        // like the GUI does, instead of hiding the tab content area
         if (dom.detailsTitle) dom.detailsTitle.textContent = 'Details';
         
-        // Hide the tab content area
+        // Show the tab content area (with dashboard showing empty state)
         if (dom.detailsTabContent) {
-            dom.detailsTabContent.style.visibility = 'hidden';
-            dom.detailsTabContent.style.opacity = '0';
-        } else {
-            console.warn("renderDetails: detailsTabContent element not found when clearing!");
+            dom.detailsTabContent.style.visibility = 'visible';
+            dom.detailsTabContent.style.opacity = '1';
         }
         
-        // Clear dashboard
+        // Clear dashboard (shows "Select a pool or dataset" message)
         renderDashboard(null);
+        
+        // Disable all tabs except dashboard when nothing is selected
+        const dashboardTabButton = document.getElementById('dashboard-tab-button');
+        if (dashboardTabButton) dashboardTabButton.disabled = false;
+        document.getElementById('properties-tab-button').disabled = true;
+        document.getElementById('snapshots-tab-button').disabled = true;
+        document.getElementById('pool-status-tab-button').disabled = true;
+        document.getElementById('pool-edit-tab-button').disabled = true;
+        document.getElementById('encryption-tab-button').disabled = true;
+        
+        // Switch to dashboard tab
+        if (dashboardTabButton) {
+            try {
+                const tabInstance = bootstrap.Tab.getOrCreateInstance(dashboardTabButton);
+                if (tabInstance) tabInstance.show();
+            } catch (e) {
+                console.warn("Could not activate dashboard tab:", e);
+            }
+        }
+        
         console.warn("renderDetails called with null object.");
         return;
     }

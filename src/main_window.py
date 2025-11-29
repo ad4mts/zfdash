@@ -440,10 +440,11 @@ class MainWindow(QMainWindow):
         expanded_paths = self._get_expanded_items()
         current_tab_index = self.details_tabs.currentIndex()
 
-        # Disable UI during refresh
+        # Disable UI during refresh but keep current view visible
+        # (Don't clear details view to avoid brief flash to dashboard with "Select a Pool" message)
         self.refresh_action.setEnabled(False)
         self.tree_view.setEnabled(False)
-        self._update_details_view(None) # Clear details view
+        self.details_tabs.setEnabled(False)  # Disable tabs to prevent user interaction during refresh
         self._update_action_states() # Update disabled states
 
         self._worker = Worker(self.zfs_client.get_all_zfs_data)
@@ -558,6 +559,8 @@ class MainWindow(QMainWindow):
         self.refresh_action.setEnabled(True)
         if self.tree_view:
             self.tree_view.setEnabled(True)
+        if self.details_tabs:
+            self.details_tabs.setEnabled(True)
         # Crucially, update action states based on the *final* selection state
         self._update_action_states()
 
