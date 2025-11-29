@@ -16,7 +16,7 @@ set -o pipefail # Handle pipe errors correctly
 # --- Application Info (Should match build.sh) ---
 APP_NAME="ZfDash"
 INSTALL_NAME="zfdash"
-APP_VERSION="1.5.4" # Informational
+# APP_VERSION is read dynamically from src/version.py below
 
 # --- Build Output Configuration (Where to find the pre-built app) ---
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" &> /dev/null && pwd)
@@ -106,6 +106,20 @@ uninstall_existing() {
 # --- === INSTALLATION PHASE START === ---
 # --- ============================== ---
 echo ""
+
+# Read APP_VERSION from src/version.py (single source of truth)
+VERSION_FILE="${SCRIPT_DIR}/src/version.py"
+if [ -f "$VERSION_FILE" ]; then
+    APP_VERSION=$(grep -oP '__version__\s*=\s*["\x27]\K[^"\x27]+' "$VERSION_FILE" 2>/dev/null || echo "unknown")
+    if [ -z "$APP_VERSION" ] || [ "$APP_VERSION" = "unknown" ]; then
+        log_warn "Could not parse version from $VERSION_FILE, using 'unknown'"
+        APP_VERSION="unknown"
+    fi
+else
+    log_warn "Version file not found at $VERSION_FILE, using 'unknown'"
+    APP_VERSION="unknown"
+fi
+
 log_info "--- Starting ${APP_NAME} Installation Process (Version ${APP_VERSION}) ---"
 
 # 1. Check Root Privileges
@@ -326,7 +340,7 @@ ICON_LINE=""; if [ -f "$INSTALLED_ICON_PATH" ]; then ICON_LINE="Icon=${INSTALLED
 # --- END MODIFICATION ---
 cat > "$INSTALL_DESKTOP_FILE_PATH" <<EOF
 [Desktop Entry]
-Version=1.5.4
+Version=${APP_VERSION}
 Name=${APP_NAME}
 GenericName=ZFS Manager
 Comment=ZFS pool, dataset, and snapshot management GUI/WebUI

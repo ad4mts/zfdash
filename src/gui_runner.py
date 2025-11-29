@@ -38,9 +38,12 @@ except ImportError as e:
 # --- Import New ZFS Manager Client ---
 from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
 
+# --- Import Version from single source of truth ---
+from version import __version__, __app_name__
+
 # --- Constants ---
-APP_NAME = "ZfDash"
-APP_VERSION = "1.7.5" # Consider reading from a central place
+APP_NAME = __app_name__
+APP_VERSION = __version__
 APP_ORG = "ZfDash"
 
 # --- Helper Functions ---

@@ -17,7 +17,7 @@ set -e
 # --- Application Info ---
 APP_NAME="ZfDash"
 INSTALL_NAME="zfdash" # Base name for executable output
-APP_VERSION="1.8.0" # Used in logging, could be dynamic later
+# APP_VERSION is read dynamically from src/version.py below
 
 # --- Build Configuration ---
 CONDA_PYTHON_VERSION="3.11" # Desired Python version for the build env
@@ -88,6 +88,20 @@ run_in_conda_env() {
 # --- === BUILD PHASE START ==== ---
 # --- ========================== ---
 echo ""
+
+# Read APP_VERSION from src/version.py (single source of truth)
+VERSION_FILE="${SCRIPT_DIR}/src/version.py"
+if [ -f "$VERSION_FILE" ]; then
+    APP_VERSION=$(grep -oP '__version__\s*=\s*["\x27]\K[^"\x27]+' "$VERSION_FILE" 2>/dev/null || echo "unknown")
+    if [ -z "$APP_VERSION" ] || [ "$APP_VERSION" = "unknown" ]; then
+        log_warn "Could not parse version from $VERSION_FILE, using 'unknown'"
+        APP_VERSION="unknown"
+    fi
+else
+    log_warn "Version file not found at $VERSION_FILE, using 'unknown'"
+    APP_VERSION="unknown"
+fi
+
 log_info "--- Starting ${APP_NAME} Build Process (Version ${APP_VERSION}) ---"
 
 # 1. Check Host Prerequisites

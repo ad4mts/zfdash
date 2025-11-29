@@ -29,6 +29,8 @@ try:
     import utils # For formatting/parsing in backend if needed
     # Import models needed for type checking in dict conversion
     from models import ZfsObject, Pool, Dataset, Snapshot
+    # Import version info from single source of truth
+    from version import get_version_info
 except ImportError as e:
     # Use basic print here as logger might not be configured yet
     print(f"WEB_UI: FATAL: Could not import required ZFS modules or config: {e}", file=sys.stderr)
@@ -572,6 +574,14 @@ def auth_status():
         return jsonify(status="success", authenticated=True, username=current_user.username)
     else:
         return jsonify(status="success", authenticated=False)
+
+@app.route('/api/version')
+def version_info():
+    """Return version and application information."""
+    import sys
+    info = get_version_info()
+    info['python_version'] = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    return jsonify(status="success", **info)
 
 # Serve static files (JS, CSS) - Handled automatically by Flask
 

@@ -33,6 +33,7 @@ try:
     import utils
     import config_manager
     from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
+    from version import __version__, __app_name__, __app_description__, __repository__, __license__, __copyright__, __author__
 except ImportError as import_err:
     print(
         f"FATAL: Failed to import necessary modules: {import_err}\n"
@@ -186,6 +187,17 @@ class MainWindow(QMainWindow):
         )
         self.promote_dataset_action.triggered.connect(self._promote_dataset)
 
+        # --- Help Menu Actions ---
+        self.about_action = QAction(
+            QIcon.fromTheme("help-about"), "&About...", self
+        )
+        self.about_action.triggered.connect(self._show_about_dialog)
+
+        self.check_updates_action = QAction(
+            QIcon.fromTheme("software-update-available"), "Check for &Updates...", self
+        )
+        self.check_updates_action.triggered.connect(self._check_for_updates)
+
     def _create_menus(self):
         """Create the main menu bar."""
         file_menu = self.menuBar().addMenu("&File")
@@ -216,6 +228,12 @@ class MainWindow(QMainWindow):
         dataset_menu.addAction(self.unmount_dataset_action)
         dataset_menu.addSeparator()
         dataset_menu.addAction(self.promote_dataset_action)
+
+        # --- Help Menu ---
+        help_menu = self.menuBar().addMenu("&Help")
+        help_menu.addAction(self.check_updates_action)
+        help_menu.addSeparator()
+        help_menu.addAction(self.about_action)
 
     def _create_toolbars(self):
         """Create the main application toolbar."""
@@ -1280,6 +1298,42 @@ class MainWindow(QMainWindow):
     @Slot()
     def _show_log_viewer(self):
         dialog = LogViewerDialog(self); dialog.exec()
+
+    @Slot()
+    def _show_about_dialog(self):
+        """Show the About dialog with application information."""
+        import sys
+        py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+        
+        about_text = f"""<h2>{__app_name__}</h2>
+<p><b>Version:</b> {__version__}</p>
+<p>{__app_description__}</p>
+<p><b>Author:</b> {__author__}</p>
+<p><b>Python:</b> {py_version}</p>
+<p><b>License:</b> {__license__}</p>
+<p><b>Repository:</b> <a href="{__repository__}">{__repository__}</a></p>
+<hr>
+<p>{__copyright__}</p>
+"""
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle(f"About {__app_name__}")
+        msg_box.setTextFormat(Qt.TextFormat.RichText)
+        msg_box.setText(about_text)
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        msg_box.exec()
+
+    @Slot()
+    def _check_for_updates(self):
+        """Placeholder for Check for Updates functionality."""
+        QMessageBox.information(
+            self,
+            "Check for Updates",
+            f"<p><b>{__app_name__}</b> is currently at version <b>{__version__}</b>.</p>"
+            f"<p>Automatic update checking is not yet implemented.</p>"
+            f"<p>Please visit <a href='{__repository__}/releases'>{__repository__}/releases</a> "
+            f"to check for new versions manually.</p>",
+        )
 
     # --- Window Closing Logic ---
 

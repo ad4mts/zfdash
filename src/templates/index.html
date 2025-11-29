@@ -63,6 +63,17 @@
                                  <li><button id="promote-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-arrow-up-circle me-2"></i>Promote Clone</button></li>
                             </ul>
                         </li>
+                        <!-- Help Menu -->
+                        <li class="nav-item dropdown">
+                            <a class="nav-link dropdown-toggle" href="#" id="helpDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                                Help
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="helpDropdown">
+                                <li><button id="check-updates-button" class="dropdown-item" type="button"><i class="bi bi-cloud-download me-2"></i>Check for Updates...</button></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li><button id="about-button" class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#aboutModal"><i class="bi bi-info-circle me-2"></i>About...</button></li>
+                            </ul>
+                        </li>
                     </ul>
                     <!-- Right side of Navbar -->
                     <div class="d-flex align-items-center ms-auto">
@@ -431,6 +442,71 @@
           <div class="modal-footer">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
             <button type="button" class="btn btn-primary" id="changePasswordConfirmButton">Change Password</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- About Modal -->
+    <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="aboutModalLabel"><i class="bi bi-hdd-stack-fill me-2"></i>About ZfDash</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body text-center">
+            <div class="mb-3">
+              <i class="bi bi-hdd-stack-fill display-1 text-primary"></i>
+            </div>
+            <h4 id="about-app-name">ZfDash</h4>
+            <p class="text-muted mb-2" id="about-version">Version: Loading...</p>
+            <p id="about-description">A modern graphical interface for ZFS pool and dataset management</p>
+            <hr>
+            <table class="table table-sm table-borderless mb-0 mx-auto" style="width: auto;">
+              <tbody>
+                <tr><th class="text-end pe-3">Author:</th><td class="text-start" id="about-author">-</td></tr>
+                <tr><th class="text-end pe-3">Python:</th><td class="text-start" id="about-python-version">-</td></tr>
+                <tr><th class="text-end pe-3">License:</th><td class="text-start" id="about-license">-</td></tr>
+                <tr><th class="text-end pe-3">Repository:</th><td class="text-start"><a id="about-repository" href="#" target="_blank" rel="noopener noreferrer">-</a></td></tr>
+              </tbody>
+            </table>
+            <hr>
+            <p class="small text-muted mb-0" id="about-copyright">© 2024-2025 ZfDash Contributors</p>
+          </div>
+          <div class="modal-footer justify-content-center">
+            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+
+    <!-- Check for Updates Modal -->
+    <div class="modal fade" id="checkUpdatesModal" tabindex="-1" aria-labelledby="checkUpdatesModalLabel" aria-hidden="true">
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title" id="checkUpdatesModalLabel"><i class="bi bi-cloud-download me-2"></i>Check for Updates</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+          </div>
+          <div class="modal-body text-center">
+            <div class="mb-3">
+              <i class="bi bi-arrow-repeat display-1 text-info"></i>
+            </div>
+            <h5>Current Version</h5>
+            <p class="text-muted mb-3" id="updates-current-version">Loading...</p>
+            <div class="alert alert-info" role="alert">
+              <i class="bi bi-info-circle me-2"></i>
+              Automatic update checking is not yet implemented.
+            </div>
+            <p>Please check for new releases manually:</p>
+            <a id="updates-releases-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
+              <i class="bi bi-github me-2"></i>View Releases on GitHub
+            </a>
+          </div>
+          <div class="modal-footer justify-content-center">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
           </div>
         </div>
       </div>

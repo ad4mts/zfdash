@@ -119,6 +119,8 @@ import {
 
 import { renderDetails, updateActionStates } from './details.js';
 
+import { initHelpMenu } from './help.js';
+
 // Make constants available globally for modules that may need them
 window.EDITABLE_PROPERTIES_WEB = EDITABLE_PROPERTIES_WEB;
 window.POOL_LEVEL_PROPERTIES = POOL_LEVEL_PROPERTIES;
@@ -424,6 +426,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Shutdown Button ---
     document.getElementById('shutdown-daemon-button')?.addEventListener('click', handleShutdownDaemon);
+
+    // --- Help Menu (About, Check for Updates) ---
+    initHelpMenu();
 });
 
 // --- END OF FILE src/static/js/app.js ---
