@@ -583,6 +583,40 @@ def version_info():
     info['python_version'] = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     return jsonify(status="success", **info)
 
+@app.route('/api/check_updates')
+@login_required
+def check_updates():
+    """Check for updates via GitHub releases API and return update info with instructions."""
+    from update_checker import check_for_updates, fetch_update_instructions
+    from version import get_update_info
+    from paths import IS_DOCKER, IS_FROZEN
+    
+    # Get update check result from GitHub
+    result = check_for_updates()
+    
+    # Determine deployment type
+    if IS_DOCKER:
+        deployment_type = "docker"
+    elif IS_FROZEN:
+        deployment_type = "native"
+    else:
+        deployment_type = "source"
+    
+    # Add deployment info
+    result["is_docker"] = IS_DOCKER
+    result["is_frozen"] = IS_FROZEN
+    result["deployment_type"] = deployment_type
+    
+    # Fetch update instructions (from remote with local fallback)
+    instructions = fetch_update_instructions(deployment_type)
+    result["instructions"] = instructions
+    
+    # Also include releases URL
+    update_info = get_update_info()
+    result["releases_url"] = update_info["releases_url"]
+    
+    return jsonify(**result)
+
 # Serve static files (JS, CSS) - Handled automatically by Flask
 
 # --- Main Execution ---

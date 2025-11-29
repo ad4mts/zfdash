@@ -1,5 +1,12 @@
-# ZfDash (v1.8.1-beta)
+# ZfDash (v1.8.7-beta)
 **(ZFS Management GUI / WEBUI) 💻** (Currently In Testing Phase) 
+# Updating
+
+**To update:** just run the new installer again (it handles upgrades). For Docker, stop and remove the old container before pull/run the new one (instructions below).
+
+**v1.8.7-beta and later:** Check for updates anytime from the Help menu in the GUI or Web UI.
+
+
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 
 ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Python to simplify common ZFS pool, dataset, and snapshot management tasks on Linux. It interacts with a secure background daemon, launched on demand via Polkit, to perform ZFS operations.

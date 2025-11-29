@@ -484,26 +484,76 @@
 
     <!-- Check for Updates Modal -->
     <div class="modal fade" id="checkUpdatesModal" tabindex="-1" aria-labelledby="checkUpdatesModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-dialog modal-dialog-centered modal-lg">
         <div class="modal-content">
           <div class="modal-header">
             <h5 class="modal-title" id="checkUpdatesModalLabel"><i class="bi bi-cloud-download me-2"></i>Check for Updates</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
           </div>
-          <div class="modal-body text-center">
-            <div class="mb-3">
-              <i class="bi bi-arrow-repeat display-1 text-info"></i>
+          <div class="modal-body">
+            <!-- Loading State -->
+            <div id="updates-loading" class="text-center py-4">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Checking for updates...</span>
+              </div>
+              <p class="mt-2 text-muted">Checking for updates...</p>
             </div>
-            <h5>Current Version</h5>
-            <p class="text-muted mb-3" id="updates-current-version">Loading...</p>
-            <div class="alert alert-info" role="alert">
-              <i class="bi bi-info-circle me-2"></i>
-              Automatic update checking is not yet implemented.
+            
+            <!-- Error State -->
+            <div id="updates-error" class="text-center py-4" style="display: none;">
+              <i class="bi bi-exclamation-triangle display-1 text-warning"></i>
+              <h5 class="mt-3">Could not check for updates</h5>
+              <p class="text-muted" id="updates-error-message">Unknown error</p>
+              <a id="updates-error-releases-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
+                <i class="bi bi-github me-2"></i>Check Releases Manually
+              </a>
             </div>
-            <p>Please check for new releases manually:</p>
-            <a id="updates-releases-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
-              <i class="bi bi-github me-2"></i>View Releases on GitHub
-            </a>
+            
+            <!-- Up to Date State -->
+            <div id="updates-uptodate" class="text-center py-4" style="display: none;">
+              <i class="bi bi-check-circle display-1 text-success"></i>
+              <h5 class="mt-3">You're up to date!</h5>
+              <p class="text-muted">Current version: <strong id="updates-current-version-ok">-</strong></p>
+              <p class="text-muted">Latest version: <strong id="updates-latest-version-ok">-</strong></p>
+            </div>
+            
+            <!-- Update Available State -->
+            <div id="updates-available" style="display: none;">
+              <div class="text-center mb-4">
+                <i class="bi bi-gift display-1 text-primary"></i>
+                <h4 class="mt-3">A new version is available!</h4>
+                <p>
+                  <span class="badge bg-secondary me-2" id="updates-current-badge">Current: -</span>
+                  <i class="bi bi-arrow-right"></i>
+                  <span class="badge bg-success ms-2" id="updates-latest-badge">Latest: -</span>
+                </p>
+              </div>
+              
+              <!-- Dynamic Update Instructions (populated by JS), use <ul> instead of <ol> -->
+              <div id="updates-instructions-container">
+                <div class="alert alert-info" id="updates-deployment-type-alert">
+                  <i class="bi bi-info-circle me-2"></i><span id="updates-deployment-title">Installation</span>
+                  <small class="ms-2 text-muted" id="updates-instructions-source"></small>
+                </div>
+                <h6>How to update:</h6>
+                <ul class="mb-3" id="updates-steps-list">
+                  <!-- Steps will be populated dynamically -->
+                </ul>
+                <div id="updates-notes-container" style="display: none;">
+                  <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Important:</strong>
+                    <ul class="mb-0 mt-1" id="updates-notes-list"></ul>
+                  </div>
+                </div>
+              </div>
+              
+              <div class="text-center mt-3">
+                <a id="updates-releases-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+                  <i class="bi bi-github me-2"></i>View Release on GitHub
+                </a>
+              </div>
+            </div>
           </div>
           <div class="modal-footer justify-content-center">
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>

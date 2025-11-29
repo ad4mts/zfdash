@@ -1325,15 +1325,94 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _check_for_updates(self):
-        """Placeholder for Check for Updates functionality."""
-        QMessageBox.information(
-            self,
-            "Check for Updates",
-            f"<p><b>{__app_name__}</b> is currently at version <b>{__version__}</b>.</p>"
-            f"<p>Automatic update checking is not yet implemented.</p>"
-            f"<p>Please visit <a href='{__repository__}/releases'>{__repository__}/releases</a> "
-            f"to check for new versions manually.</p>",
-        )
+        """Check GitHub releases for updates."""
+        from update_checker import check_for_updates, fetch_update_instructions
+        from paths import IS_DOCKER, IS_FROZEN
+        
+        # Show waiting cursor
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        self._update_status_bar("Checking for updates...")
+        
+        try:
+            result = check_for_updates()
+            
+            # Determine deployment type and fetch instructions
+            if IS_DOCKER:
+                deployment_type = "docker"
+            elif IS_FROZEN:
+                deployment_type = "native"
+            else:
+                deployment_type = "source"
+            
+            instructions = fetch_update_instructions(deployment_type)
+        finally:
+            QApplication.restoreOverrideCursor()
+        
+        if not result["success"]:
+            QMessageBox.warning(
+                self,
+                "Update Check Failed",
+                f"<p>Could not check for updates.</p>"
+                f"<p><b>Error:</b> {result['error']}</p>"
+                f"<p>Please check your internet connection or visit "
+                f"<a href='{__repository__}/releases'>{__repository__}/releases</a> manually.</p>",
+            )
+            self._update_status_bar("Update check failed.")
+            return
+        
+        current = result["current_version"]
+        latest = result["latest_version"]
+        
+        if result["update_available"]:
+            # Build instructions HTML from fetched data
+            instructions_html = ""
+            if instructions.get("success") and instructions.get("steps"):
+                source_note = "(Source: latest from GitHub)" if instructions.get("source") == "remote" else "(Source: local cache ⚠️)"
+                instructions_html = f"<p><b>{instructions.get('title', 'How to update')}:</b> <small>{source_note}</small></p><ul>"
+                for step in instructions["steps"]:
+                    if step.get("command"):
+                        instructions_html += f"<li><b>{step['title']}:</b><br><code style='font-size:0.9em;'>{step['command']}</code></li>"
+                    else:
+                        desc = step.get('description', '')
+                        instructions_html += f"<li><b>{step['title']}:</b> {desc}</li>"
+                instructions_html += "</ul>"
+                
+                # Add notes if present
+                if instructions.get("notes"):
+                    instructions_html += "<p><b>Note:</b></p><ul>"
+                    for note in instructions["notes"]:
+                        instructions_html += f"<li>{note}</li>"
+                    instructions_html += "</ul>"
+            else:
+                # Fallback if instructions fetch failed
+                instructions_html = (
+                    "<p>Visit the GitHub releases page for update instructions.</p>"
+                )
+            
+            msg_box = QMessageBox(self)
+            msg_box.setWindowTitle("Update Available")
+            msg_box.setIcon(QMessageBox.Icon.Information)
+            msg_box.setTextFormat(Qt.TextFormat.RichText)
+            msg_box.setText(
+                f"<h3>A new version of {__app_name__} is available!</h3>"
+                f"<p><b>Current version:</b> {current}</p>"
+                f"<p><b>Latest version:</b> {latest}</p>"
+                f"<hr>"
+                f"{instructions_html}"
+                f"<p><a href='{result['release_url']}'>View Release on GitHub</a></p>"
+            )
+            msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+            msg_box.exec()
+            self._update_status_bar(f"Update available: v{latest}")
+        else:
+            QMessageBox.information(
+                self,
+                "Up to Date",
+                f"<p><b>{__app_name__}</b> is up to date!</p>"
+                f"<p><b>Current version:</b> {current}</p>"
+                f"<p><b>Latest version:</b> {latest}</p>",
+            )
+            self._update_status_bar("You are running the latest version.")
 
     # --- Window Closing Logic ---
 
