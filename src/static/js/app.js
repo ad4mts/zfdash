@@ -1,3 +1,5 @@
+// DEPRECATED: use refractored modules> src/static/js/modules/app.js instead.
+// Keep for reference.
 // --- START OF FILE src/static/js/app.js ---
 // --- SECTION 1: Globals and Helpers ---
 

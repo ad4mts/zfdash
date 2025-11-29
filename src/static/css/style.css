@@ -10,9 +10,16 @@
     --app-primary-color: #6a64e8; /* Adjusted from --bs-primary */
     --app-primary-rgb: 106, 100, 232;
     --app-primary-darker: #5752d6;
+    --app-primary-lighter: rgba(106, 100, 232, 0.1);
     --app-hover-bg: #eef0f8;
     --app-selected-bg: var(--app-primary-color);
     --app-selected-text: #ffffff;
+    --app-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --app-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --app-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.12);
+    --app-transition-fast: 0.15s ease;
+    --app-transition-normal: 0.2s ease;
+    --app-transition-slow: 0.3s ease;
     --bs-body-font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", "Liberation Sans", Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
     --bs-font-monospace: SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
     --bs-primary: var(--app-primary-color);
@@ -27,6 +34,24 @@ html, body {
     color: var(--app-text-color);
     font-size: 0.95rem;
     overflow: hidden; /* Prevent scrolling on body */
+}
+
+/* --- Global Focus States for Accessibility --- */
+*:focus-visible {
+    outline: 2px solid var(--app-primary-color);
+    outline-offset: 2px;
+}
+
+button:focus-visible,
+.btn:focus-visible {
+    outline: 2px solid var(--app-primary-color);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(106, 100, 232, 0.2);
+}
+
+/* --- Global Smooth Scroll --- */
+* {
+    scroll-behavior: smooth;
 }
 
 /* --- Visibility Control --- */
@@ -81,29 +106,65 @@ body.logged-in #app-section { display: flex; } /* Main app section is flex colum
 .navbar .dropdown-menu {
     background-color: var(--app-pane-bg); /* Use light pane background */
     border: 1px solid var(--app-border-color); /* Add subtle border */
-    border-radius: 0.3rem;
-    box-shadow: 0 0.5rem 1rem rgba(0,0,0,0.1);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15), 0 2px 8px rgba(0,0,0,0.1);
     margin-top: 0.5rem;
+    padding: 0.5rem 0;
+    backdrop-filter: blur(10px);
+    animation: dropdownFadeIn 0.2s ease-out;
 }
+
+@keyframes dropdownFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
 .navbar .dropdown-item {
     color: var(--app-text-color); /* Use standard text color */
-    padding: 0.5rem 1rem;
+    padding: 0.6rem 1rem;
     font-size: 0.9rem;
-    transition: background-color 0.15s ease-in-out, color 0.15s ease-in-out;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    margin: 2px 6px;
+    border-left: 3px solid transparent;
 }
 .navbar .dropdown-item i {
-    margin-right: 0.5rem;
+    margin-right: 0.6rem;
     opacity: 0.7; /* Slightly less prominent icons */
+    transition: all 0.2s ease;
+    font-size: 1em;
 }
 
 .navbar .dropdown-item:hover, .navbar .dropdown-item:focus {
-    background-color: var(--app-hover-bg); /* Use standard hover */
-    color: var(--app-text-color);
+    background-color: rgba(106, 100, 232, 0.1);
+    color: var(--app-primary-color);
+    border-left-color: var(--app-primary-color);
+    transform: translateX(2px);
 }
+
+.navbar .dropdown-item:hover i, .navbar .dropdown-item:focus i {
+    opacity: 1;
+    color: var(--app-primary-color);
+}
+
+.navbar .dropdown-item:active {
+    background-color: rgba(106, 100, 232, 0.2);
+    transform: translateX(2px) scale(0.98);
+}
+
 /* Ensure disabled items look right */
 .navbar .dropdown-item.disabled, .navbar .dropdown-item:disabled {
     color: var(--app-text-muted) !important; /* Muted text color */
     background-color: transparent !important;
+    border-left-color: transparent !important;
+    transform: none !important;
+    opacity: 0.5;
 }
 
 .navbar .dropdown-divider {
@@ -126,10 +187,23 @@ body.logged-in #app-section { display: flex; } /* Main app section is flex colum
 #refresh-button {
     color: #fff !important;
     border-color: rgba(255, 255, 255, 0.5) !important;
+    transition: all 0.2s ease;
+    border-radius: 6px;
 }
 #refresh-button:hover {
-    background-color: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.75) !important;
+    background-color: rgba(255, 255, 255, 0.15);
+    border-color: rgba(255, 255, 255, 0.8) !important;
+    transform: translateY(-1px);
+}
+#refresh-button:active {
+    transform: translateY(0);
+    background-color: rgba(255, 255, 255, 0.2);
+}
+#refresh-button i {
+    transition: transform 0.3s ease;
+}
+#refresh-button:hover i {
+    transform: rotate(180deg);
 }
 
 /* --- Main App Section (#app-section) --- */
@@ -138,34 +212,53 @@ body.logged-in #app-section { display: flex; } /* Main app section is flex colum
 
 /* --- Tabs Panel (#tabs-panel) --- */
 #tabs-panel {
-/* Attributes set in index.html: class="bg-light border-bottom px-3 py-1 flex-shrink-0" */
-z-index: 1020; /* Below navbar, above main content */
+    /* Attributes set in index.html: class="bg-light border-bottom px-3 py-1 flex-shrink-0" */
+    z-index: 1020; /* Below navbar, above main content */
+    background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 #tabs-panel .nav-link {
     font-size: 0.9rem;
-    padding: 0.5rem 0.8rem;
+    padding: 0.6rem 1rem;
     /* Default state for enabled, inactive tabs */
     color: var(--app-text-muted); /* Use the muted text color directly */
     border: none;
     border-bottom: 3px solid transparent;
     margin-bottom: -1px;
-    transition: border-color 0.1s ease-in-out, color 0.1s ease-in-out;
+    transition: all 0.2s ease;
+    border-radius: 6px 6px 0 0;
+    position: relative;
 }
 
 /* Hover for enabled, inactive tabs */
 #tabs-panel .nav-link:not(.active):not(.disabled):hover {
-    color: var(--app-text-color); /* Full text color on hover */
-    border-bottom-color: var(--app-border-color);
+    color: var(--app-primary-color); /* Primary color on hover */
+    background-color: rgba(106, 100, 232, 0.06);
+    border-bottom-color: rgba(106, 100, 232, 0.4);
 }
 
 /* Active Tab State */
 #tabs-panel .nav-link.active {
     font-weight: 600;
     color: var(--app-primary-color);
-    background-color: transparent;
+    background-color: var(--app-pane-bg);
     border-bottom-color: var(--app-primary-color);
-    opacity: 1; /* Ensure active is fully opaque (already was) */
+    opacity: 1;
+    box-shadow: 0 -2px 8px rgba(106, 100, 232, 0.1);
+}
+
+/* Tab icon styling */
+#tabs-panel .nav-link i {
+    transition: transform 0.2s ease;
+}
+
+#tabs-panel .nav-link:hover i {
+    transform: scale(1.1);
+}
+
+#tabs-panel .nav-link.active i {
+    color: var(--app-primary-color);
 }
 
 /* Disabled Tab State - Keep it very faded */
@@ -207,43 +300,100 @@ z-index: 1020; /* Below navbar, above main content */
 #main-content-area .col-lg-8  /* Right Pane */
 {
     background-color: var(--app-pane-bg);
-    border-radius: 6px; /* Add rounded corners */
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04); /* Softer shadow */
-    /* Add a very subtle inset shadow for depth */
-    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05), 0 2px 4px rgba(0,0,0,0.05);
-    transition: box-shadow 0.3s ease-in-out;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+    border: 1px solid rgba(0, 0, 0, 0.04);
 }
 
 /* Optional: Slightly enhance shadow on hover */
 #main-content-area .col-lg-4:hover,
 #main-content-area .col-lg-8:hover {
-     box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.05), 0 4px 8px rgba(0,0,0,0.07);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04);
 }
 
 /* --- Card inside Left Pane --- */
 /* Attributes set in index.html: class="card flex-grow-1 rounded-0 border-0" */
 .card-header {
     font-weight: 600;
-    padding: 0.6rem 1rem;
+    padding: 0.75rem 1rem;
     border-bottom: 1px solid var(--app-border-color);
+    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+    color: var(--app-text-color);
+    font-size: 0.95rem;
+    letter-spacing: 0.3px;
 }
 
 /* --- Tree View Styling --- */
 #zfs-tree-container {
-padding: 0.5rem; /* Reduced padding */
+    padding: 0.5rem; /* Reduced padding */
 }
 .zfs-tree-view { font-size: 0.9rem; }
 .zfs-tree-view ul { padding-left: 0; margin-bottom: 0; }
 .zfs-tree-view li { list-style-type: none; }
-.tree-item { padding: 5px 8px; cursor: pointer; border-radius: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; margin-bottom: 2px; transition: background-color 0.15s ease-in-out; }
-.tree-item:hover { background-color: var(--app-hover-bg); }
-.tree-item.selected { background-color: var(--app-selected-bg); color: var(--app-selected-text); font-weight: 500; }
+
+/* Tree Item - Base State */
+.tree-item { 
+    padding: 8px 12px; 
+    cursor: pointer; 
+    border-radius: 6px; 
+    white-space: nowrap; 
+    overflow: hidden; 
+    text-overflow: ellipsis; 
+    display: flex; 
+    align-items: center; 
+    margin-bottom: 3px; 
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
+    position: relative;
+}
+
+/* Tree Item - Hover State (Much more visible) */
+.tree-item:hover { 
+    background-color: rgba(106, 100, 232, 0.1);
+    border-color: rgba(106, 100, 232, 0.25);
+    box-shadow: 0 2px 6px rgba(106, 100, 232, 0.12);
+}
+
+/* Tree Item - Active/Click State */
+.tree-item:active {
+    background-color: rgba(106, 100, 232, 0.15);
+}
+
+/* Tree Item - Selected State (More prominent) */
+.tree-item.selected { 
+    background: linear-gradient(135deg, var(--app-primary-color) 0%, #5752d6 100%);
+    color: var(--app-selected-text); 
+    font-weight: 500;
+    border-color: var(--app-primary-darker);
+    box-shadow: 0 3px 10px rgba(106, 100, 232, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.tree-item.selected:hover {
+    background: linear-gradient(135deg, #5752d6 0%, #4a47c5 100%);
+    box-shadow: 0 4px 14px rgba(106, 100, 232, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
 .tree-item.selected i, .tree-item.selected span.badge { color: var(--app-selected-text) !important; }
-.tree-item.selected span.badge.bg-light, .tree-item.selected span.badge.bg-white { background-color: rgba(255, 255, 255, 0.8) !important; color: #333 !important; }
-.tree-item i.bi { vertical-align: -0.125em; margin-right: 0.3rem; }
+.tree-item.selected span.badge.bg-light, .tree-item.selected span.badge.bg-white { 
+    background-color: rgba(255, 255, 255, 0.9) !important; 
+    color: var(--app-primary-color) !important;
+    font-weight: 600;
+}
+.tree-item i.bi { 
+    vertical-align: -0.125em; 
+    margin-right: 0.4rem;
+    font-size: 1.05em;
+}
 .tree-toggle { cursor: pointer; display: inline-block; width: 1em; flex-shrink: 0; }
 .tree-item-name { margin-left: 2px; flex-grow: 1; overflow: hidden; text-overflow: ellipsis; }
-.tree-item .badge { margin-left: 0.5rem; font-size: 0.75em; padding: 0.25em 0.4em; }
+.tree-item .badge { 
+    margin-left: 0.5rem; 
+    font-size: 0.75em; 
+    padding: 0.3em 0.55em;
+    border-radius: 4px;
+    font-weight: 600;
+}
 
 /* --- Right Pane Column (Tab Content) --- */
 /* Attributes set in index.html: class="col-lg-8 col-md-7 d-flex flex-column h-100" */
@@ -279,45 +429,52 @@ overflow-y: auto; /* Scroll vertically */
 #properties-table {
     border-collapse: separate;
     border-spacing: 0;
-    border-radius: 8px;
+    border-radius: 10px;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
     margin-bottom: 1rem;
 }
 #properties-table thead {
-    background-color: #f8f9fa;
+    background: linear-gradient(180deg, #f8f9fa 0%, #f1f3f5 100%);
     border-bottom: 2px solid #e9ecef;
 }
 #properties-table th {
-    padding: 0.75rem 1rem;
+    padding: 0.85rem 1rem;
     font-weight: 600;
     color: #495057;
     border: none;
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 #properties-table td {
-    padding: 0.6rem 1rem;
+    padding: 0.65rem 1rem;
     border-bottom: 1px solid #e9ecef;
     vertical-align: middle;
+    transition: background-color 0.15s ease;
 }
+
+/* Row hover effect */
+#properties-table tbody tr:hover td {
+    background-color: rgba(106, 100, 232, 0.04);
+}
+
 #properties-table tbody tr:last-child td {
     border-bottom: none;
 }
 /* Section headers in properties table */
 #properties-table tr.table-primary td,
 #properties-table tr.table-secondary td {
-    padding: 0.5rem 1rem;
+    padding: 0.6rem 1rem;
     font-weight: 600;
     letter-spacing: 0.5px;
     border-radius: 0;
 }
 #properties-table tr.table-primary {
-    background-color: rgba(13, 110, 253, 0.08);
+    background: linear-gradient(90deg, rgba(106, 100, 232, 0.12) 0%, rgba(106, 100, 232, 0.06) 100%);
 }
 #properties-table tr.table-secondary {
-    background-color: rgba(108, 117, 125, 0.08);
+    background: linear-gradient(90deg, rgba(108, 117, 125, 0.1) 0%, rgba(108, 117, 125, 0.05) 100%);
 }
 /* Spacer rows */
 #properties-table tr.table-light {
@@ -330,11 +487,25 @@ overflow-y: auto; /* Scroll vertically */
 }
 /* Highlight editable property rows with subtle color and hover effect */
 #properties-table tr.editable-property {
-    background-color: rgba(13, 110, 253, 0.03);
-    transition: background-color 0.15s ease;
+    background-color: rgba(106, 100, 232, 0.03);
+    transition: all 0.2s ease;
+    position: relative;
+}
+#properties-table tr.editable-property::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 3px;
+    background-color: transparent;
+    transition: background-color 0.2s ease;
 }
 #properties-table tr.editable-property:hover {
-    background-color: rgba(13, 110, 253, 0.08);
+    background-color: rgba(106, 100, 232, 0.08);
+}
+#properties-table tr.editable-property:hover::before {
+    background-color: var(--app-primary-color);
 }
 /* Style for property action buttons */
 #properties-table .properties-table-btn {
@@ -343,20 +514,110 @@ overflow-y: auto; /* Scroll vertically */
 /* Add more contrast to the property names */
 #properties-table td:first-child {
     font-weight: 500;
+    color: var(--app-text-color);
 }
 /* Sticky header styling */
 #properties-table thead.sticky-top {
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+    box-shadow: 0 3px 6px rgba(0, 0, 0, 0.08);
 }
 
 /* Snapshots Tab */
 #snapshots-tab-pane .table-responsive { /* Scrollable area */
-flex-grow: 1; /* Take remaining space */
-overflow-y: auto; /* Scroll vertically */
+    flex-grow: 1; /* Take remaining space */
+    overflow-y: auto; /* Scroll vertically */
 }
-#snapshots-table { font-size: 0.85rem; margin-bottom: 0; }
-#snapshots-table tbody tr:hover { background-color: var(--app-hover-bg); cursor: pointer; }
-#snapshots-table tbody tr.table-active { background-color: var(--app-selected-bg); color: var(--app-selected-text); font-weight: 500; }
+
+#snapshots-table { 
+    font-size: 0.85rem; 
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+/* Snapshot table header styling */
+#snapshots-table thead {
+    background-color: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+}
+
+#snapshots-table thead th {
+    padding: 0.75rem 1rem;
+    font-weight: 600;
+    color: #495057;
+    border: none;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    position: sticky;
+    top: 0;
+    background-color: #f8f9fa;
+    z-index: 1;
+}
+
+/* Snapshot table row styling */
+#snapshots-table tbody tr {
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #e9ecef;
+    border-left: 3px solid transparent;
+    border-radius: 6px;
+}
+
+#snapshots-table tbody td {
+    padding: 0.65rem 1rem;
+    vertical-align: middle;
+    border: none;
+}
+
+/* First and last cell rounding for row effect */
+#snapshots-table tbody td:first-child {
+    border-top-left-radius: 6px;
+    border-bottom-left-radius: 6px;
+}
+
+#snapshots-table tbody td:last-child {
+    border-top-right-radius: 6px;
+    border-bottom-right-radius: 6px;
+}
+
+/* Snapshot row hover - Match tree view hover style */
+#snapshots-table tbody tr:hover:not(.table-active),
+#snapshots-table tbody tr:hover:not(.table-active) td { 
+    background-color: rgba(106, 100, 232, 0.15) !important;
+    cursor: pointer;
+}
+
+#snapshots-table tbody tr:hover:not(.table-active) {
+    border-left: 3px solid rgba(106, 100, 232, 0.4) !important;
+    box-shadow: 0 2px 8px rgba(106, 100, 232, 0.15);
+}
+
+/* Snapshot row selected - Match tree view style with solid purple background */
+#snapshots-table tbody tr.table-active,
+#snapshots-table tbody tr.table-active:hover,
+.table > tbody > tr.table-active { 
+    background: linear-gradient(135deg, #6a64e8 0%, #5752d6 100%) !important;
+    color: #ffffff !important;
+    font-weight: 500;
+    border-left-color: #4a47c5;
+    box-shadow: 0 3px 10px rgba(106, 100, 232, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+#snapshots-table tbody tr.table-active td,
+#snapshots-table tbody tr.table-active:hover td,
+.table > tbody > tr.table-active > td {
+    color: #ffffff !important;
+    background: transparent !important;
+}
+
+#snapshots-table tbody tr.table-active:hover {
+    background: linear-gradient(135deg, #5752d6 0%, #4a47c5 100%) !important;
+    box-shadow: 0 4px 14px rgba(106, 100, 232, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+/* Zebra striping for better readability */
+#snapshots-table tbody tr:nth-child(even):not(.table-active):not(:hover) {
+    background-color: rgba(0, 0, 0, 0.015);
+}
 
 /* Pool Status Tab */
 #pool-status-tab-pane > .flex-grow-1 { /* Wrapper for pre - THIS needs to grow */
@@ -374,72 +635,180 @@ margin-bottom: 0; /* Needed if inside scrolling div */
 
 /* Pool Edit Tab */
 #pool-edit-tree-container { /* Scrollable area */
-font-family: var(--bs-font-monospace); font-size: 0.85rem;
-flex-grow: 1; /* Take remaining space */
-overflow-y: auto; /* Scroll vertically */
-border-top: 1px solid var(--app-border-color); /* Add top border */
+    font-family: var(--bs-font-monospace); 
+    font-size: 0.85rem;
+    flex-grow: 1; /* Take remaining space */
+    overflow-y: auto; /* Scroll vertically */
+    border-top: 1px solid var(--app-border-color); /* Add top border */
 }
 #pool-edit-tree-container ul { padding-left: 0; margin-bottom: 0; }
-#pool-edit-tree-container li.pool-edit-item { list-style-type: none; padding: 3px 6px; cursor: pointer; white-space: pre; border-radius: 3px; margin-bottom: 1px; }
-#pool-edit-tree-container li.pool-edit-item:hover { background-color: var(--app-hover-bg); }
-#pool-edit-tree-container li.pool-edit-item.selected {
-    background-color: #d6d4fa; /* Use the same light primary shade */
-    color: var(--app-text-color); /* Dark text for readability */
-    /* Remove default browser selection styles if necessary */
-    -webkit-user-select: none; /* Safari */
-    -ms-user-select: none; /* IE 10+ */
-    user-select: none; /* Standard syntax */
+
+/* Pool Edit Item - Base State */
+#pool-edit-tree-container li.pool-edit-item { 
+    list-style-type: none; 
+    padding: 6px 10px; 
+    cursor: pointer; 
+    white-space: pre; 
+    border-radius: 6px; 
+    margin-bottom: 3px;
+    transition: all 0.2s ease;
+    border: 1px solid transparent;
 }
-#pool-edit-tree-container li .badge { font-family: var(--bs-body-font-family); font-size: 0.7em; }
-#pool-edit-tree-container .pool-edit-children { margin-left: 1rem; border-left: 1px dashed #ccc; padding-left: 0.5rem; }
+
+/* Pool Edit Item - Hover State (More visible) */
+#pool-edit-tree-container li.pool-edit-item:hover { 
+    background-color: rgba(106, 100, 232, 0.08);
+    border-color: rgba(106, 100, 232, 0.2);
+    transform: translateX(2px);
+}
+
+/* Pool Edit Item - Selected State (Much more prominent) */
+#pool-edit-tree-container li.pool-edit-item.selected {
+    background: linear-gradient(135deg, rgba(106, 100, 232, 0.15) 0%, rgba(87, 82, 214, 0.2) 100%);
+    color: var(--app-text-color); /* Dark text for readability */
+    border-color: var(--app-primary-color);
+    box-shadow: 0 2px 8px rgba(106, 100, 232, 0.2), inset 0 0 0 1px rgba(106, 100, 232, 0.1);
+    -webkit-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    border-left: 3px solid var(--app-primary-color);
+}
+
+#pool-edit-tree-container li.pool-edit-item.selected:hover {
+    background: linear-gradient(135deg, rgba(106, 100, 232, 0.2) 0%, rgba(87, 82, 214, 0.25) 100%);
+}
+
+#pool-edit-tree-container li .badge { 
+    font-family: var(--bs-body-font-family); 
+    font-size: 0.7em;
+    padding: 0.3em 0.5em;
+    border-radius: 4px;
+    font-weight: 600;
+}
+#pool-edit-tree-container .pool-edit-children { 
+    margin-left: 1rem; 
+    border-left: 2px dashed rgba(106, 100, 232, 0.3); 
+    padding-left: 0.5rem; 
+}
 
 /* --- START: Modern Pool Edit Tree Styling --- */
-#pool-edit-tree-container li.pool-edit-item {
-    border-radius: 4px;
-    padding: 4px 8px; /* Slightly more padding */
-    margin-bottom: 2px;
-    transition: background-color 0.15s ease-in-out;
-}
-
-#pool-edit-tree-container li.pool-edit-item:hover {
-    background-color: #e9ecef; /* Subtle hover */
-}
-
-#pool-edit-tree-container li.pool-edit-item.selected {
-    background-color: #d6d4fa; /* Use the same light primary shade */
-    color: var(--app-text-color); /* Dark text for readability */
-    /* Remove default browser selection styles if necessary */
-    -webkit-user-select: none; /* Safari */
-    -ms-user-select: none; /* IE 10+ */
-    user-select: none; /* Standard syntax */
-}
-
 /* Ensure badges remain readable on selection */
 #pool-edit-tree-container li.pool-edit-item.selected .badge {
     color: #000 !important; /* Override potential parent color */
-    background-color: rgba(255, 255, 255, 0.7) !important; /* Slightly transparent white */
+    background-color: rgba(255, 255, 255, 0.85) !important; /* Slightly transparent white */
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 /* Make state badges slightly more prominent */
 #pool-edit-tree-container li.pool-edit-item .badge.float-end {
-    font-weight: 500;
+    font-weight: 600;
 }
 /* --- END: Modern Pool Edit Tree Styling --- */
 
 /* Encryption Tab */
 #encryption-tab-pane .enc-info-container { /* Scrollable area */
-flex-grow: 1; /* Take remaining space */
-overflow-y: auto; /* Scroll vertically */
+    flex-grow: 1; /* Take remaining space */
+    overflow-y: auto; /* Scroll vertically */
+    padding: 1rem;
 }
-#encryption-tab-pane .enc-info-table { font-size: 0.85rem; width: 100%; margin-bottom: 0; }
-#encryption-tab-pane .enc-info-table th { width: 150px; font-weight: 600; text-align: right; padding-right: 1rem; color: var(--app-text-muted); border: none; vertical-align: top; }
-#encryption-tab-pane .enc-info-table td { border: none; vertical-align: top; }
 
-/* Modal Styling (Unchanged) */
+#encryption-tab-pane .enc-info-table { 
+    font-size: 0.85rem; 
+    width: 100%; 
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+#encryption-tab-pane .enc-info-table tr {
+    transition: background-color 0.15s ease;
+}
+
+#encryption-tab-pane .enc-info-table tr:hover {
+    background-color: rgba(106, 100, 232, 0.04);
+}
+
+#encryption-tab-pane .enc-info-table th { 
+    width: 160px; 
+    font-weight: 600; 
+    text-align: right; 
+    padding: 0.75rem 1rem 0.75rem 0.5rem; 
+    color: var(--app-text-muted); 
+    border: none; 
+    vertical-align: top;
+    border-bottom: 1px solid var(--app-border-color);
+}
+
+#encryption-tab-pane .enc-info-table td { 
+    border: none; 
+    vertical-align: top;
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--app-border-color);
+    color: var(--app-text-color);
+    font-weight: 500;
+}
+
+#encryption-tab-pane .enc-info-table tr:last-child th,
+#encryption-tab-pane .enc-info-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Modal Styling */
 .modal-dialog { max-width: 600px; }
 .modal-dialog.modal-lg { max-width: 800px; }
 .modal-dialog.modal-xl { max-width: 1140px; }
-.modal-body { max-height: 70vh; overflow-y: auto; }
+
+.modal-content {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    overflow: hidden;
+}
+
+.modal-header {
+    background: linear-gradient(135deg, var(--app-primary-color) 0%, #5752d6 100%);
+    color: white;
+    border-bottom: none;
+    padding: 1.25rem 1.5rem;
+}
+
+.modal-header .modal-title {
+    font-weight: 600;
+    font-size: 1.1rem;
+}
+
+.modal-header .btn-close {
+    filter: brightness(0) invert(1);
+    opacity: 0.8;
+    transition: opacity 0.2s ease;
+}
+
+.modal-header .btn-close:hover {
+    opacity: 1;
+}
+
+.modal-body { 
+    max-height: 70vh; 
+    overflow-y: auto;
+    padding: 1.5rem;
+}
+
+.modal-footer {
+    border-top: 1px solid var(--app-border-color);
+    padding: 1rem 1.5rem;
+    background-color: #f8f9fa;
+}
+
+.modal-footer .btn {
+    border-radius: 6px;
+    padding: 0.5rem 1.25rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.modal-footer .btn:hover {
+    transform: translateY(-1px);
+}
 /* Create Pool/Add VDEV specific modal styling (Unchanged) */
 #pool-available-devices, #pool-vdev-config .device-list-in-vdev { font-size: 0.85rem; }
 #pool-available-devices .list-group-item, #pool-vdev-list .list-group-item { padding: 0.3rem 0.6rem; cursor: pointer; }
@@ -867,9 +1236,39 @@ body.login-page {
 
 /* General style for buttons inside tabs */
 #details-tab-content .tab-pane .btn {
-    transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out, opacity 0.15s ease-in-out, color 0.15s ease-in-out;
+    transition: all 0.2s ease;
     /* Ensure text color is white for colored buttons initially */
     color: #fff;
+    border-radius: 6px;
+    font-weight: 500;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    position: relative;
+    overflow: hidden;
+}
+
+#details-tab-content .tab-pane .btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(120deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.4s ease;
+}
+
+#details-tab-content .tab-pane .btn:hover::before {
+    left: 100%;
+}
+
+#details-tab-content .tab-pane .btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+#details-tab-content .tab-pane .btn:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 #details-tab-content .tab-pane .btn i {
@@ -1453,3 +1852,25 @@ tr.editable-property {
     }
 }
 
+/* --- Bootstrap Overrides for Snapshot Table Selection --- */
+/* These must be at the end to override Bootstrap's .table-active */
+.table-striped > tbody > tr.table-active,
+.table-hover > tbody > tr.table-active:hover,
+.table > tbody > tr.table-active,
+#snapshots-table > tbody > tr.table-active {
+    --bs-table-accent-bg: transparent !important;
+    --bs-table-bg: transparent !important;
+    background: linear-gradient(135deg, #6a64e8 0%, #5752d6 100%) !important;
+    color: #ffffff !important;
+}
+
+.table-striped > tbody > tr.table-active > *,
+.table-hover > tbody > tr.table-active:hover > *,
+.table > tbody > tr.table-active > *,
+#snapshots-table > tbody > tr.table-active > * {
+    --bs-table-accent-bg: transparent !important;
+    --bs-table-bg: transparent !important;
+    background: transparent !important;
+    color: #ffffff !important;
+    box-shadow: none !important;
+}
