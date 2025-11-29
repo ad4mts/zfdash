@@ -15,7 +15,7 @@ ZPOOL_PROPS = [
 # Used for 'zfs list -t filesystem,volume -o ...'
 ZFS_DATASET_PROPS = [
     'name', 'type', 'used', 'available', 'referenced', 'mountpoint', 'quota', 'reservation',
-    'recordsize', 'compression', 'atime', 'relatime', 'readonly', 'volsize',
+    'recordsize', 'compression', 'compressratio', 'atime', 'relatime', 'readonly', 'volsize',
     'volblocksize', 'dedup', 'encryption', 'keystatus', 'keyformat', 'keylocation', 'pbkdf2iters',
     'mounted', 'origin', 'creation', 'logicalused', 'logicalreferenced', 'sync'
 ]

@@ -84,7 +84,8 @@ import {
 import { 
     renderPoolStatus, 
     renderPoolEditLayout, 
-    updatePoolEditActionStates 
+    updatePoolEditActionStates,
+    initPoolStatusButtons
 } from './pool-status.js';
 
 import { 
@@ -411,6 +412,9 @@ document.addEventListener('DOMContentLoaded', () => {
         handlePoolEditAction('remove_vdev', dom.poolEditTreeContainer.querySelector('.selected')));
     document.getElementById('split-pool-button')?.addEventListener('click', () => 
         handlePoolEditAction('split', dom.poolEditTreeContainer.querySelector('.selected')));
+
+    // --- Pool Status View Buttons ---
+    initPoolStatusButtons();
 
     // --- Encryption Tab Buttons ---
     document.getElementById('load-key-button')?.addEventListener('click', handleLoadKey);

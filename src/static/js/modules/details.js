@@ -10,7 +10,7 @@ import dom from './dom-elements.js';
 import { renderDashboard } from './dashboard.js';
 import { renderProperties } from './property-editor.js';
 import { renderSnapshots } from './snapshots.js';
-import { renderPoolStatus, renderPoolEditLayout, updatePoolEditActionStates } from './pool-status.js';
+import { renderPoolStatus, renderPoolEditLayout, updatePoolEditActionStates, initPoolStatusView, clearPoolStatusView } from './pool-status.js';
 import { renderEncryptionInfo } from './encryption.js';
 
 /**
@@ -85,9 +85,9 @@ export async function renderDetails(obj) {
     // Pool Status
     if (isPool) {
         state.setCurrentPoolStatusText(obj.status_details || '');
-        renderPoolStatus(state.currentPoolStatusText);
+        initPoolStatusView(obj.name, state.currentPoolStatusText);
     } else {
-        renderPoolStatus('');
+        clearPoolStatusView();
     }
 
     // Pool Edit Layout

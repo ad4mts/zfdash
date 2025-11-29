@@ -29,6 +29,7 @@ try:
     from widgets.import_pool_dialog import ImportPoolDialog
     from widgets.encryption_widget import EncryptionWidget
     from widgets.dashboard_widget import DashboardWidget
+    from widgets.pool_status_widget import PoolStatusWidget
     import utils
     import config_manager
     from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
@@ -79,7 +80,7 @@ class MainWindow(QMainWindow):
         self.dashboard_widget: Optional[DashboardWidget] = None
         self.properties_widget: Optional[PropertiesEditor] = None
         self.snapshots_widget: Optional[SnapshotsWidget] = None
-        self.pool_status_text: Optional[QPlainTextEdit] = None
+        self.pool_status_widget: Optional[PoolStatusWidget] = None
         self.pool_editor_widget: Optional[PoolEditorWidget] = None
         self.encryption_widget: Optional[EncryptionWidget] = None
         self.status_bar: Optional[QStatusBar] = None
@@ -305,14 +306,10 @@ class MainWindow(QMainWindow):
             self.snapshots_widget, QIcon.fromTheme("camera-photo"), "Snapshots"
         )
 
-        self.pool_status_text = QPlainTextEdit()
-        self.pool_status_text.setReadOnly(True)
-        monospace_font = QFont("Monospace")
-        monospace_font.setStyleHint(QFont.StyleHint.TypeWriter)
-        monospace_font.setPointSize(10) # Adjust size as needed
-        self.pool_status_text.setFont(monospace_font)
+        self.pool_status_widget = PoolStatusWidget(zfs_client=self.zfs_client)
+        self.pool_status_widget.status_message.connect(self._update_status_bar)
         self.pool_status_tab_index = self.details_tabs.addTab(
-            self.pool_status_text, QIcon.fromTheme("dialog-information"), "Pool Status"
+            self.pool_status_widget, QIcon.fromTheme("dialog-information"), "Pool Health"
         )
 
         self.pool_editor_widget = PoolEditorWidget(zfs_client=self.zfs_client)
@@ -603,7 +600,7 @@ class MainWindow(QMainWindow):
     def _update_details_view(self, selected_object: Optional[ZfsObject]):
         """Update the content and enabled state of the details tabs."""
         if not all([self.details_tabs, self.dashboard_widget, self.properties_widget, self.snapshots_widget,
-                    self.pool_status_text, self.pool_editor_widget, self.encryption_widget]):
+                    self.pool_status_widget, self.pool_editor_widget, self.encryption_widget]):
             print("Warning: Details view update skipped, widgets not ready.")
             return
 
@@ -636,8 +633,11 @@ class MainWindow(QMainWindow):
         self.dashboard_widget.set_object(selected_object)
         self.properties_widget.set_object(selected_object)
         self.snapshots_widget.set_dataset(selected_object if is_dataset_or_vol else None)
-        pool_status = getattr(selected_object, 'status_details', '') if is_pool else ""
-        self.pool_status_text.setPlainText(pool_status)
+        if is_pool:
+            pool_status = getattr(selected_object, 'status_details', '')
+            self.pool_status_widget.set_pool(selected_object.name, pool_status)
+        else:
+            self.pool_status_widget.clear()
         self.pool_editor_widget.set_pool(selected_object if is_pool else None)
         self.encryption_widget.set_dataset(selected_object if is_encrypted_dataset else None)
 

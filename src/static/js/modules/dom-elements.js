@@ -61,6 +61,9 @@ const dom = {
     // Pool Status & Edit
     poolStatusContent: null,
     poolEditTreeContainer: null,
+    poolStatusBtn: null,
+    poolLayoutBtn: null,
+    poolIostatBtn: null,
     
     // Refresh Button
     refreshButton: null,
@@ -117,6 +120,9 @@ export function initDomElements() {
     // --- Pool Status & Edit ---
     dom.poolStatusContent = document.getElementById('pool-status-content');
     dom.poolEditTreeContainer = document.getElementById('pool-edit-tree-container');
+    dom.poolStatusBtn = document.getElementById('pool-status-btn');
+    dom.poolLayoutBtn = document.getElementById('pool-layout-btn');
+    dom.poolIostatBtn = document.getElementById('pool-iostat-btn');
 
     // --- Refresh Button ---
     dom.refreshButton = document.getElementById('refresh-button');

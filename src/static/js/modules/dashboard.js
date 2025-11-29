@@ -237,8 +237,13 @@ function renderDatasetDashboardInfo(dataset, generalInfo, configInfo, statsInfo)
     }
 
     if (configInfo) {
+        // Get compression ratio and format it nicely
+        const compressRatio = props.compressratio || '-';
+        const compressRatioClass = (compressRatio && compressRatio !== '-' && compressRatio !== '1.00x') ? 'info' : '';
+        
         let configHtml = 
             createInfoRow('Compression:', props.compression || '-') +
+            createInfoRow('Compress Ratio:', compressRatio, compressRatioClass) +
             createInfoRow('Dedup:', props.dedup || '-') +
             createInfoRow('Atime:', props.atime || '-') +
             createInfoRow('Sync:', props.sync || '-') +

@@ -581,6 +581,14 @@ class DashboardWidget(QWidget):
         props = dataset.properties or {}
         self.config_card.clear_content()
         self.config_card.add_row("Compression:", props.get('compression', '-'))
+        
+        # Show compression ratio if compression is enabled
+        compress_ratio = props.get('compressratio', '-')
+        if compress_ratio and compress_ratio != '-' and compress_ratio != '1.00x':
+            self.config_card.add_row("Compress Ratio:", compress_ratio, "#2196F3")
+        else:
+            self.config_card.add_row("Compress Ratio:", compress_ratio if compress_ratio else '-')
+        
         self.config_card.add_row("Dedup:", props.get('dedup', '-'))
         self.config_card.add_row("Atime:", props.get('atime', '-'))
         self.config_card.add_row("Sync:", props.get('sync', '-'))

@@ -8,6 +8,162 @@ import * as state from './state.js';
 import dom from './dom-elements.js';
 import { VDEV_GROUP_PATTERNS, DEVICE_PATTERN_RE } from './constants.js';
 
+// Track current pool status view mode and cached data
+let currentPoolStatusView = 'status'; // 'status', 'layout', or 'iostat'
+let cachedPoolStatusData = {
+    status: null,
+    layout: null,
+    iostat: null
+};
+let currentPoolName = null;
+
+/**
+ * Update the active state of pool status view buttons
+ * @param {string} activeView - The current active view ('status', 'layout', or 'iostat')
+ */
+function updatePoolStatusButtons(activeView) {
+    if (dom.poolStatusBtn) {
+        dom.poolStatusBtn.classList.toggle('active', activeView === 'status');
+    }
+    if (dom.poolLayoutBtn) {
+        dom.poolLayoutBtn.classList.toggle('active', activeView === 'layout');
+    }
+    if (dom.poolIostatBtn) {
+        dom.poolIostatBtn.classList.toggle('active', activeView === 'iostat');
+    }
+}
+
+/**
+ * Set pool status buttons enabled/disabled state
+ * @param {boolean} enabled - Whether buttons should be enabled
+ */
+export function setPoolStatusButtonsEnabled(enabled) {
+    if (dom.poolStatusBtn) dom.poolStatusBtn.disabled = !enabled;
+    if (dom.poolLayoutBtn) dom.poolLayoutBtn.disabled = !enabled;
+    if (dom.poolIostatBtn) dom.poolIostatBtn.disabled = !enabled;
+}
+
+/**
+ * Fetch pool data from API
+ * @param {string} poolName - Name of the pool
+ * @param {string} dataType - Type of data to fetch ('layout' or 'iostat')
+ * @returns {Promise<string>} - The fetched data
+ */
+async function fetchPoolData(poolName, dataType) {
+    const endpoint = dataType === 'layout' 
+        ? `/api/pool/${encodeURIComponent(poolName)}/list_verbose`
+        : `/api/pool/${encodeURIComponent(poolName)}/iostat_verbose`;
+    try {
+        const response = await fetch(endpoint);
+        const result = await response.json();
+        if (result.status === 'success') {
+            return result.data || `No ${dataType} data available.`;
+        } else {
+            return `Error fetching ${dataType}: ${result.error || 'Unknown error'}`;
+        }
+    } catch (error) {
+        console.error(`Error fetching pool ${dataType}:`, error);
+        return `Error fetching ${dataType}: ${error.message}`;
+    }
+}
+
+/**
+ * Switch the pool status view
+ * @param {string} viewType - The view to switch to ('status', 'layout', or 'iostat')
+ */
+export async function switchPoolStatusView(viewType) {
+    if (!currentPoolName || !state.currentSelection || state.currentSelection.obj_type !== 'pool') {
+        renderPoolStatus('Select a pool to view its information.');
+        return;
+    }
+
+    currentPoolStatusView = viewType;
+    updatePoolStatusButtons(viewType);
+
+    if (viewType === 'status') {
+        // Use cached status data (from pool's status_details)
+        renderPoolStatus(cachedPoolStatusData.status);
+    } else {
+        // Check cache first
+        if (cachedPoolStatusData[viewType]) {
+            renderPoolStatus(cachedPoolStatusData[viewType]);
+        } else {
+            // Show loading message
+            renderPoolStatus(`Loading ${viewType === 'layout' ? 'pool layout' : 'IO statistics'}...`);
+            // Fetch data
+            const data = await fetchPoolData(currentPoolName, viewType);
+            cachedPoolStatusData[viewType] = data;
+            // Only update if still on the same view
+            if (currentPoolStatusView === viewType) {
+                renderPoolStatus(data);
+            }
+        }
+    }
+}
+
+/**
+ * Initialize pool status view with status data and reset cache
+ * @param {string} poolName - Name of the pool
+ * @param {string} statusText - The pool status text
+ */
+export function initPoolStatusView(poolName, statusText) {
+    // Reset cache when pool changes
+    if (poolName !== currentPoolName) {
+        cachedPoolStatusData = {
+            status: statusText,
+            layout: null,
+            iostat: null
+        };
+        currentPoolName = poolName;
+        currentPoolStatusView = 'status';
+        updatePoolStatusButtons('status');
+    } else {
+        // Just update status cache
+        cachedPoolStatusData.status = statusText;
+    }
+    
+    // Enable buttons when pool is selected
+    setPoolStatusButtonsEnabled(true);
+    
+    // If currently viewing status, update display
+    if (currentPoolStatusView === 'status') {
+        renderPoolStatus(statusText);
+    }
+}
+
+/**
+ * Clear pool status view (when non-pool is selected)
+ */
+export function clearPoolStatusView() {
+    currentPoolName = null;
+    cachedPoolStatusData = {
+        status: null,
+        layout: null,
+        iostat: null
+    };
+    currentPoolStatusView = 'status';
+    updatePoolStatusButtons('status');
+    setPoolStatusButtonsEnabled(false);
+    renderPoolStatus('Pool status not applicable.');
+}
+
+/**
+ * Initialize pool status button event listeners
+ */
+export function initPoolStatusButtons() {
+    if (dom.poolStatusBtn) {
+        dom.poolStatusBtn.addEventListener('click', () => switchPoolStatusView('status'));
+    }
+    if (dom.poolLayoutBtn) {
+        dom.poolLayoutBtn.addEventListener('click', () => switchPoolStatusView('layout'));
+    }
+    if (dom.poolIostatBtn) {
+        dom.poolIostatBtn.addEventListener('click', () => switchPoolStatusView('iostat'));
+    }
+    // Initially disable buttons until a pool is selected
+    setPoolStatusButtonsEnabled(false);
+}
+
 /**
  * Render pool status text
  * @param {string} statusText - Pool status text

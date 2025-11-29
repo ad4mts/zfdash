@@ -398,6 +398,22 @@ def get_pool_status(pool_name: str, *, _log_enabled=False, _user_uid=-1, **kwarg
     return stdout.strip()
 
 @adapt_common_kwargs
+def get_pool_list_verbose(pool_name: str, *, _log_enabled=False, _user_uid=-1, **kwargs) -> str:
+    """Get verbose pool layout using 'zpool list -v <pool>'."""
+    builder = ZpoolCommandBuilder('list').verbose().pool(pool_name)
+    retcode, stdout, stderr = builder.run(_log_enabled=_log_enabled, _user_uid=_user_uid)
+    if retcode != 0: raise ZfsCommandError(f"Failed to get verbose list for pool '{pool_name}'.", builder.build(), stderr, retcode)
+    return stdout.strip()
+
+@adapt_common_kwargs
+def get_pool_iostat_verbose(pool_name: str, *, _log_enabled=False, _user_uid=-1, **kwargs) -> str:
+    """Get verbose pool IO statistics using 'zpool iostat -v <pool>'."""
+    builder = ZpoolCommandBuilder('iostat').verbose().pool(pool_name)
+    retcode, stdout, stderr = builder.run(_log_enabled=_log_enabled, _user_uid=_user_uid)
+    if retcode != 0: raise ZfsCommandError(f"Failed to get iostat for pool '{pool_name}'.", builder.build(), stderr, retcode)
+    return stdout.strip()
+
+@adapt_common_kwargs
 def list_all_datasets_snapshots(*, _log_enabled=False, _user_uid=-1, **kwargs) -> List[Dict[str, Any]]:
     items_data = []
 
@@ -1066,6 +1082,8 @@ COMMAND_MAP = {
     # Getters
     "list_pools": list_pools,
     "get_pool_status": get_pool_status,
+    "get_pool_list_verbose": get_pool_list_verbose,
+    "get_pool_iostat_verbose": get_pool_iostat_verbose,
     "list_all_datasets_snapshots": list_all_datasets_snapshots,
     "get_all_properties_with_sources": get_all_properties_with_sources,
     "list_importable_pools": list_importable_pools,

@@ -506,6 +506,40 @@ def get_importable_pools():
     return _handle_zfs_call('list_importable_pools', search_dirs=search_dirs_list)
 
 
+@app.route('/api/pool/<pool_name>/list_verbose')
+@login_required
+def get_pool_list_verbose(pool_name):
+    """Endpoint to get verbose pool layout (zpool list -v)."""
+    try:
+        zfs_client = _get_zfs_client()
+        # Call daemon directly for raw output
+        response = zfs_client._send_request("get_pool_list_verbose", pool_name)
+        data = response.get("data", "")
+        return jsonify(status="success", data=data)
+    except (ZfsCommandError, ZfsClientCommunicationError) as e:
+        return jsonify(status="error", error=str(e)), 400
+    except Exception as e:
+        app.logger.exception(f"Error getting pool list verbose for {pool_name}")
+        return jsonify(status="error", error=str(e)), 500
+
+
+@app.route('/api/pool/<pool_name>/iostat_verbose')
+@login_required
+def get_pool_iostat_verbose(pool_name):
+    """Endpoint to get verbose pool iostat (zpool iostat -v)."""
+    try:
+        zfs_client = _get_zfs_client()
+        # Call daemon directly for raw output
+        response = zfs_client._send_request("get_pool_iostat_verbose", pool_name)
+        data = response.get("data", "")
+        return jsonify(status="success", data=data)
+    except (ZfsCommandError, ZfsClientCommunicationError) as e:
+        return jsonify(status="error", error=str(e)), 400
+    except Exception as e:
+        app.logger.exception(f"Error getting pool iostat verbose for {pool_name}")
+        return jsonify(status="error", error=str(e)), 500
+
+
 @app.route('/api/action/<action_name>', methods=['POST'])
 @login_required
 def execute_action(action_name):

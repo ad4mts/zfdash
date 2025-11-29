@@ -49,6 +49,239 @@ button:focus-visible,
     box-shadow: 0 0 0 4px rgba(106, 100, 232, 0.2);
 }
 
+/* ============================================
+   UNIFIED BUTTON SYSTEM
+   ============================================ */
+
+/* --- Base App Button Styles --- */
+.btn-app {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.4rem 0.85rem;
+    border-radius: 6px;
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all var(--app-transition-fast);
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.btn-app:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.btn-app i {
+    font-size: 0.9em;
+}
+
+/* --- Primary Button (Filled Purple) --- */
+.btn-app-primary {
+    background-color: var(--app-primary-color);
+    border-color: var(--app-primary-color);
+    color: #fff;
+}
+
+.btn-app-primary:hover:not(:disabled) {
+    background-color: var(--app-primary-darker);
+    border-color: var(--app-primary-darker);
+    color: #fff;
+    box-shadow: var(--app-shadow-sm);
+}
+
+.btn-app-primary:active:not(:disabled) {
+    background-color: var(--app-primary-darker);
+    transform: translateY(1px);
+}
+
+/* --- Secondary Button (Light with Purple border) --- */
+.btn-app-secondary {
+    background-color: #fff;
+    border-color: var(--app-primary-color);
+    color: var(--app-primary-color);
+}
+
+.btn-app-secondary:hover:not(:disabled) {
+    background-color: var(--app-primary-lighter);
+    color: var(--app-primary-color);
+}
+
+.btn-app-secondary:active:not(:disabled) {
+    background-color: var(--app-primary-color);
+    color: #fff;
+}
+
+/* --- Ghost Button (No background, subtle) --- */
+.btn-app-ghost {
+    background-color: transparent;
+    border-color: transparent;
+    color: var(--app-text-color);
+}
+
+.btn-app-ghost:hover:not(:disabled) {
+    background-color: var(--app-hover-bg);
+    color: var(--app-primary-color);
+}
+
+.btn-app-ghost:active:not(:disabled) {
+    background-color: var(--app-primary-lighter);
+}
+
+/* --- Toggle Button Group (for Status/Layout/IO Stats) --- */
+.btn-toggle-group {
+    display: inline-flex !important;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1px solid #dee2e6 !important; /* Explicit border color */
+    background-color: #ffffff !important; /* Explicit white background */
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+.btn-toggle-group .btn-toggle {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+    font-size: 0.85rem !important;
+    font-weight: 500;
+    padding: 0.5rem 1rem !important;
+    border: none !important;
+    background-color: transparent !important;
+    color: #495057 !important; /* Dark gray text */
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-right: 1px solid #dee2e6 !important;
+    opacity: 1 !important; /* Ensure opacity */
+    visibility: visible !important; /* Ensure visibility */
+}
+
+.btn-toggle-group .btn-toggle:last-child {
+    border-right: none !important;
+}
+
+.btn-toggle-group .btn-toggle:hover:not(:disabled):not(.active) {
+    background-color: #f8f9fa !important;
+    color: var(--app-primary-color) !important;
+}
+
+.btn-toggle-group .btn-toggle.active {
+    background-color: var(--app-primary-color) !important;
+    color: #ffffff !important;
+}
+
+.btn-toggle-group .btn-toggle:disabled {
+    background-color: #e9ecef !important;
+    color: #adb5bd !important;
+    cursor: not-allowed;
+}
+
+.btn-toggle-group .btn-toggle i {
+    font-size: 1em;
+}
+
+/* --- Danger Button (Red for destructive actions) --- */
+.btn-app-danger {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: #fff;
+}
+
+.btn-app-danger:hover:not(:disabled) {
+    background-color: #bb2d3b;
+    border-color: #bb2d3b;
+    color: #fff;
+}
+
+/* --- Info Button (Cyan/Blue) --- */
+.btn-app-info {
+    background-color: #0dcaf0;
+    border-color: #0dcaf0;
+    color: #000;
+}
+
+.btn-app-info:hover:not(:disabled) {
+    background-color: #31d2f2;
+    border-color: #25cff2;
+    color: #000;
+}
+
+/* --- Dark Button --- */
+.btn-app-dark {
+    background-color: #212529;
+    border-color: #212529;
+    color: #fff;
+}
+
+.btn-app-dark:hover:not(:disabled) {
+    background-color: #424649;
+    border-color: #373b3e;
+    color: #fff;
+}
+
+/* --- Light Outline Button (for dark backgrounds) --- */
+.btn-app-light-outline {
+    background-color: transparent;
+    border: 1px solid #f8f9fa;
+    color: #f8f9fa;
+}
+
+.btn-app-light-outline:hover:not(:disabled) {
+    background-color: #f8f9fa;
+    color: #000;
+}
+
+/* --- Success Button (Green for positive actions) --- */
+.btn-app-success {
+    background-color: #198754;
+    border-color: #198754;
+    color: #fff;
+}
+
+.btn-app-success:hover:not(:disabled) {
+    background-color: #157347;
+    border-color: #157347;
+    color: #fff;
+}
+
+/* --- Warning Button (Orange/Yellow) --- */
+.btn-app-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+.btn-app-warning:hover:not(:disabled) {
+    background-color: #ffca2c;
+    border-color: #ffc720;
+    color: #212529;
+}
+
+/* --- Small Button Variant --- */
+.btn-app-sm {
+    font-size: 0.75rem;
+    padding: 0.3rem 0.6rem;
+}
+
+/* --- Large Button Variant --- */
+.btn-app-lg {
+    font-size: 1rem;
+    padding: 0.6rem 1.2rem;
+}
+
+/* --- Extra Small Button Variant --- */
+.btn-app-xs {
+    font-size: 0.7rem;
+    padding: 0.2rem 0.5rem;
+}
+
+/* ============================================
+   END UNIFIED BUTTON SYSTEM
+   ============================================ */
+
 /* --- Global Smooth Scroll --- */
 * {
     scroll-behavior: smooth;
@@ -345,14 +578,16 @@ body.logged-in #app-section { display: flex; } /* Main app section is flex colum
     margin-bottom: 3px; 
     transition: all 0.2s ease;
     border: 1px solid transparent;
+    border-left-width: 3px; /* Reserve space for hover effect */
     position: relative;
 }
 
 /* Tree Item - Hover State (Much more visible) */
 .tree-item:hover { 
-    background-color: rgba(106, 100, 232, 0.1);
-    border-color: rgba(106, 100, 232, 0.25);
-    box-shadow: 0 2px 6px rgba(106, 100, 232, 0.12);
+    background-color: rgba(106, 100, 232, 0.15) !important;
+    border-color: transparent;
+    border-left-color: rgba(106, 100, 232, 0.4) !important;
+    box-shadow: 0 2px 8px rgba(106, 100, 232, 0.15);
 }
 
 /* Tree Item - Active/Click State */
@@ -621,9 +856,10 @@ overflow-y: auto; /* Scroll vertically */
 
 /* Pool Status Tab */
 #pool-status-tab-pane > .flex-grow-1 { /* Wrapper for pre - THIS needs to grow */
-flex-grow: 1; /* Take remaining space */
-overflow-y: auto; /* Make THIS div scroll */
+    flex-grow: 1; /* Take remaining space */
+    overflow-y: auto; /* Make THIS div scroll */
 }
+
 #pool-status-content { /* The pre tag */
 font-family: var(--bs-font-monospace); font-size: 0.85rem;
 white-space: pre;
