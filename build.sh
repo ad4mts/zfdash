@@ -3,12 +3,24 @@
 # Creates a local Conda environment, installs dependencies,
 # and bundles the application using PyInstaller.
 # This script should be run as a regular user (NO SUDO).
+#
+# Usage: ./build.sh [--yes|-y]
+# Options:
+#   --yes, -y   Skip confirmation prompts (for CI/automation)
 
 # --- Strict Mode ---
 set -u # Treat unset variables as errors
 set -o pipefail # Handle pipe errors correctly
 # Exit immediately if a command exits with a non-zero status during build.
 set -e
+
+# --- Parse Arguments ---
+AUTO_YES=false
+for arg in "$@"; do
+    case "$arg" in
+        --yes|-y) AUTO_YES=true ;;
+    esac
+done
 
 # --- ========================== ---
 # --- === CONFIGURATION START ==== ---
@@ -128,7 +140,12 @@ if ! command_exists conda; then
     log_info " This script needs to download and install Miniconda to create a local build environment."
     log_info " Miniconda is governed by the Anaconda Terms of Service."
     log_info " Please review the terms at: https://legal.anaconda.com/policies/en/?name=terms-of-service"
-    read -p " Do you agree to these terms and wish to proceed with the download? (y/N): " agree_to_tos
+    if [[ "$AUTO_YES" == true ]]; then
+        log_info " Auto-accepting Anaconda ToS (--yes flag provided)."
+        agree_to_tos="y"
+    else
+        read -p " Do you agree to these terms and wish to proceed with the download? (y/N): " agree_to_tos
+    fi
     if [[ ! "$agree_to_tos" =~ ^[Yy]$ ]]; then
         exit_error "Build cancelled by user. You must agree to the Anaconda ToS to proceed."
     fi
@@ -193,7 +210,13 @@ fi
 # Create/Update the build environment
 CREATE_ENV=false
 if [ -d "$CONDA_ENV_DIR" ]; then
-    log_info " Build environment directory already exists: $CONDA_ENV_DIR"; read -p " Do you want to remove and recreate it? (y/N): " recreate_env
+    log_info " Build environment directory already exists: $CONDA_ENV_DIR"
+    if [[ "$AUTO_YES" == true ]]; then
+        log_info " Reusing existing build environment (--yes flag provided)."
+        recreate_env="n"
+    else
+        read -p " Do you want to remove and recreate it? (y/N): " recreate_env
+    fi
     if [[ "$recreate_env" =~ ^[Yy]$ ]]; then log_info " Removing existing build environment..."; rm -rf "$CONDA_ENV_DIR" || exit_error "Failed to remove existing build environment."; CREATE_ENV=true; fi
 else CREATE_ENV=true; fi
 
