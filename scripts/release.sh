@@ -10,7 +10,7 @@
 # Options:
 #   --github    Create GitHub release using gh CLI
 #   --yes, -y   Skip confirmation prompts (auto-yes)
-#
+## uses build.sh > depends on uv; build.sh installs it if missing
 set -euo pipefail
 
 #######################################
@@ -424,6 +424,7 @@ EOF
       log_info "Creating GitHub release ${VERSION} and uploading ${tar_name}"
       if ! gh release create "${VERSION}" "${tar_name}" --title "ZfDash ${VERSION}" --notes-file "${notes_file}"; then
         log_error "gh release create failed. You may need GH_TOKEN or interactive login."
+        exit 1
       fi
     fi
   fi

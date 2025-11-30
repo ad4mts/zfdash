@@ -1,20 +1,37 @@
-build_env_zfdash/
-miniconda_installer/
-miniconda_base/
+# Build artifacts
 build/
 dist/
-__pycache__/
 *.spec
+
+# Python
+__pycache__/
 *.pyc
 *.pyo
 *.pyd
+.venv/
+
+# uv
+
+# Conda (legacy, kept for backward compatibility)
+build_env_zfdash/
+miniconda_installer/
+miniconda_base/
+
+# Logs
 *.log
+
+# Cache
 .cache/
 .cache
-.venv/
+
+# Development
 developer documentation/
 compose.override.yml
 **/docker-local-debug.sh
+
+# Release artifacts
 release_tmp/
 *.tar.gz
+
+# Private/ignored scripts
 _ign-*

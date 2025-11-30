@@ -75,6 +75,7 @@
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04);
     transition: box-shadow 0.3s ease, transform 0.3s ease;
     border: 1px solid rgba(0, 0, 0, 0.04);
+    min-height: 0; /* Critical: allows flex children to shrink and enable overflow scroll */
 }
 
 #main-content-area .col-lg-4:hover,

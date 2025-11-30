@@ -212,7 +212,7 @@ Security is paramount due to the privileged nature of ZFS operations.
 
 ## 5. Installation and Build Process
 
-*   **`build.sh`:** (Run as user) Uses `PyInstaller` to bundle the Python application (`src/`) and its dependencies (from `requirements.txt`) into a self-contained executable (`dist/zfdash/zfdash`) and copies necessary data files.
+*   **`build.sh`:** (Run as user) Uses [uv](https://docs.astral.sh/uv/) for fast dependency management and `PyInstaller` to bundle the Python application (`src/`) and its dependencies (from `pyproject.toml`) into a self-contained executable (`dist/zfdash/zfdash`) and copies necessary data files.
 *   **`install.sh`:** (Run as root)
     *   Copies the built application from `dist/zfdash` to `/opt/zfdash/app`.
     *   Copies assets (icon, policy file, default credentials) from the source tree (`src/data/`) to appropriate system locations (`/opt/zfdash/data/icons`, `/usr/share/polkit-1/actions`, `/opt/zfdash/data`).
@@ -250,10 +250,11 @@ Security is paramount due to the privileged nature of ZFS operations.
 ## 7. Development Setup
 
 1.  **Clone Repository:** `git clone https://github.com/ad4mts/zfdash`
-2.  **Create Virtual Environment:** `python3 -m venv venv && source venv/bin/activate`
-3.  **Install Dependencies:** `pip install -r requirements.txt`
-4.  **Install Polkit Policy (if not already installed):** `sudo cp src/data/policies/org.zfsgui.pkexec.daemon.launch.policy /usr/share/polkit-1/actions/` (set owner/perms if needed).
-5.  **Run:**
+2.  **Install uv:** `curl -LsSf https://astral.sh/uv/install.sh | sh`
+3.  **Create Virtual Environment:** `uv venv --python 3.11 .venv && source .venv/bin/activate`
+4.  **Install Dependencies:** `uv pip install -e .`
+5.  **Install Polkit Policy (if not already installed):** `sudo cp src/data/policies/org.zfsgui.pkexec.daemon.launch.policy /usr/share/polkit-1/actions/` (set owner/perms if needed).
+6.  **Run:**
     *   **GUI:** `cd src && python3 main.py`
     *   **Web UI (Debug):** `cd src && python3 main.py --web --debug` (Access at `http://127.0.0.1:5001`, uses Flask dev server, default creds `admin:admin`).
     *   **Web UI (Production-like):** `cd src && python3 main.py --web` (Uses Waitress).

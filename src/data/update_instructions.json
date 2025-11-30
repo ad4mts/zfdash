@@ -49,12 +49,8 @@
     "title": "Source/Development Installation",
     "steps": [
       {
-        "title": "Pull the latest changes",
-        "command": "git pull origin main"
-      },
-      {
-        "title": "Install any new dependencies",
-        "command": "pip install -r requirements.txt"
+        "title": "Pull and sync dependencies",
+        "command": "git pull origin main && uv sync"
       },
       {
         "title": "Restart the application",

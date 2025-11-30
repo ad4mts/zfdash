@@ -11,9 +11,19 @@
     letter-spacing: 0.3px;
 }
 
+/* Left pane card - enable proper flex overflow */
+#main-content-area .col-lg-4 > .card,
+#main-content-area .col-md-5 > .card {
+    min-height: 0; /* Critical for flex children to allow shrinking */
+    display: flex;
+    flex-direction: column;
+}
+
 /* Tree View Container */
 #zfs-tree-container {
     padding: 0.5rem;
+    min-height: 0; /* Allow flexbox to constrain height */
+    overflow-y: auto !important;
 }
 
 .zfs-tree-view { font-size: 0.9rem; }

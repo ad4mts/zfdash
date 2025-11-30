@@ -1,4 +1,4 @@
-# ZfDash (v1.8.7-beta)
+# ZfDash (v1.8.8-beta)
 **(ZFS Management GUI / WEBUI) 💻** (Currently In Testing Phase) 
 # Updating
 
@@ -55,8 +55,8 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 
 * **Linux Operating System** (Tested primarily on Fedora 41, should work on other systemd-based distros)
 * **ZFS installed and configured** (Tested with zfs-2.3.1. `zfs` and `zpool` commands must be executable by root).
-* **Python 3** (Developed/Tested with 3.11, 3.13).
-* **Python Dependencies (for Build/Manual Run):** Listed in `requirements.txt` (PySide6 for GUI, Flask, Waitress, Flask-Login for WebUI). If building from source, `pip` and potentially `python3-venv` are needed.
+* **Python 3** (Developed/Tested with 3.10-3.13).
+* **Python Dependencies (for Build/Manual Run only):** Listed in `pyproject.toml` (PySide6 for GUI, Flask, Waitress, Flask-Login for WebUI). The build script uses [uv](https://docs.astral.sh/uv/) for fast, cross-platform dependency management.
 
 ## 🚀 Installation & Running
 
@@ -70,15 +70,30 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 5.  Launch GUI: App Menu/`zfdash`, Launch Web UI: `zfdash --web [--host <ip>] [--port <num>]`
 6.  Uninstall: `sudo /opt/zfdash/uninstall.sh` (*Note: Installer usually makes this executable*)
 
-**Method 2: Build From Source (Desktop/Manual WebUI)**
+**Method 2: Run From Source with uv (Cross-Platform)**
+
+1.  Install [uv](https://docs.astral.sh/uv/): `curl -LsSf https://astral.sh/uv/install.sh | sh`
+2.  `git clone https://github.com/ad4mts/zfdash && cd zfdash`
+3.  Run GUI: `uv run src/main.py`
+4.  Run Web UI: `uv run src/main.py --web`
+
+* Troubleshooting: If the daemon won't start due to Polkit/policy issues, copy the packaged policy into the system actions directory:
+```bash
+sudo cp src/data/policies/org.zfsgui.pkexec.daemon.launch.policy /usr/share/polkit-1/actions/
+sudo chown root:root /usr/share/polkit-1/actions/org.zfsgui.pkexec.daemon.launch.policy
+sudo chmod 644 /usr/share/polkit-1/actions/org.zfsgui.pkexec.daemon.launch.policy
+```
+retry `uv run src/main.py --web`.
+
+**Method 3: Build From Source (Desktop/Manual WebUI)**
 1.  `git clone https://github.com/ad4mts/zfdash && cd zfdash`
 2.  `chmod +x build.sh`
-3.  `./build.sh` (Needs build tools)
+3.  `./build.sh` (Automatically installs uv and builds)
 4.  `chmod +x install.sh`
 5.  `sudo ./install.sh`
 6.  Launch/Uninstall: See Method 1.
 
-**Method 3: Docker (Only Web UI)**
+**Method 4: Docker (Only Web UI)**
 Running zfdash in a privileged Docker container.
 
 ## 🐳 Docker Usage
@@ -148,7 +163,7 @@ ZfDash requires direct access to the host's ZFS subsystem, which presents a secu
 
 **HostID Compatibility Note**: ZFS pools store the system hostid they were created on. To prevent hostid mismatch errors, the container syncs with the host's `/etc/hostid` via the `-v /etc:/host-etc:ro` mount (already included in compose files). This works across all distributions, handling missing hostid files gracefully.
 
-**Method 4: Web UI Systemd Service (Headless/Server)**
+**Method 5: Web UI Systemd Service (Headless/Server)**
 Note: (Polkit<0.106 is not supported for now, ie older Distros)
 1.  Install ZfDash via Method 1 or 2 first.
 2.  `cd install_service`

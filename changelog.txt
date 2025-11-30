@@ -1,4 +1,8 @@
 # ZfDash Changelog #always use same format
+## v1.8.8-Beta
+*   **Refractor** Migrate from Conda to uv for simpler build, manual run and maintain dependencies (#9)
+*   **Fix** fix treeview does not scroll vertically (#14)
+
 ## v1.8.7-Beta
 *   **Web UI:** Improved Web UI visuals
 *   **Feature** Improved treeview selection.

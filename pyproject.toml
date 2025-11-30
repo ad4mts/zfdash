@@ -1,0 +1,81 @@
+[project]
+name = "zfdash"
+version = "1.8.8-beta"
+description = "A modern graphical interface for managing ZFS storage pools, datasets, snapshots, and encryption."
+readme = "README.md"
+license = { text = "GPL-3.0" }
+authors = [
+    { name = "Ayham(ad4mts) and Contributors" }
+]
+requires-python = ">=3.10"
+keywords = ["zfs", "storage", "gui", "management", "snapshots", "encryption"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: X11 Applications :: Qt",
+    "Environment :: Web Environment",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: GNU General Public License v3 (GPLv3)",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Filesystems",
+    "Topic :: System :: Systems Administration",
+]
+
+dependencies = [
+    # GUI framework - Qt6 bindings
+    # 6.4.0+: Stable Python 3.10-3.12 support, mature Qt 6.4 LTS base
+    # Note: PySide6 7.x will likely have breaking changes
+    "PySide6>=6.4.0,<7.0.0",
+    
+    # Web framework
+    # 2.0+: Has all features we use (flash, session, redirect, jsonify)
+    # 3.0+: Dropped Python 3.7, otherwise compatible
+    "Flask>=2.0.0",
+    
+    # WSGI production server
+    # 2.0+: Stable channel-based architecture, Python 3.7+
+    # 3.0+: Python 3.9+ (matches our requires-python)
+    "waitress>=2.0.0",
+    
+    # Session management for Flask
+    # 0.6.0+: Stable API with current_user, login_required, etc.
+    "Flask-Login>=0.6.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/ad4mts/zfdash"
+Repository = "https://github.com/ad4mts/zfdash"
+Issues = "https://github.com/ad4mts/zfdash/issues"
+
+[project.optional-dependencies]
+dev = [
+    # Bundler for creating standalone executables
+    # 6.0+: Full Python 3.12 support, improved hooks
+    "pyinstaller>=6.0.0",
+    # Testing framework (if tests are added)
+    "pytest>=7.0.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.uv]
+# Use Python 3.13 by default for builds
+python-preference = "managed"
+
+[tool.uv.sources]
+# All packages from PyPI (default)
+
+[tool.pyinstaller]
+# PyInstaller configuration (for reference, actual args in build.sh)
+name = "zfdash"
+onefile = false
+console = false
