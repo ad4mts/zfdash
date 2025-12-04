@@ -38,3 +38,4 @@ werkzeug==3.1.4
     # via
     #   flask
     #   flask-login
+zipp>=3.19.1 # not directly required, pinned by Snyk to avoid a vulnerability
