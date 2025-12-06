@@ -635,6 +635,7 @@ def run_web_ui(host='127.0.0.1', port=5001, debug=False, zfs_client: ZfsManagerC
         app.logger.setLevel(logging.DEBUG)
         app.after_request(log_request_info)
         print(f"WEB_UI: Debug mode enabled. Running Flask development server on http://{host}:{port}", file=sys.stderr)
+        print("WEB_UI: To close, use Ctrl+C (do NOT use Ctrl+Z).", file=sys.stderr)
         app.run(host=host, port=port, debug=True)
     else:
         logging.basicConfig(level=logging.INFO, format='%(levelname)s:%(name)s:%(message)s')
@@ -642,16 +643,19 @@ def run_web_ui(host='127.0.0.1', port=5001, debug=False, zfs_client: ZfsManagerC
         try:
             from waitress import serve
             print(f"WEB_UI: Production mode. Running Waitress server on http://{host}:{port}", file=sys.stderr)
+            print("WEB_UI: To close, use Ctrl+C (do NOT use Ctrl+Z).", file=sys.stderr)
             serve(app, host=host, port=port, threads=8)
         except ImportError:
             app.logger.error("Waitress not found. Falling back to Flask development server (NOT recommended for production).")
             print("WEB_UI: Waitress not installed. Running Flask development server.", file=sys.stderr)
+            print("WEB_UI: To close, use Ctrl+C (do NOT use Ctrl+Z).", file=sys.stderr)
             app.run(host=host, port=port, debug=False)
         except Exception as e:
             app.logger.exception(f"Error starting Waitress server: {e}")
             print(f"WEB_UI: Error starting Waitress server: {e}", file=sys.stderr)
             try:
                 print("WEB_UI: Attempting fallback to Flask development server...", file=sys.stderr)
+                print("WEB_UI: To close, use Ctrl+C (do NOT use Ctrl+Z).", file=sys.stderr)
                 app.run(host=host, port=port, debug=False)
             except Exception as fallback_e:
                  app.logger.exception(f"Fallback to Flask dev server also failed: {fallback_e}")

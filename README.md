@@ -1,4 +1,4 @@
-# ZfDash (v1.8.9-beta)
+# ZfDash (v1.8.10-beta)
 **(ZFS Management GUI / WEBUI) 💻** (Currently In Testing Phase) 
 # Updating
 

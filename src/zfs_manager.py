@@ -404,14 +404,20 @@ class ZfsManagerClient:
             #print("MANAGER_CLIENT: Already shutting down.", file=sys.stderr)
             return
 
-        # 1. Signal reader thread to stop
-        self.shutdown_event.set()
+        # 1. Attempt graceful shutdown command (ONLY if we own the daemon)
+        # If pid != 0, we launched it and should clean it up.
+        # If pid == 0, it's an external daemon, so we just disconnect.
+        if self.daemon_process and self.daemon_process.pid != 0:
+            try:
+                 self.shutdown_daemon() # Try sending the command
+            except Exception as e:
+                 print(f"MANAGER_CLIENT: Ignored error during optional shutdown command: {e}", file=sys.stderr)
+            time.sleep(0.5) # Give daemon a moment to process shutdown
+        else:
+            print("MANAGER_CLIENT: External daemon still running, skipping shutdown command.", file=sys.stderr)
 
-        # 2. Attempt graceful shutdown command (optional, fire and forget)
-        try:
-             self.shutdown_daemon() # Try sending the command
-        except Exception as e:
-             print(f"MANAGER_CLIENT: Ignored error during optional shutdown command: {e}", file=sys.stderr)
+        # 2. Signal reader thread to stop (fix: NOW set this, after sending shutdown request or it fails)
+        self.shutdown_event.set()
 
         # 3. Close transport (this signals EOF/broken connection to daemon/reader)
         print("MANAGER_CLIENT: Closing transport...", file=sys.stderr)
@@ -430,25 +436,26 @@ class ZfsManagerClient:
                 print("MANAGER_CLIENT: Warning: Reader thread did not exit cleanly.", file=sys.stderr)
         self.reader_thread = None
 
-        # 5. Terminate and wait for daemon process
-        if self.daemon_process and self.daemon_process.poll() is None:
-            print(f"MANAGER_CLIENT: Terminating daemon process (PID: {self.daemon_process.pid})...", file=sys.stderr)
-            try:
-                self.daemon_process.terminate() # Send SIGTERM
-                self.daemon_process.wait(timeout=constants.TERMINATE_TIMEOUT) # Wait for termination
-                print(f"MANAGER_CLIENT: Daemon process terminated (Exit code: {self.daemon_process.returncode}).", file=sys.stderr)
-            except subprocess.TimeoutExpired:
-                print("MANAGER_CLIENT: Timeout waiting for daemon termination, attempting kill...", file=sys.stderr)
+        # 5. Terminate and wait for daemon process (skip if external daemon with pid=0)
+        if self.daemon_process and self.daemon_process.pid != 0:
+            if self.daemon_process.poll() is None:
+                print(f"MANAGER_CLIENT: Terminating daemon process (PID: {self.daemon_process.pid})...", file=sys.stderr)
                 try:
-                    self.daemon_process.kill() # Send SIGKILL
-                    self.daemon_process.wait(timeout=constants.KILL_TIMEOUT)
-                    print(f"MANAGER_CLIENT: Daemon process killed (Exit code: {self.daemon_process.returncode}).", file=sys.stderr)
+                    self.daemon_process.terminate() # Send SIGTERM
+                    self.daemon_process.wait(timeout=constants.TERMINATE_TIMEOUT) # Wait for termination
+                    print(f"MANAGER_CLIENT: Daemon process terminated (Exit code: {self.daemon_process.returncode}).", file=sys.stderr)
+                except subprocess.TimeoutExpired:
+                    print("MANAGER_CLIENT: Timeout waiting for daemon termination, attempting kill...", file=sys.stderr)
+                    try:
+                        self.daemon_process.kill() # Send SIGKILL
+                        self.daemon_process.wait(timeout=constants.KILL_TIMEOUT)
+                        print(f"MANAGER_CLIENT: Daemon process killed (Exit code: {self.daemon_process.returncode}).", file=sys.stderr)
+                    except Exception as e:
+                        print(f"MANAGER_CLIENT: Error killing daemon process: {e}", file=sys.stderr)
                 except Exception as e:
-                    print(f"MANAGER_CLIENT: Error killing daemon process: {e}", file=sys.stderr)
-            except Exception as e:
-                 print(f"MANAGER_CLIENT: Error terminating daemon process: {e}", file=sys.stderr)
-        elif self.daemon_process:
-            print(f"MANAGER_CLIENT: Daemon process already exited (Exit code: {self.daemon_process.returncode}).", file=sys.stderr)
+                     print(f"MANAGER_CLIENT: Error terminating daemon process: {e}", file=sys.stderr)
+            else:
+                print(f"MANAGER_CLIENT: Daemon process already exited (Exit code: {self.daemon_process.returncode}).", file=sys.stderr)
         self.daemon_process = None
 
         print("MANAGER_CLIENT: Shutdown complete.", file=sys.stderr)

@@ -1,117 +1,177 @@
 #!/bin/bash
-# Uninstaller script for ZfDash
-echo "--- ZfDash Uninstaller ---"
-set +e # Allow errors during removal
+# ZfDash Uninstaller
+# Cleanly removes ZfDash with option to preserve user data
+# Usage: sudo ./uninstall.sh [-y]
+#   -y  Skip confirmation prompts (auto-yes, preserves data by default)
 
-INSTALL_BASE_DIR="/opt/zfdash"
-INSTALL_DATA_DIR="${INSTALL_BASE_DIR}/data"
-INSTALL_LAUNCHER_PATH="/usr/local/bin/zfdash"
-INSTALL_DESKTOP_FILE_PATH="/usr/share/applications/zfdash.desktop"
-INSTALL_POLICY_PATH="/usr/share/polkit-1/actions/org.zfsgui.pkexec.daemon.launch.policy"
-# Log paths/patterns
-SYSTEM_DAEMON_LOG_PATTERN="/tmp/zfdash-daemon.log*"
-SYSTEM_DAEMON_STDERR_LOG_PATH="/tmp/zfdash_daemon_stderr.log"
+set +e  # Allow errors during removal
 
-if [ "$(id -u)" -ne 0 ]; then echo "ERROR: Must run as root/sudo." >&2; exit 1; fi
+# ============================================================================
+# CONFIGURATION
+# ============================================================================
 
-echo "This script will remove:"
-echo " - App dir:       ${INSTALL_BASE_DIR}"
-echo " - Launcher:      ${INSTALL_LAUNCHER_PATH}"
-echo " - Desktop file:  ${INSTALL_DESKTOP_FILE_PATH}"
-echo " - Polkit policy: ${INSTALL_POLICY_PATH}"
-echo ""
+AUTO_YES=false
+while getopts "y" opt; do
+    case $opt in
+        y) AUTO_YES=true ;;
+        *) ;;
+    esac
+done
 
-read -p "Are you sure you want to uninstall ZfDash? (y/N): " confirm
-# Check if running non-interactively (e.g. from install script)
-if [ ! -t 0 ]; then
-    # Non-interactive mode: Assume YES for uninstall, but preserve data by default
-    echo "Non-interactive mode detected. Proceeding with uninstall."
-    confirm="y"
-fi
+APP_NAME="ZfDash"
+INSTALL_DIR="/opt/zfdash"
+INSTALL_DATA_DIR="${INSTALL_DIR}/data"
+INSTALL_LAUNCHER="/usr/local/bin/zfdash"
+INSTALL_DESKTOP="/usr/share/applications/zfdash.desktop"
+INSTALL_POLICY="/usr/share/polkit-1/actions/org.zfsgui.pkexec.daemon.launch.policy"
+LOG_PATTERNS=("/tmp/zfdash-daemon.log*" "/tmp/zfdash_daemon_stderr.log")
 
-if [[ ! "$confirm" =~ ^[Yy]$ ]]; then echo "Uninstall cancelled."; exit 0; fi
+# ============================================================================
+# LOGGING (matches install.sh style)
+# ============================================================================
 
-# Ask about preserving credentials/config data
-PRESERVE_DATA=false
-if [ -d "${INSTALL_DATA_DIR}" ]; then
-    echo ""
-    echo "The data directory contains credentials and configuration:"
-    echo "  ${INSTALL_DATA_DIR}"
+log_info()  { printf "\033[0;34m[INFO]\033[0m  %s\n" "$1" >&2; }
+log_ok()    { printf "\033[0;32m[OK]\033[0m    %s\n" "$1" >&2; }
+log_warn()  { printf "\033[0;33m[WARN]\033[0m  %s\n" "$1" >&2; }
+log_error() { printf "\033[0;31m[ERROR]\033[0m %s\n" "$1" >&2; }
+
+# ============================================================================
+# HELPER FUNCTIONS
+# ============================================================================
+
+check_root() {
+    if [[ $(id -u) -ne 0 ]]; then
+        log_error "This script must be run as root. Use: sudo $0"
+        exit 1
+    fi
+}
+
+is_interactive() {
+    [[ -t 0 ]] && [[ "$AUTO_YES" == "false" ]]
+}
+
+confirm_prompt() {
+    local prompt="$1" default="$2" response
+    if is_interactive; then
+        read -p "$prompt" response
+        [[ -z "$response" ]] && response="$default"
+    else
+        response="$default"
+        [[ "$AUTO_YES" == "true" ]] && log_info "Auto-yes mode: using default ($default)"
+    fi
+    [[ "$response" =~ ^[Yy]$ ]]
+}
+
+# ============================================================================
+# REMOVAL FUNCTIONS
+# ============================================================================
+
+remove_file() {
+    local path="$1" desc="$2"
+    if [[ -f "$path" ]] || [[ -L "$path" ]]; then
+        rm -f "$path" && log_ok "Removed $desc"
+    fi
+}
+
+remove_app_directory() {
+    local preserve_data="$1"
     
-    if [ ! -t 0 ]; then
-        # Non-interactive: Default to KEEPING data
-        keep_data="y"
-        echo "Non-interactive mode: Defaulting to KEEP credentials."
-    else
-        read -p "Do you want to KEEP your credentials and configuration? (Y/n): " keep_data
+    if [[ ! -d "$INSTALL_DIR" ]]; then
+        log_info "Application directory already removed"
+        return
     fi
-
-    if [[ ! "$keep_data" =~ ^[Nn]$ ]]; then
-        PRESERVE_DATA=true
-        echo "INFO: Credentials and configuration will be preserved."
+    
+    if [[ "$preserve_data" == "true" ]] && [[ -d "$INSTALL_DATA_DIR" ]]; then
+        log_info "Preserving user data..."
+        local temp_dir="/tmp/zfdash_data_backup_$$"
+        mv "$INSTALL_DATA_DIR" "$temp_dir"
+        rm -rf "$INSTALL_DIR"
+        mkdir -p "$INSTALL_DIR"
+        mv "$temp_dir" "$INSTALL_DATA_DIR"
+        log_ok "Application removed (data preserved at $INSTALL_DATA_DIR)"
     else
-        echo "INFO: Credentials and configuration will be REMOVED."
+        rm -rf "$INSTALL_DIR"
+        log_ok "Application directory removed"
     fi
-fi
+}
 
-echo ""
-echo "INFO: Removing application files..."
+remove_logs() {
+    local removed=false
+    for pattern in "${LOG_PATTERNS[@]}"; do
+        # shellcheck disable=SC2086
+        if ls $pattern &>/dev/null 2>&1; then
+            rm -f $pattern && removed=true
+        fi
+    done
+    [[ "$removed" == "true" ]] && log_ok "Log files removed"
+}
 
-if [ -d "${INSTALL_BASE_DIR}" ]; then
-    if [ "$PRESERVE_DATA" = true ] && [ -d "${INSTALL_DATA_DIR}" ]; then
-        # Preserve data directory - remove everything else in INSTALL_BASE_DIR
-        echo "INFO: Preserving data directory: ${INSTALL_DATA_DIR}"
-        # Move data dir temporarily
-        TEMP_DATA_DIR="/tmp/zfdash_data_backup_$$"
-        mv "${INSTALL_DATA_DIR}" "${TEMP_DATA_DIR}"
-        # Remove everything else
-        rm -rf "${INSTALL_BASE_DIR}"
-        # Recreate base dir and restore data
-        mkdir -p "${INSTALL_BASE_DIR}"
-        mv "${TEMP_DATA_DIR}" "${INSTALL_DATA_DIR}"
-        echo "INFO: Application removed, data preserved at ${INSTALL_DATA_DIR}"
-    else
-        # Remove everything including data
-        rm -rf "${INSTALL_BASE_DIR}"
-        echo "INFO: Application directory removed: ${INSTALL_BASE_DIR}"
-    fi
-else
-    echo "INFO: App directory already removed."
-fi
+update_caches() {
+    command -v update-desktop-database &>/dev/null && update-desktop-database -q /usr/share/applications 2>/dev/null || true
+    command -v gtk-update-icon-cache &>/dev/null && gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor 2>/dev/null || true
+}
 
-echo "INFO: Removing launcher script: ${INSTALL_LAUNCHER_PATH}..."
-if [ -f "${INSTALL_LAUNCHER_PATH}" ]; then rm -f "${INSTALL_LAUNCHER_PATH}"; else echo "INFO: Launcher already removed."; fi
+# ============================================================================
+# MAIN
+# ============================================================================
 
-echo "INFO: Removing desktop entry: ${INSTALL_DESKTOP_FILE_PATH}..."
-if [ -f "${INSTALL_DESKTOP_FILE_PATH}" ]; then rm -f "${INSTALL_DESKTOP_FILE_PATH}"; else echo "INFO: Desktop entry already removed."; fi
-
-echo "INFO: Removing Polkit policy: ${INSTALL_POLICY_PATH}..."
-if [ -f "${INSTALL_POLICY_PATH}" ]; then rm -f "${INSTALL_POLICY_PATH}"; else echo "INFO: Polkit policy already removed."; fi
-
-# Remove log files
-echo "INFO: Checking for daemon log files..."
-rm -f ${SYSTEM_DAEMON_LOG_PATTERN} 2>/dev/null && echo "INFO: Removed daemon log files." || true
-if [ -f "${SYSTEM_DAEMON_STDERR_LOG_PATH}" ]; then
-    rm -f "${SYSTEM_DAEMON_STDERR_LOG_PATH}" || echo "WARN: Failed to remove ${SYSTEM_DAEMON_STDERR_LOG_PATH}." >&2
-fi
-
-echo "INFO: Updating desktop database (optional)..."
-if command -v update-desktop-database &> /dev/null && [ -d "$(dirname "${INSTALL_DESKTOP_FILE_PATH}")" ]; then
-    update-desktop-database -q "$(dirname "${INSTALL_DESKTOP_FILE_PATH}")" || echo "Warning: update-desktop-database failed." >&2
-fi
-if command -v gtk-update-icon-cache &> /dev/null && [ -d "/usr/share/icons/hicolor" ]; then
-    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor || echo "Warning: gtk-update-icon-cache failed." >&2
-fi
-
-echo ""
-echo "NOTE: User-specific configuration (~/.config/ZfDash) and cache (~/.cache/ZfDash) are NOT removed by this script."
-echo "      You may need to remove them manually if they exist."
-if [ "$PRESERVE_DATA" = true ]; then
+main() {
     echo ""
-    echo "NOTE: Your credentials and configuration were preserved at: ${INSTALL_DATA_DIR}"
-    echo "      To remove them later: sudo rm -rf ${INSTALL_DATA_DIR}"
-fi
+    log_info "=== ${APP_NAME} Uninstaller ==="
+    echo ""
+    
+    check_root
+    
+    # Show what will be removed
+    echo "This will remove:"
+    echo "  • Application:   $INSTALL_DIR"
+    echo "  • Launcher:      $INSTALL_LAUNCHER"
+    echo "  • Desktop entry: $INSTALL_DESKTOP"
+    echo "  • Polkit policy: $INSTALL_POLICY"
+    echo ""
+    
+    # Confirm uninstall
+    if ! confirm_prompt "Uninstall ${APP_NAME}? (y/N): " "n"; then
+        log_info "Uninstall cancelled"
+        exit 0
+    fi
+    
+    # Ask about preserving data
+    local preserve_data="false"
+    if [[ -d "$INSTALL_DATA_DIR" ]]; then
+        echo ""
+        log_warn "Data directory contains credentials: $INSTALL_DATA_DIR"
+        if confirm_prompt "Keep credentials and configuration? (Y/n): " "y"; then
+            preserve_data="true"
+            log_info "User data will be preserved"
+        else
+            log_info "User data will be removed"
+        fi
+    fi
+    
+    echo ""
+    log_info "Removing ${APP_NAME}..."
+    
+    # Remove components
+    remove_app_directory "$preserve_data"
+    remove_file "$INSTALL_LAUNCHER" "launcher"
+    remove_file "$INSTALL_DESKTOP" "desktop entry"
+    remove_file "$INSTALL_POLICY" "polkit policy"
+    remove_logs
+    update_caches
+    
+    # Summary
+    echo ""
+    log_ok "=== Uninstall Complete ==="
+    echo ""
+    echo "  Note: User config (~/.config/ZfDash) and cache (~/.cache/ZfDash)"
+    echo "        are not removed. Delete manually if needed."
+    if [[ "$preserve_data" == "true" ]]; then
+        echo ""
+        echo "  Your data was preserved at: $INSTALL_DATA_DIR"
+        echo "  To remove: sudo rm -rf $INSTALL_DATA_DIR"
+    fi
+    echo ""
+}
 
-echo ""
-echo "--- ZfDash Uninstallation Complete ---"
-exit 0
+main "$@"

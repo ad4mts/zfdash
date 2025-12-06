@@ -1,4 +1,9 @@
 # ZfDash Changelog #always use same format
+## v1.8.10-beta
+*   **Improvement** Better signal handling and cleanup to prevent zombie processes.
+*   **Improvement** New improved installation scripts (install.sh and uninstall.sh) that handle upgrades and user data correctly.
+*   **Fix** Fixed shutdown logic for standalone daemon connections.
+
 ## v1.8.9-Beta
 *   **Feature** Added `get-zfdash.sh` for automated one-line installation/update.
 *   **Fix** Resolved SSL certificate verification errors by integrating `certifi`.

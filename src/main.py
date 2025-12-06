@@ -2,6 +2,8 @@
 # --- START OF FILE src/main.py ---
 import sys
 import os
+import signal
+import atexit
 import platform
 import traceback # Keep for error reporting if needed
 import argparse # Import argparse
@@ -12,6 +14,63 @@ from ipc_client import launch_daemon
 from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
 import constants
 from paths import IS_FROZEN
+
+# Globals for cleanup
+_cleanup_done = False
+_zfs_client: Optional['ZfsManagerClient'] = None
+_daemon_process = None  # Track daemon process separately for early-exit cleanup
+
+def _cleanup():
+    """Central cleanup function - called on exit or signal."""
+    global _cleanup_done, _zfs_client, _daemon_process
+    if _cleanup_done:
+        return
+    _cleanup_done = True
+    
+    print("MAIN: Cleaning up...", file=sys.stderr)
+    
+    # Close client (which terminates daemon if it owns it)
+    if _zfs_client:
+        try:
+            _zfs_client.close()
+        except Exception as e:
+            print(f"MAIN: Cleanup error: {e}", file=sys.stderr)
+        _zfs_client = None
+    
+    # Kill orphan daemon if client wasn't created yet
+    if _daemon_process and _daemon_process.poll() is None:
+        print(f"MAIN: Terminating orphan daemon (PID: {_daemon_process.pid})...", file=sys.stderr)
+        try:
+            _daemon_process.terminate()
+            _daemon_process.wait(timeout=2)
+        except Exception:
+            try:
+                _daemon_process.kill()
+            except Exception:
+                pass
+        _daemon_process = None
+    
+    print("MAIN: Exiting.", file=sys.stderr)
+
+def _signal_handler(signum, frame):
+    """Handle termination signals."""
+    sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
+    print(f"\nMAIN: Received {sig_name}, shutting down...", file=sys.stderr)
+    _cleanup()
+    sys.exit(0)
+
+def _sigtstp_handler(signum, frame):
+    """Handle suspend signal (Ctrl+Z) by ignoring it and warning the user."""
+    print("\nMAIN: Ctrl+Z (Suspend) detected. Suspension is disabled to prevent orphaned processes.", file=sys.stderr)
+    print("MAIN: If the application stops despite this warning, please manually kill any stuck processes.", file=sys.stderr)
+    print("MAIN: Please use Ctrl+C to exit safely.", file=sys.stderr)
+
+# Register cleanup
+atexit.register(_cleanup)
+signal.signal(signal.SIGINT, _signal_handler)
+signal.signal(signal.SIGTERM, _signal_handler)
+if hasattr(signal, 'SIGTSTP'):
+    signal.signal(signal.SIGTSTP, _sigtstp_handler)
 
 
 # Basic error display function ONLY for cases where GUI components cannot load
@@ -182,6 +241,7 @@ if __name__ == "__main__":
                 
                 fake_process = ExternalDaemonProcess()
                 zfs_manager_client = ZfsManagerClient(fake_process, buffered)
+                _zfs_client = zfs_manager_client  # Register for cleanup
                 
                 print("MAIN: ZFS Manager client created. Proceeding with UI launch.", file=sys.stderr)
                 
@@ -197,10 +257,12 @@ if __name__ == "__main__":
             try:
                 print("MAIN: Launching daemon...", file=sys.stderr)
                 daemon_process, transport = launch_daemon(use_socket=args.socket)
+                _daemon_process = daemon_process  # Register for cleanup (before client created)
                 print(f"MAIN: Daemon launched successfully (PID: {daemon_process.pid}). Creating client...", file=sys.stderr)
 
                 # Create the ZFS Manager Client instance
                 zfs_manager_client = ZfsManagerClient(daemon_process, transport)
+                _zfs_client = zfs_manager_client  # Register for cleanup
 
                 print("MAIN: ZFS Manager client created. Proceeding with UI launch.", file=sys.stderr)
             except (RuntimeError, TimeoutError, ValueError) as e:
@@ -230,26 +292,7 @@ if __name__ == "__main__":
         except Exception as e:
              _show_startup_error(f"{mode} Runtime Error", f"An unexpected error occurred during {mode} execution:\n{e}\n\n{traceback.format_exc()}")
              sys.exit(1)
-        finally:
-            # --- Cleanup --- #
-            if zfs_manager_client:
-                if args.connect_socket is not None:
-                    # External daemon - just close connection, don't terminate
-                    print("MAIN: Closing connection to external daemon...", file=sys.stderr)
-                    zfs_manager_client.close()
-                else:
-                    # Own daemon - close and terminate
-                    print("MAIN: Shutting down ZFS Manager client and daemon...", file=sys.stderr)
-                    zfs_manager_client.close()
-            elif 'daemon_process' in locals() and daemon_process and daemon_process.poll() is None:
-                 # If client wasn't created but process was, ensure termination (only for own daemon)
-                 if args.connect_socket is None:
-                     print("MAIN: Terminating daemon process due to early exit...", file=sys.stderr)
-                     try:
-                         daemon_process.terminate()
-                         daemon_process.wait(timeout=constants.TERMINATE_TIMEOUT)
-                     except: pass # Ignore errors during cleanup
-            print("MAIN: Exiting.", file=sys.stderr)
+        # Cleanup handled by atexit/_signal_handler via _cleanup()
 
 
 # --- END OF FILE src/main.py ---
