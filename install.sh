@@ -190,10 +190,17 @@ if [ -d "${INSTALL_BASE_DIR}/app" ]; then
     sleep 2
 fi
 if [ -d "$INSTALL_BASE_DIR" ] || [ -f "$INSTALL_LAUNCHER_PATH" ] || [ -f "$INSTALL_DESKTOP_FILE_PATH" ] || [ -f "$INSTALL_POLICY_PATH" ]; then
-    log_warn "An existing ${APP_NAME} installation or leftover components were found."; read -p "Do you want to remove the existing components before installing? (y/N): " remove_confirm
-    if [[ "$remove_confirm" =~ ^[Yy]$ ]]; then log_info "Uninstalling existing version..."; if ! uninstall_existing; then exit_error "Uninstall of existing version failed. Aborting installation."; fi; log_info "Existing components removed.";
-    else log_warn "Proceeding without removing existing components. This might cause issues."; sleep 2; fi
-else log_info "No existing installation found."; fi
+    log_warn "An existing ${APP_NAME} installation or leftover components were found."
+    # Automatically remove existing installation without prompting
+    log_info "Automatically removing existing version to ensure clean install..."
+    if ! uninstall_existing; then 
+        log_warn "Uninstall of existing version encountered errors, but proceeding with installation."
+    else
+        log_info "Existing components removed."
+    fi
+else 
+    log_info "No existing installation found."
+fi
 
 
 # 5. Create Installation Directories
