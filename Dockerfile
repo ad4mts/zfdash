@@ -34,7 +34,7 @@ RUN chmod +x /entrypoint.sh
 
 # 2. Install Python Dependencies (The Optimization Layer)
 #    We copy ONLY the lockfiles first.
-COPY pyproject.toml uv.lock .python-version ./
+COPY pyproject.toml uv.lock ./
 
 #    We use --no-install-project so we don't need 'src/' or 'README.md' yet.
 #    Docker will skip this slow step if cached even if source code changes.
