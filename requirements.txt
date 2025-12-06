@@ -19,15 +19,15 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
-pyside6==6.10.1
+pyside6==6.10.1; sys_platform != 'freebsd'
     # via zfdash (pyproject.toml)
-pyside6-addons==6.10.1
+pyside6-addons==6.10.1; sys_platform != 'freebsd'
     # via pyside6
-pyside6-essentials==6.10.1
+pyside6-essentials==6.10.1; sys_platform != 'freebsd'
     # via
     #   pyside6
     #   pyside6-addons
-shiboken6==6.10.1
+shiboken6==6.10.1; sys_platform != 'freebsd'
     # via
     #   pyside6
     #   pyside6-addons

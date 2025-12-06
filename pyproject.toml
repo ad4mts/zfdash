@@ -26,10 +26,10 @@ classifiers = [
 ]
 
 dependencies = [
-    # GUI framework - Qt6 bindings
+    # GUI framework - Qt6 bindings (not available on FreeBSD)
     # 6.4.0+: Stable Python 3.10-3.12 support, mature Qt 6.4 LTS base
     # Note: PySide6 7.x will likely have breaking changes
-    "PySide6>=6.4.0,<7.0.0",
+    "PySide6>=6.4.0,<7.0.0; sys_platform != 'freebsd'",
     
     # Web framework
     # 2.0+: Has all features we use (flash, session, redirect, jsonify)
@@ -70,6 +70,15 @@ packages = ["src"]
 [tool.uv]
 # Use Python 3.13 by default for builds
 python-preference = "managed"
+
+# Environments to resolve dependencies for (cross-platform support)
+# Only specify systems; uv will resolve for all architectures automatically
+environments = [
+    "sys_platform == 'linux'",      # All Linux architectures
+    "sys_platform == 'darwin'",     # All macOS architectures
+    "sys_platform == 'win32'",      # All Windows architectures
+    "sys_platform == 'freebsd'",    # All FreeBSD architectures
+]
 
 [tool.uv.sources]
 # All packages from PyPI (default)

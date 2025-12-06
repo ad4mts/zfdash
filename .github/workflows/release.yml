@@ -1,10 +1,20 @@
-name: Release
+# DISABLED: Replaced by release-crossplatform.yml
+# To re-enable, uncomment the 'on:' trigger below
+
+name: Release (Legacy - Disabled)
+
+# on:
+#   push:
+#     tags:
+#       - 'v*.*.*'
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
-
+  workflow_dispatch:
+    inputs:
+      note:
+        description: 'This workflow is disabled. Use release-crossplatform.yml instead.'
+        required: false
+# ------------------------------------------------------
 jobs:
   release:
     runs-on: ubuntu-latest

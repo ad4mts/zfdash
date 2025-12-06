@@ -30,6 +30,7 @@ compose.override.yml
 **/docker-local-debug.sh
 
 # Release artifacts
+releases/
 release_tmp/
 *.tar.gz
 

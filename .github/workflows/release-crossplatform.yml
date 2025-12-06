@@ -1,0 +1,167 @@
+# Cross-platform release workflow for ZfDash
+# Builds for multiple architectures and creates a single GitHub release
+#
+# Trigger: Push a tag like v1.8.8-beta
+# Manual: workflow_dispatch with version input
+#
+# Uses native GitHub runners for speed (no QEMU emulation)
+
+name: Release Cross-Platform
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 1.8.8-beta)'
+        required: false
+        type: string
+      draft:
+        description: 'Create as draft release'
+        required: false
+        type: boolean
+        default: true
+
+# Ensure only one release workflow runs at a time
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # Build job - runs in parallel for each architecture
+  build:
+    name: Build (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: x86_64
+            runner: ubuntu-22.04
+          - os: linux
+            arch: arm64
+            runner: ubuntu-22.04-arm
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Build and create tarball
+        run: |
+          # Make build script executable
+          chmod +x build.sh
+          
+          # Run tarball generation (uses build.sh internally)
+          python scripts/generate_tarball.py --yes
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.os }}-${{ matrix.arch }}
+          path: |
+            releases/*.tar.gz
+            releases/*.sha256
+          retention-days: 1
+
+  # Release job - waits for all builds, then publishes
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write  # Required for creating releases
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: releases
+          pattern: release-*
+          merge-multiple: true
+
+      - name: List release files
+        run: |
+          echo "=== Release files ==="
+          ls -la releases/
+          echo "===================="
+
+      - name: Determine version
+        id: version
+        run: |
+          if [ -n "${{ github.event.inputs.version }}" ]; then
+            VERSION="${{ github.event.inputs.version }}"
+          elif [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"  # Remove 'v' prefix
+          else
+            VERSION=$(grep -oP '__version__\s*=\s*["\047]\K[^"\047]+' src/version.py)
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "tag=v${VERSION}" >> $GITHUB_OUTPUT
+          echo "Detected version: ${VERSION}"
+
+      - name: Generate release notes
+        run: |
+          python scripts/generate_notes.py "${{ steps.version.outputs.version }}"
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION_TAG="${{ steps.version.outputs.tag }}"
+          NOTES_FILE="releases/release_notes_${VERSION_TAG}.md"
+          
+          # Build release command
+          RELEASE_ARGS="--title \"ZfDash ${VERSION_TAG}\""
+          
+          if [ "${{ github.event.inputs.draft }}" = "true" ]; then
+            RELEASE_ARGS="${RELEASE_ARGS} --draft"
+          fi
+          
+          # Check if release exists
+          if gh release view "${VERSION_TAG}" > /dev/null 2>&1; then
+            echo "Release ${VERSION_TAG} exists, uploading assets..."
+            gh release upload "${VERSION_TAG}" releases/*.tar.gz releases/*.sha256 --clobber
+          else
+            echo "Creating release ${VERSION_TAG}..."
+            gh release create "${VERSION_TAG}" \
+              --title "ZfDash ${VERSION_TAG}" \
+              --notes-file "${NOTES_FILE}" \
+              ${{ github.event.inputs.draft == 'true' && '--draft' || '' }} \
+              releases/*.tar.gz releases/*.sha256
+          fi
+
+      - name: Release summary
+        run: |
+          echo "## Release Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Version:** ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          for f in releases/*.tar.gz; do
+            if [ -f "$f" ]; then
+              name=$(basename "$f")
+              size=$(stat -c%s "$f" 2>/dev/null || stat -f%z "$f")
+              echo "- \`${name}\` ($(numfmt --to=iec ${size}))" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
