@@ -8,6 +8,7 @@ import urllib.request
 import json
 import ssl
 import os
+import certifi
 from pathlib import Path
 from typing import Optional, Tuple, Dict, Any
 
@@ -110,8 +111,8 @@ def check_for_updates() -> dict:
             }
         )
         
-        # Create SSL context (use default CA certificates)
-        context = ssl.create_default_context()
+        # Create SSL context (use certifi CA certificates for cross-platform reliability)
+        context = ssl.create_default_context(cafile=certifi.where())
         
         with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT, context=context) as response:
             data = json.loads(response.read().decode('utf-8'))
@@ -174,7 +175,7 @@ def fetch_update_instructions(deployment_type: str = "native") -> Dict[str, Any]
             INSTRUCTIONS_URL,
             headers={"User-Agent": f"ZfDash/{__version__}"}
         )
-        context = ssl.create_default_context()
+        context = ssl.create_default_context(cafile=certifi.where())
         
         with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT, context=context) as response:
             instructions_data = json.loads(response.read().decode('utf-8'))
@@ -234,7 +235,7 @@ def get_all_instructions() -> Dict[str, Any]:
             INSTRUCTIONS_URL,
             headers={"User-Agent": f"ZfDash/{__version__}"}
         )
-        context = ssl.create_default_context()
+        context = ssl.create_default_context(cafile=certifi.where())
         
         with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT, context=context) as response:
             instructions_data = json.loads(response.read().decode('utf-8'))

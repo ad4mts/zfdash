@@ -2,9 +2,9 @@
 **(ZFS Management GUI / WEBUI) 💻** (Currently In Testing Phase) 
 # Updating
 
-**To update:** just run the new installer again (it handles upgrades). For Docker, stop and remove the old container before pull/run the new one (instructions below).
+**To update:** just run the new installer again `curl -sSL https://raw.githubusercontent.com/ad4mts/zfdash/main/get-zfdash.sh | bash` (it handles upgrades). For Docker, stop and remove the old container before pull/run the new one (instructions below).
 
-**v1.8.7-beta and later:** Check for updates anytime from the Help menu in the GUI or Web UI.
+**v1.8.7-beta and later:** Check for updates anytime from the Help menu in the GUI or Web UI with newest instructions.
 
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
@@ -32,11 +32,11 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 
 ## ✨ Features
 
-*   🔒 Secure backend daemon (Polkit/`pkexec`) & pipe communication.
+*   🔒 Secure backend daemon (Polkit/`pkexec`) & pipe/socket communication.
 *   💻 Desktop GUI (PySide6) & 🌐 Web UI (Flask/Waitress) with secure login (Flask-Login, PBKDF2).
 *   📊 Pool Management: View status, Create (various vdevs), Destroy, Import, Export, Scrub, Clear errors, Edit structure (Add/Remove/Attach/Detach/Replace/etc.), Force option.
 *   🌳 Dataset/Volume Management: Tree view, Create/Destroy (recursive), Rename, View/Edit properties, Inherit, Promote, Mount/Unmount.
-*   📸 Snapshot Management: View, Create (recursive), Delete, Rollback (DANGEROUS!), Clone.
+*   📸 Snapshot Management: View, Create (recursive), Delete, Rollback, Clone.
 *   🔐 Encryption Support: Create encrypted datasets, View status, Manage keys (Load/Unload/Change).
 *   📜 Utilities: Optional command logging.
 
@@ -53,7 +53,8 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 
 ## ⚙️ Requirements
 
-* **Linux Operating System** (Tested primarily on Fedora 41, should work on other systemd-based distros)
+* **Supported Platforms:** Linux (x86_64 and ARM64).
+* **Experimental/Unsupported:** macOS and FreeBSD are NOT officially supported yet. You may try running from source (Method 2 with --socket mode), but GUI features (PySide6) are disabled on FreeBSD, and ZFS command compatibility is not guaranteed.
 * **ZFS installed and configured** (Tested with zfs-2.3.1. `zfs` and `zpool` commands must be executable by root).
 * **Python 3** (Developed/Tested with 3.10-3.13).
 * **Python Dependencies (for Build/Manual Run only):** Listed in `pyproject.toml` (PySide6 for GUI, Flask, Waitress, Flask-Login for WebUI). The build script uses [uv](https://docs.astral.sh/uv/) for fast, cross-platform dependency management.
@@ -62,20 +63,28 @@ ZfDash provides user interfaces (both a Desktop GUI and a Web UI) built with Pyt
 
 *Default WebUI: http://127.0.0.1:5001, Login: `admin`/`admin` (CHANGE IMMEDIATELY!)*
 
-**Method 1: Pre-Built Release (Desktop/Manual WebUI)**
-1.  Download & Extract Release (`.tar.gz`).
-2.  `cd zfdash-vX.Y.Z`
-3.  `chmod +x install.sh`
-4.  `sudo ./install.sh`
-5.  Launch GUI: App Menu/`zfdash`, Launch Web UI: `zfdash --web [--host <ip>] [--port <num>]`
-6.  Uninstall: `sudo /opt/zfdash/uninstall.sh` (*Note: Installer usually makes this executable*)
+**Method 1: Pre-Built Release (linux `amd64`and `arm64` only for now)**
+Run this command to automatically download and install/update-to the latest version for your system:
+```bash
+curl -sSL https://raw.githubusercontent.com/ad4mts/zfdash/main/get-zfdash.sh | bash
+```
+
+*  Launch GUI: App Menu/`zfdash`, Launch Web UI: `zfdash --web [--host <ip>] [--port <num>]`, Help: `zfdash --help`
+*  Uninstall: `sudo /opt/zfdash/uninstall.sh` (*Note: Installer usually makes this executable*)
+
+
+or download latest release tar for your system and run install.sh.
 
 **Method 2: Run From Source with uv (Cross-Platform)**
 
 1.  Install [uv](https://docs.astral.sh/uv/): `curl -LsSf https://astral.sh/uv/install.sh | sh`
 2.  `git clone https://github.com/ad4mts/zfdash && cd zfdash`
 3.  Run GUI: `uv run src/main.py`
-4.  Run Web UI: `uv run src/main.py --web`
+4.  Run Web UI: `uv run src/main.py --web` or `uv run src/main.py --web --socket` for macos/freebsd> sudo required on these
+
+    **Note:**
+     macOS and FreeBSD are not officially supported yet. Please report issues if you test on these platforms. see: `uv run src/main.py --help`.
+    
 
 * Troubleshooting: If the daemon won't start due to Polkit/policy issues, copy the packaged policy into the system actions directory:
 ```bash
@@ -83,7 +92,7 @@ sudo cp src/data/policies/org.zfsgui.pkexec.daemon.launch.policy /usr/share/polk
 sudo chown root:root /usr/share/polkit-1/actions/org.zfsgui.pkexec.daemon.launch.policy
 sudo chmod 644 /usr/share/polkit-1/actions/org.zfsgui.pkexec.daemon.launch.policy
 ```
-retry `uv run src/main.py --web`.
+then retry.
 
 **Method 3: Build From Source (Desktop/Manual WebUI)**
 1.  `git clone https://github.com/ad4mts/zfdash && cd zfdash`
@@ -165,7 +174,7 @@ ZfDash requires direct access to the host's ZFS subsystem, which presents a secu
 
 **Method 5: Web UI Systemd Service (Headless/Server)**
 Note: (Polkit<0.106 is not supported for now, ie older Distros)
-1.  Install ZfDash via Method 1 or 2 first.
+1.  Install ZfDash via Method 1 or 3 first.
 2.  `cd install_service`
 3.  `chmod +x install_web_service.sh`
 4.  `sudo ./install_web_service.sh` (Follow prompts for setup)

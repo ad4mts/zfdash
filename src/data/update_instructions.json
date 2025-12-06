@@ -28,16 +28,12 @@
     "title": "Native/Binary Installation",
     "steps": [
       {
-        "title": "Download the latest release",
-        "description": "Download the latest release tarball from GitHub Releases"
+        "title": "Automated Update (Recommended)",
+        "command": "curl -sSL https://raw.githubusercontent.com/ad4mts/zfdash/main/get-zfdash.sh | bash"
       },
       {
-        "title": "Uninstall the current version (optional: handeled by installer):",
-        "command": "sudo /opt/zfdash/uninstall.sh"
-      },
-      {
-        "title": "Extract and install the new version",
-        "command": "tar -xzf zfdash-*.tar.gz && chmod +x install.sh && sudo ./install.sh"
+        "title": "Manual Update (Alternative)",
+        "description": "1. Download release from GitHub\n2. Extract: tar -xzf zfdash-*.tar.gz\n3. Run: sudo ./install.sh"
       }
     ],
     "notes": [

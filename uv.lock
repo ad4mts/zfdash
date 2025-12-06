@@ -1,24 +1,10 @@
 version = 1
 revision = 3
 requires-python = ">=3.10"
-resolution-markers = [
-    "sys_platform == 'linux'",
-    "sys_platform == 'darwin'",
-    "sys_platform == 'win32'",
-    "sys_platform == 'freebsd'",
-]
-supported-markers = [
-    "sys_platform == 'linux'",
-    "sys_platform == 'darwin'",
-    "sys_platform == 'win32'",
-    "sys_platform == 'freebsd'",
-]
 required-markers = [
-    "platform_machine == 'x86_64' and sys_platform == 'linux'",
-    "platform_machine == 'aarch64' and sys_platform == 'linux'",
-    "platform_machine == 'x86_64' and sys_platform == 'darwin'",
-    "platform_machine == 'arm64' and sys_platform == 'darwin'",
-    "platform_machine == 'AMD64' and sys_platform == 'win32'",
+    "sys_platform == 'linux'",
+    "sys_platform == 'darwin'",
+    "platform_system == 'FreeBSD'",
 ]
 
 [[package]]
@@ -37,6 +23,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/21/28/9b3f50ce0e048515135495f198351908d99540d69bfdc8c1d15b73dc55ce/blinker-1.9.0.tar.gz", hash = "sha256:b4ce2265a7abece45e7cc896e98dbebe6cead56bcf805a3d23136d145f5445bf", size = 22460, upload-time = "2024-11-08T17:25:47.436Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/10/cb/f2ad4230dc2eb1a74edf38f1a38b9b52277f75bef262d8908e60d957e13c/blinker-1.9.0-py3-none-any.whl", hash = "sha256:ba0efaa9080b619ff2f3459d1d500c57bddea4a6b424b60a91141db6fd2f08bc", size = 8458, upload-time = "2024-11-08T17:25:46.184Z" },
+]
+
+[[package]]
+name = "certifi"
+version = "2025.11.12"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a2/8c/58f469717fa48465e4a50c014a0400602d3c437d7c0c468e17ada824da3a/certifi-2025.11.12.tar.gz", hash = "sha256:d8ab5478f2ecd78af242878415affce761ca6bc54a22a27e026d7c25357c3316", size = 160538, upload-time = "2025-11-12T02:54:51.517Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/70/7d/9bc192684cea499815ff478dfcdc13835ddf401365057044fb721ec6bddb/certifi-2025.11.12-py3-none-any.whl", hash = "sha256:97de8790030bbd5c2d96b7ec782fc2f7820ef8dba6db909ccf95449f2d062d4b", size = 159438, upload-time = "2025-11-12T02:54:49.735Z" },
 ]
 
 [[package]]
@@ -65,7 +60,7 @@ name = "exceptiongroup"
 version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "typing-extensions", marker = "(python_full_version < '3.13' and sys_platform == 'darwin') or (python_full_version < '3.13' and sys_platform == 'freebsd') or (python_full_version < '3.13' and sys_platform == 'linux') or (python_full_version < '3.13' and sys_platform == 'win32')" },
+    { name = "typing-extensions", marker = "python_full_version < '3.13'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/50/79/66800aadf48771f6b62f7eb014e352e5d06856655206165d775e675a02c9/exceptiongroup-1.3.1.tar.gz", hash = "sha256:8b412432c6055b0b7d14c310000ae93352ed6754f70fa8f7c34141f91c4e3219", size = 30371, upload-time = "2025-11-21T23:01:54.787Z" }
 wheels = [
@@ -77,12 +72,12 @@ name = "flask"
 version = "3.1.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "blinker", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "click", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "itsdangerous", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "jinja2", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "markupsafe", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "werkzeug", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "blinker" },
+    { name = "click" },
+    { name = "itsdangerous" },
+    { name = "jinja2" },
+    { name = "markupsafe" },
+    { name = "werkzeug" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/dc/6d/cfe3c0fcc5e477df242b98bfe186a4c34357b4847e87ecaef04507332dab/flask-3.1.2.tar.gz", hash = "sha256:bf656c15c80190ed628ad08cdfd3aaa35beb087855e2f494910aa3774cc4fd87", size = 720160, upload-time = "2025-08-19T21:03:21.205Z" }
 wheels = [
@@ -94,8 +89,8 @@ name = "flask-login"
 version = "0.6.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "flask", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "werkzeug", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "flask" },
+    { name = "werkzeug" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/c3/6e/2f4e13e373bb49e68c02c51ceadd22d172715a06716f9299d9df01b6ddb2/Flask-Login-0.6.3.tar.gz", hash = "sha256:5e23d14a607ef12806c699590b89d0f0e0d67baeec599d75947bf9c147330333", size = 48834, upload-time = "2023-10-30T14:53:21.151Z" }
 wheels = [
@@ -125,7 +120,7 @@ name = "jinja2"
 version = "3.1.6"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markupsafe", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "markupsafe" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/df/bf/f7da0350254c0ed7c72f3e33cef02e048281fec7ecec5f032d4aac52226b/jinja2-3.1.6.tar.gz", hash = "sha256:0137fb05990d35f1275a587e9aee6d56da821fc83491a0fb838183be43f66d6d", size = 245115, upload-time = "2025-03-05T20:05:02.478Z" }
 wheels = [
@@ -137,7 +132,7 @@ name = "macholib"
 version = "1.16.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "altgraph", marker = "sys_platform == 'darwin'" },
+    { name = "altgraph" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/10/2f/97589876ea967487978071c9042518d28b958d87b17dceb7cdc1d881f963/macholib-1.16.4.tar.gz", hash = "sha256:f408c93ab2e995cd2c46e34fe328b130404be143469e41bc366c807448979362", size = 59427, upload-time = "2025-11-22T08:28:38.373Z" }
 wheels = [
@@ -270,13 +265,13 @@ name = "pyinstaller"
 version = "6.17.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "altgraph", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "altgraph" },
     { name = "macholib", marker = "sys_platform == 'darwin'" },
-    { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "packaging" },
     { name = "pefile", marker = "sys_platform == 'win32'" },
-    { name = "pyinstaller-hooks-contrib", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pyinstaller-hooks-contrib" },
     { name = "pywin32-ctypes", marker = "sys_platform == 'win32'" },
-    { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/01/80/9e0dad9c69a7cfd4b5aaede8c6225d762bab7247a2a6b7651e1995522001/pyinstaller-6.17.0.tar.gz", hash = "sha256:be372bd911392b88277e510940ac32a5c2a6ce4b8d00a311c78fa443f4f27313", size = 4014147, upload-time = "2025-11-24T19:43:32.109Z" }
 wheels = [
@@ -298,8 +293,8 @@ name = "pyinstaller-hooks-contrib"
 version = "2025.10"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "setuptools", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "packaging" },
+    { name = "setuptools" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/26/4f/e33132acdb8f732978e577b8a0130a412cbfe7a3414605e3fd380a975522/pyinstaller_hooks_contrib-2025.10.tar.gz", hash = "sha256:a1a737e5c0dccf1cf6f19a25e2efd109b9fec9ddd625f97f553dac16ee884881", size = 168155, upload-time = "2025-11-22T09:34:36.138Z" }
 wheels = [
@@ -311,9 +306,9 @@ name = "pyside6"
 version = "6.8.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyside6-addons", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pyside6-essentials", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "shiboken6", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pyside6-addons" },
+    { name = "pyside6-essentials" },
+    { name = "shiboken6" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/04/8c/2529634d9c6284db1fe7ea12688d5a43ce7abaaba5f5b45c23b2634b1fde/PySide6-6.8.0.2-cp39-abi3-macosx_12_0_universal2.whl", hash = "sha256:cecc6ce1da6cb04542ff5a0887734f63e6ecf54258d1786285b9c7904abd9b01", size = 554051, upload-time = "2024-10-24T12:08:20.348Z" },
@@ -327,8 +322,8 @@ name = "pyside6-addons"
 version = "6.8.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "pyside6-essentials", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "shiboken6", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pyside6-essentials" },
+    { name = "shiboken6" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d1/a3/f44f6ad700a8534cbbb9f72a1cd203417890424ad59920bab76111fc524d/PySide6_Addons-6.8.0.2-cp39-abi3-macosx_12_0_universal2.whl", hash = "sha256:30c9ca570dd18ffbfd34ee95e0a319c34313a80425c4011d6ccc9f4cca0dc4c8", size = 302011435, upload-time = "2024-10-24T12:04:21.838Z" },
@@ -342,7 +337,7 @@ name = "pyside6-essentials"
 version = "6.8.0.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "shiboken6", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "shiboken6" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/1e/57/3210660aff9436429cb2709ed7bdf1808b075f8f6ed47853160e56903621/PySide6_Essentials-6.8.0.2-cp39-abi3-macosx_12_0_universal2.whl", hash = "sha256:3df4ed75bbb74d74ac338b330819b1a272e7f5cec206765c7176a197c8bc9c79", size = 164669671, upload-time = "2024-10-24T12:07:31.368Z" },
@@ -357,12 +352,12 @@ version = "9.0.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "colorama", marker = "sys_platform == 'win32'" },
-    { name = "exceptiongroup", marker = "(python_full_version < '3.11' and sys_platform == 'darwin') or (python_full_version < '3.11' and sys_platform == 'freebsd') or (python_full_version < '3.11' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'win32')" },
-    { name = "iniconfig", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "packaging", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pluggy", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pygments", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "tomli", marker = "(python_full_version < '3.11' and sys_platform == 'darwin') or (python_full_version < '3.11' and sys_platform == 'freebsd') or (python_full_version < '3.11' and sys_platform == 'linux') or (python_full_version < '3.11' and sys_platform == 'win32')" },
+    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+    { name = "iniconfig" },
+    { name = "packaging" },
+    { name = "pluggy" },
+    { name = "pygments" },
+    { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/07/56/f013048ac4bc4c1d9be45afd4ab209ea62822fb1598f40687e6bf45dcea4/pytest-9.0.1.tar.gz", hash = "sha256:3e9c069ea73583e255c3b21cf46b8d3c56f6e3a1a8f6da94ccb0fcf57b9d73c8", size = 1564125, upload-time = "2025-11-12T13:05:09.333Z" }
 wheels = [
@@ -470,7 +465,7 @@ name = "werkzeug"
 version = "3.1.4"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "markupsafe", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "markupsafe" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/45/ea/b0f8eeb287f8df9066e56e831c7824ac6bab645dd6c7a8f4b2d767944f9b/werkzeug-3.1.4.tar.gz", hash = "sha256:cd3cd98b1b92dc3b7b3995038826c68097dcb16f9baa63abe35f20eafeb9fe5e", size = 864687, upload-time = "2025-11-29T02:15:22.841Z" }
 wheels = [
@@ -482,24 +477,26 @@ name = "zfdash"
 version = "1.8.8b0"
 source = { editable = "." }
 dependencies = [
-    { name = "flask", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "flask-login", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pyside6", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "waitress", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "certifi" },
+    { name = "flask" },
+    { name = "flask-login" },
+    { name = "pyside6", marker = "platform_system != 'FreeBSD'" },
+    { name = "waitress" },
 ]
 
 [package.optional-dependencies]
 dev = [
-    { name = "pyinstaller", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pytest", marker = "sys_platform == 'darwin' or sys_platform == 'freebsd' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pyinstaller" },
+    { name = "pytest" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "certifi", specifier = ">=2024.0.0" },
     { name = "flask", specifier = ">=2.0.0" },
     { name = "flask-login", specifier = ">=0.6.0" },
     { name = "pyinstaller", marker = "extra == 'dev'", specifier = ">=6.0.0" },
-    { name = "pyside6", marker = "sys_platform != 'freebsd'", specifier = ">=6.4.0,<6.8.1" },
+    { name = "pyside6", marker = "platform_system != 'FreeBSD'", specifier = ">=6.4.0,<6.8.1" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
     { name = "waitress", specifier = ">=2.0.0" },
 ]

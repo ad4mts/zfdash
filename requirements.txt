@@ -2,6 +2,8 @@
 #    uv pip compile pyproject.toml -o requirements.txt
 blinker==1.9.0
     # via flask
+certifi==2025.11.12
+    # via zfdash (pyproject.toml)
 click==8.3.1
     # via flask
 flask==3.1.2
@@ -19,15 +21,15 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
-pyside6==6.10.1; sys_platform != 'freebsd'
+pyside6==6.8.0.2; platform_system != 'FreeBSD'
     # via zfdash (pyproject.toml)
-pyside6-addons==6.10.1; sys_platform != 'freebsd'
+pyside6-addons==6.8.0.2; platform_system != 'FreeBSD'
     # via pyside6
-pyside6-essentials==6.10.1; sys_platform != 'freebsd'
+pyside6-essentials==6.8.0.2; platform_system != 'FreeBSD'
     # via
     #   pyside6
     #   pyside6-addons
-shiboken6==6.10.1; sys_platform != 'freebsd'
+shiboken6==6.8.0.2; platform_system != 'FreeBSD'
     # via
     #   pyside6
     #   pyside6-addons

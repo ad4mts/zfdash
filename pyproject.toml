@@ -30,7 +30,7 @@ dependencies = [
     # 6.4.0+: Stable Python 3.10-3.12 support, mature Qt 6.4 LTS base
     # <6.8.1: GitHub ARM runners need manylinux_2_31, 6.8.1+ requires manylinux_2_39
     # Note: PySide6 7.x will likely have breaking changes
-    "PySide6>=6.4.0,<6.8.1; sys_platform != 'freebsd'",
+    "PySide6>=6.4.0,<6.8.1; platform_system != 'FreeBSD'",
     
     # Web framework
     # 2.0+: Has all features we use (flash, session, redirect, jsonify)
@@ -45,6 +45,10 @@ dependencies = [
     # Session management for Flask
     # 0.6.0+: Stable API with current_user, login_required, etc.
     "Flask-Login>=0.6.0",
+
+    # SSL Certificate Authority Bundle
+    # Ensures reliable HTTPS requests across all platforms (fixes SSL errors on some systems)
+    "certifi>=2024.0.0",
 ]
 
 [project.urls]
@@ -74,24 +78,29 @@ python-preference = "managed"
 
 # Environments to resolve dependencies for (cross-platform support)
 # Only specify systems; uv will resolve for all architectures automatically
-environments = [
-    "sys_platform == 'linux'",      # All Linux architectures
-    "sys_platform == 'darwin'",     # All macOS architectures
-    "sys_platform == 'win32'",      # All Windows architectures
-    "sys_platform == 'freebsd'",    # All FreeBSD architectures
-]
+# environments = [
+#     "sys_platform == 'linux'",      # All Linux architectures
+#     "sys_platform == 'darwin'",     # All macOS architectures
+#     "sys_platform == 'win32'",      # All Windows architectures
+#     "sys_platform == 'freebsd'",    # All FreeBSD architectures
+# ]
+#examples:    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+#    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+#    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
+#    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+#    "sys_platform == 'win32' and platform_machine == 'AMD64'",
 
 # Required environments: ensures uv finds compatible wheels for all platforms
 # This tells uv to resolve versions that work on ALL these platforms
 # Note: Windows ARM64 excluded - PySide6 <6.8.1 has no win_arm64 wheels
+# "sys_platform == 'freebsd'" didnt work reliably
 required-environments = [
-    "sys_platform == 'linux' and platform_machine == 'x86_64'",
-    "sys_platform == 'linux' and platform_machine == 'aarch64'",
-    "sys_platform == 'darwin' and platform_machine == 'x86_64'",
-    "sys_platform == 'darwin' and platform_machine == 'arm64'",
-    "sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "sys_platform == 'linux'",
+    "sys_platform == 'darwin'",
+    ##"sys_platform == 'win32' and platform_system != 'FreeBSD'", #fix marker overlap
+    "platform_system == 'FreeBSD'",  
 ]
-
+# "sys_platform == 'linux' and platform_machine == 'x86_64'",
 [tool.uv.sources]
 # All packages from PyPI (default)
 
