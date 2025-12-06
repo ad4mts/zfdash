@@ -52,7 +52,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
 
       - name: Install uv
         uses: astral-sh/setup-uv@v4
@@ -89,7 +89,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.13'
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
@@ -130,11 +130,17 @@ jobs:
           VERSION_TAG="${{ steps.version.outputs.tag }}"
           NOTES_FILE="releases/release_notes_${VERSION_TAG}.md"
           
-          # Build release command
-          RELEASE_ARGS="--title \"ZfDash ${VERSION_TAG}\""
-          
-          if [ "${{ github.event.inputs.draft }}" = "true" ]; then
-            RELEASE_ARGS="${RELEASE_ARGS} --draft"
+          # Determine if this should be a draft
+          # - Manual dispatch: use the input value
+          # - Tag push: always draft
+          DRAFT_FLAG=""
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ inputs.draft }}" = "true" ]; then
+              DRAFT_FLAG="--draft"
+            fi
+          else
+            # Tag push - always create as draft
+            DRAFT_FLAG="--draft"
           fi
           
           # Check if release exists
@@ -142,11 +148,11 @@ jobs:
             echo "Release ${VERSION_TAG} exists, uploading assets..."
             gh release upload "${VERSION_TAG}" releases/*.tar.gz releases/*.sha256 --clobber
           else
-            echo "Creating release ${VERSION_TAG}..."
+            echo "Creating release ${VERSION_TAG} as draft..."
             gh release create "${VERSION_TAG}" \
               --title "ZfDash ${VERSION_TAG}" \
               --notes-file "${NOTES_FILE}" \
-              ${{ github.event.inputs.draft == 'true' && '--draft' || '' }} \
+              ${DRAFT_FLAG} \
               releases/*.tar.gz releases/*.sha256
           fi
 
