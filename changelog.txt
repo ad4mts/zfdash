@@ -1,4 +1,10 @@
 # ZfDash Changelog #always use same format
+## v1.8.9-Beta
+*   **Feature** Added `get-zfdash.sh` for automated one-line installation/update.
+*   **Fix** Resolved SSL certificate verification errors by integrating `certifi`.
+*   **Fix** Fixed dependency resolution on FreeBSD (excluded PySide6 correctly).
+*   **Fix** Fixed GitHub Actions ARM builds by adjusting PySide6 version constraints.
+
 ## v1.8.8-Beta
 *   **Refractor** Migrate from Conda to uv for simpler build, manual run and maintain dependencies (#9)
 *   **Fix** fix treeview does not scroll vertically (#14)
