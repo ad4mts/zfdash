@@ -22,6 +22,13 @@ echo " - Polkit policy: ${INSTALL_POLICY_PATH}"
 echo ""
 
 read -p "Are you sure you want to uninstall ZfDash? (y/N): " confirm
+# Check if running non-interactively (e.g. from install script)
+if [ ! -t 0 ]; then
+    # Non-interactive mode: Assume YES for uninstall, but preserve data by default
+    echo "Non-interactive mode detected. Proceeding with uninstall."
+    confirm="y"
+fi
+
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then echo "Uninstall cancelled."; exit 0; fi
 
 # Ask about preserving credentials/config data
@@ -30,7 +37,15 @@ if [ -d "${INSTALL_DATA_DIR}" ]; then
     echo ""
     echo "The data directory contains credentials and configuration:"
     echo "  ${INSTALL_DATA_DIR}"
-    read -p "Do you want to KEEP your credentials and configuration? (Y/n): " keep_data
+    
+    if [ ! -t 0 ]; then
+        # Non-interactive: Default to KEEPING data
+        keep_data="y"
+        echo "Non-interactive mode: Defaulting to KEEP credentials."
+    else
+        read -p "Do you want to KEEP your credentials and configuration? (Y/n): " keep_data
+    fi
+
     if [[ ! "$keep_data" =~ ^[Nn]$ ]]; then
         PRESERVE_DATA=true
         echo "INFO: Credentials and configuration will be preserved."
