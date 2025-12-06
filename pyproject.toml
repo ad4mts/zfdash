@@ -28,8 +28,9 @@ classifiers = [
 dependencies = [
     # GUI framework - Qt6 bindings (not available on FreeBSD)
     # 6.4.0+: Stable Python 3.10-3.12 support, mature Qt 6.4 LTS base
+    # <6.8.1: GitHub ARM runners need manylinux_2_31, 6.8.1+ requires manylinux_2_39
     # Note: PySide6 7.x will likely have breaking changes
-    "PySide6>=6.4.0,<7.0.0; sys_platform != 'freebsd'",
+    "PySide6>=6.4.0,<6.8.1; sys_platform != 'freebsd'",
     
     # Web framework
     # 2.0+: Has all features we use (flash, session, redirect, jsonify)
@@ -82,14 +83,13 @@ environments = [
 
 # Required environments: ensures uv finds compatible wheels for all platforms
 # This tells uv to resolve versions that work on ALL these platforms
-# Note: Only 64-bit platforms included - PySide6 has no 32-bit wheels
+# Note: Windows ARM64 excluded - PySide6 <6.8.1 has no win_arm64 wheels
 required-environments = [
     "sys_platform == 'linux' and platform_machine == 'x86_64'",
     "sys_platform == 'linux' and platform_machine == 'aarch64'",
     "sys_platform == 'darwin' and platform_machine == 'x86_64'",
     "sys_platform == 'darwin' and platform_machine == 'arm64'",
     "sys_platform == 'win32' and platform_machine == 'AMD64'",
-    "sys_platform == 'win32' and platform_machine == 'ARM64'",
 ]
 
 [tool.uv.sources]
