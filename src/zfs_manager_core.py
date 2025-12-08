@@ -11,6 +11,7 @@ import stat # For setting log file permissions
 from typing import List, Dict, Tuple, Optional, Any, Union
 import traceback # Added traceback import
 import utils # <-- Import utils here
+import platform_block_devices  # Cross-platform block device enumeration
 from functools import wraps
 
 # Import constants, config manager, and path functions
@@ -782,142 +783,56 @@ def export_pool(pool_name: str, force: bool = False, *, _log_enabled=False, _use
     if retcode != 0: raise ZfsCommandError(f"Failed to export pool '{pool_name}'.", builder.build(), stderr, retcode)
 
 
-# --- Block Device Listing (Using lsblk JSON) ---
+# --- Block Device Listing (Cross-Platform) ---
 @adapt_common_kwargs
-def list_block_devices(*, _log_enabled=False, _user_uid=-1, **kwargs) -> List[Dict[str, Any]]:
-    """Lists available block devices using lsblk JSON output for robustness.
+def list_block_devices(*, _log_enabled=False, _user_uid=-1, include_all=False, **kwargs) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+    """Lists available block devices for ZFS pool creation.
 
-    linux-only: Uses Linux-specific external command 'lsblk' which is not
-    available on macOS or some BSD systems. The behavior below expects lsblk
-    JSON output format and Linux device names like '/dev/sda', '/dev/nvme...'.
+    Uses the Structured Adapter pattern via platform_block_devices module:
+    - Linux: lsblk --json → Python json
+    - macOS: diskutil list -plist → Python plistlib
+    - FreeBSD: sysctl -b kern.geom.confxml → Python xml.etree
+
+    Args:
+        include_all: If True, returns dict with 'all_devices' and 'devices' keys
+                     for future tree view support. If False (default), returns only
+                     filtered devices list (backward compatible).
+
+    Returns:
+        On success (include_all=False): List of device dicts (filtered)
+        On success (include_all=True): Dict with 'all_devices', 'devices', 'platform'
+        On error: Dict with 'error' key containing error message and 'platform' key
+    
+    See platform_block_devices.list_block_devices() for full documentation.
     """
-    lsblk_path = find_executable("lsblk", ['/usr/bin', '/bin'])  # linux-only: lsblk is Linux-specific
-    if not lsblk_path:
-        print(f"DAEMON_CORE: Error: 'lsblk' command not found. Cannot list block devices.", file=sys.stderr)
-        return [] # Cannot proceed without lsblk
-
-    all_blk_devices = []
-    try:
-        # Use JSON output (-J), parsable paths (-p), no dependencies (-b for bytes?), output specific columns
-        # PATH, SIZE, TYPE, MOUNTPOINT, FSTYPE, PARTLABEL, LABEL, VENDOR, MODEL, SERIAL, WWN, PKNAME (parent kernel name)
-        cmd = [lsblk_path, '-Jpbn', '-o', 'PATH,SIZE,TYPE,MOUNTPOINT,FSTYPE,PARTLABEL,LABEL,VENDOR,MODEL,SERIAL,WWN,PKNAME']
-        # Use _run_command for consistency, but disable logging for this internal helper command
-        # Passphrase args are irrelevant here
-        retcode, stdout, stderr = _run_command(cmd, log_enabled=False, user_uid=_user_uid)
-        if retcode != 0:
-             # Don't raise ZfsCommandError, maybe just log and return empty
-             print(f"DAEMON_CORE: Error running lsblk command (ret={retcode}): {stderr.strip()}", file=sys.stderr)
-             return []
-
-        lsblk_data = json.loads(stdout)
-
-        # Identify devices that are actively mounted (non-ZFS, non-swap) or hold critical types
-        mounted_or_critical_paths = set()
-        critical_fs_types = {'swap', 'crypto_luks', 'lvm2_member'} # Add more if needed
-
-        # Recursive function to process lsblk nodes and determine usability
-        def process_node(node, current_parents):
-            dev_path = node.get('path')
-            dev_type = node.get('type')
-            fstype = node.get('fstype')
-            mountpoint = node.get('mountpoint')
-            pkname = node.get('pkname') # Parent kernel name
-
-            if not dev_path: return # Skip nodes without path
-
-            is_mounted_non_swap = mountpoint and mountpoint != '[SWAP]'
-            is_critical_type = fstype and fstype.lower() in critical_fs_types
-            is_zfs_member = fstype and fstype.lower() == 'zfs_member'
-
-            # Determine if this device itself is blocked
-            is_directly_blocked = is_mounted_non_swap or is_critical_type
-
-            # Check if any parent is blocked (more efficient check later)
-            parent_is_blocked = any(p in mounted_or_critical_paths for p in current_parents)
-
-            # If this device is blocked, mark it and its parents
-            if is_directly_blocked:
-                mounted_or_critical_paths.add(dev_path)
-                for p_path in current_parents:
-                    mounted_or_critical_paths.add(p_path)
-
-            # Store device info if it's a disk or partition
-            if dev_type in ('disk', 'part'):
-                 dev_info = {
-                    'name': dev_path,
-                    'size_bytes': node.get('size'), # Keep as string from lsblk for now
-                    'type': dev_type,
-                    'mountpoint': mountpoint,
-                    'fstype': fstype,
-                    'label': node.get('label') or node.get('partlabel'), # Prefer label over partlabel?
-                    'vendor': node.get('vendor'),
-                    'model': node.get('model'),
-                    'serial': node.get('serial'),
-                    'wwn': node.get('wwn'),
-                    'pkname': pkname,
-                    'is_zfs_member': is_zfs_member,
-                    'is_directly_blocked': is_directly_blocked,
-                    # linux-only: Linux device parent path assumption under /dev (used to link pkname to device path)
-                    'parent_path': f"/dev/{pkname}" if pkname else None # Precompute parent path
-                 }
-                 all_blk_devices.append(dev_info)
-
-            # Recursively process children
-            new_parents = current_parents + [dev_path]
-            if 'children' in node and node['children']:
-                for child_node in node['children']:
-                    process_node(child_node, new_parents)
-
-        # Start processing from top-level devices
-        for top_level_device in lsblk_data.get('blockdevices', []):
-             process_node(top_level_device, [])
-
-    except json.JSONDecodeError as e:
-         print(f"DAEMON_CORE: Error parsing lsblk JSON output: {e}", file=sys.stderr)
-         return []
-    except Exception as e:
-        print(f"DAEMON_CORE: Unexpected error listing block devices: {e}\n{traceback.format_exc()}", file=sys.stderr)
-        return []
-
-    # Filter the collected devices based on collected block status
-    eligible_devices = []
-    for dev in all_blk_devices:
-        # --- Filtering Logic ---
-        # 1. Exclude if it's explicitly a ZFS member
-        if dev['is_zfs_member']: continue
-        # 2. Exclude if it's directly blocked (mounted, critical FS type)
-        if dev['is_directly_blocked']: continue
-        # 3. Exclude if its parent is blocked
-        if dev['parent_path'] and dev['parent_path'] in mounted_or_critical_paths: continue
-        # 4. Exclude certain device types we generally don't want (loop, rom)
-        if dev['type'] in ('loop', 'rom'): continue
-
-        # --- If it passes all checks, format and add it ---
-
-        # Format size for display
-        size_bytes_val = dev.get('size_bytes') # Value from lsblk -b is likely an int
-        size_formatted = "?"
-        if isinstance(size_bytes_val, int):
-            try:
-                # Assuming utils.format_size exists and works correctly
-                size_formatted = utils.format_size(size_bytes_val)
-            except Exception as fmt_e: # Catch potential errors in format_size
-                 print(f"DAEMON_CORE: Warning - format_size failed for {size_bytes_val}: {fmt_e}", file=sys.stderr)
-                 pass # Keep "?" if formatting fails
-        elif size_bytes_val is not None: # Handle unexpected non-int, non-None values
-             size_formatted = str(size_bytes_val)
-
-        # Construct display name
-        display_label = dev.get('label', '') # label or partlabel was already chosen
-        dev['display_name'] = f"{dev['name']} ({size_formatted}) {display_label}".strip()
-
-        # Clean up internal flags before returning
-        del dev['is_directly_blocked']
-        del dev['parent_path']
-        eligible_devices.append(dev)
-
-    eligible_devices.sort(key=lambda x: x.get('name', ''))
-    return eligible_devices
+    result = platform_block_devices.list_block_devices() #default filter
+    if result.error:
+        # Return error info as a dict so callers can display it
+        return {'error': result.error, 'platform': result.platform}
+    
+    if include_all:
+        # Convert DisableReason enum to string for JSON serialization
+        def serialize_device(dev):
+            dev_copy = dict(dev)
+            if 'disable_reason' in dev_copy:
+                dev_copy['disable_reason'] = dev_copy['disable_reason'].name
+            return dev_copy
+        
+        return {
+            'all_devices': [serialize_device(d) for d in result.all_devices],
+            'devices': [serialize_device(d) for d in result.devices],
+            'platform': result.platform,
+        }
+    
+    # Backward compatible: return only filtered list
+    # Also serialize disable_reason for JSON compatibility
+    devices = []
+    for dev in result.devices:
+        dev_copy = dict(dev)
+        if 'disable_reason' in dev_copy:
+            dev_copy['disable_reason'] = dev_copy['disable_reason'].name
+        devices.append(dev_copy)
+    return devices
 
 
 # --- POOL EDITING FUNCTIONS ---
