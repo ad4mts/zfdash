@@ -507,7 +507,70 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
             if escalation_tool:
                 tool_name = os.path.basename(escalation_tool)
                 print(f"IPC: Launching via {tool_name}. Please enter your user password if prompted.")
-            break  # Success, exit the retry loop
+            
+            # Try to connect to socket (inside the retry loop)
+            client_sock = None
+            try:
+                # Use IPC_LAUNCH_CONNECT_TIMEOUT: allows extra time for auth (polkit/sudo)
+                client_sock = connect_to_unix_socket(socket_path, timeout=constants.IPC_LAUNCH_CONNECT_TIMEOUT, check_process=process)
+                print(f"IPC: Connected to daemon socket at {socket_path}")
+
+                # Restore terminal settings if we saved them (posix only)
+                if old_tty_settings and termios:
+                    try:
+                        termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_tty_settings)
+                    except Exception:
+                        pass
+                
+                # Wrap socket in transport
+                transport = SocketTransport(client_sock)
+                buffered_transport = LineBufferedTransport(transport)
+                
+                # Wait for ready signal
+                wait_for_ready_signal(buffered_transport, process)
+                
+                print("IPC: Socket transport created successfully.")
+                return process, buffered_transport
+                
+            except Exception as e:
+                # Clean up socket if partially connected
+                if client_sock:
+                    try:
+                        client_sock.close()
+                    except Exception:
+                        pass
+                
+                # Terminate daemon if started
+                if process and process.poll() is None:
+                    try:
+                        process.terminate()
+                        process.wait(timeout=constants.TERMINATE_SHORT_TIMEOUT)
+                    except Exception:
+                        pass
+                
+                # Check if this is an auth failure (exit codes 126, 127, or 1)
+                exit_code = process.returncode if process else None
+                is_auth_failure = exit_code in (1, 126, 127)
+                
+                if is_auth_failure and escalation_tool:
+                    tried_tools.append(escalation_tool)
+                    last_error = str(e)
+                    tool_name = os.path.basename(escalation_tool)
+                    remaining = len(available_tools) - len(tried_tools)
+                    if remaining > 0:
+                        print(f"IPC: {tool_name} failed (exit {exit_code}), trying next escalation tool ({remaining} remaining)...", file=sys.stderr)
+                        # Clean up stale socket before retry
+                        try:
+                            check_and_remove_stale_socket(socket_path)
+                        except Exception:
+                            pass
+                        continue  # Retry with next tool
+                    else:
+                        raise RuntimeError(f"All privilege escalation tools failed. Last error: {last_error}")
+                
+                # Not an auth failure or no more tools to try
+                print(f"IPC: Socket connection failed: {e}", file=sys.stderr)
+                raise
             
         except Exception as e:
             last_error = str(e)
@@ -516,46 +579,6 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
                 print(f"IPC: Escalation tool {os.path.basename(escalation_tool)} failed: {e}, trying next...", file=sys.stderr)
                 continue
             raise RuntimeError(f"Failed to launch daemon process: {e}") from e
-    
-    # Connect to socket with retry and process monitoring
-    client_sock = None  # Initialize before try block to avoid UnboundLocalError
-    try:
-        # Use IPC_LAUNCH_CONNECT_TIMEOUT and not IPC_CONNECT_TIMEOUT: This allows extra time for auth (polkit/sudo)
-        client_sock = connect_to_unix_socket(socket_path, timeout=constants.IPC_LAUNCH_CONNECT_TIMEOUT, check_process=process)
-        print(f"IPC: Connected to daemon socket at {socket_path}")
-
-        # Restore terminal settings if we saved them (posix only)
-        if old_tty_settings and termios:
-            try:
-                termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_tty_settings)
-            except Exception:
-                pass
-        
-        # Wrap socket in transport
-        transport = SocketTransport(client_sock)
-        buffered_transport = LineBufferedTransport(transport)
-        
-        # Wait for ready signal
-        wait_for_ready_signal(buffered_transport, process)
-        
-        print("IPC: Socket transport created successfully.")
-        return process, buffered_transport
-        
-    except Exception as e:
-        print(f"IPC: Socket connection failed: {e}", file=sys.stderr)
-        if client_sock:
-            try:
-                client_sock.close()
-            except Exception:
-                pass
-        # Terminate daemon if started
-        if process and process.poll() is None:
-            try:
-                process.terminate()
-                process.wait(timeout=constants.TERMINATE_SHORT_TIMEOUT)
-            except Exception:
-                pass
-        raise
 
 
 def _launch_daemon_with_pipes(daemon_path: str, uid: int, gid: int, is_script: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
@@ -651,11 +674,12 @@ def _launch_daemon_with_pipes(daemon_path: str, uid: int, gid: int, is_script: b
         transport = None
         buffered_transport = None
         try:
-            process = subprocess.Popen(
+            process = subprocess.Popen( #sudo ignores this stdin/stdout/stderr and works fine!
                 cmd,
                 stdin=pipe_to_daemon_r,     # Daemon reads from this
                 stdout=pipe_from_daemon_w,  # Daemon writes to this
                 stderr=sys.stderr,          # Inherit stderr to see escalation errors
+                #stderr=subprocess.DEVNULL,  # Suppress stderr (daemon logs elsewhere)
                 env=os.environ.copy(),
             )
             
