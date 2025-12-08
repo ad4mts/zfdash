@@ -241,33 +241,59 @@ class LineBufferedTransport:
 # Platform-Specific Daemon Launcher
 # ============================================================================
 
-def _find_privilege_escalation_tool() -> Optional[str]:
+def _get_privilege_escalation_tools() -> list:
     """
-    Find the appropriate privilege escalation tool for the current platform.
+    Get ordered list of available privilege escalation tools.
     
     Returns:
-        Path to privilege escalation tool (pkexec, doas, sudo)
-        or None if running as root or tool not found.
+        List of paths to privilege escalation tools in preference order:
+        [pkexec, sudo, doas] (only includes tools that exist on system)
+        Returns empty list if running as root.
+    """
+    if os.getuid() == 0:
+        return []  # Already root, no escalation needed
+    
+    tools = []
+    
+    # Linux: pkexec (PolicyKit) - preferred for GUI auth dialog
+    # linux-only: pkexec/PolicyKit is Linux-specific
+    pkexec = shutil.which("pkexec")
+    if pkexec:
+        tools.append(pkexec)
+    
+    # sudo - works in TTY and non-TTY (with -n)
+    sudo = shutil.which("sudo")
+    if sudo:
+        tools.append(sudo)
+    
+    # FreeBSD/OpenBSD: doas
+    doas = shutil.which("doas")
+    if doas:
+        tools.append(doas)
+    
+    return tools
+
+
+def _find_privilege_escalation_tool(exclude: Optional[list] = None) -> Optional[str]:
+    """
+    Find the next available privilege escalation tool.
+    
+    Args:
+        exclude: List of tool paths to skip (used for fallback after auth failure)
+    
+    Returns:
+        Path to privilege escalation tool (pkexec, sudo, doas)
+        or None if running as root or no tool available.
     """
     if os.getuid() == 0:
         return None  # Already root, no escalation needed
     
-    # Linux: pkexec (PolicyKit)  # linux-only: pkexec/PolicyKit is Linux-specific
-    pkexec = shutil.which("pkexec")
-    if pkexec:
-        return pkexec
+    exclude = exclude or []
+    tools = _get_privilege_escalation_tools()
     
-    # Fallback: sudo (less desirable, no GUI prompt)
-    sudo = shutil.which("sudo")
-    if sudo:
-        return sudo
-    
-    # FreeBSD/OpenBSD if there is no sudo: doas
-    doas = shutil.which("doas")
-    if doas:
-        return doas
-    
-
+    for tool in tools:
+        if tool not in exclude:
+            return tool
     
     return None
 
@@ -407,14 +433,12 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
     print(f"IPC: Launching daemon as socket server from: {daemon_path} (script: {is_script})")
     print(f"IPC: User context: UID={uid}, GID={gid}")
     
-    # Find privilege escalation tool
-    escalation_tool = _find_privilege_escalation_tool()
-    if escalation_tool:
-        print(f"IPC: Using privilege escalation: {escalation_tool}")
-    else:
-        if os.getuid() != 0:
-            raise RuntimeError("No privilege escalation tool found. Cannot launch daemon as root.")
-        print("IPC: Running as root, no escalation needed.")
+    # Get available escalation tools for fallback
+    available_tools = _get_privilege_escalation_tools()
+    if not available_tools and os.getuid() != 0:
+        raise RuntimeError("No privilege escalation tool found (pkexec, sudo, doas). Cannot launch daemon as root.")
+    
+    tried_tools = []  # Track failed tools for fallback
     
     # Get socket path from centralized path configuration
     socket_path = get_daemon_socket_path(uid)
@@ -435,38 +459,63 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
         except Exception:
             pass
     
-    # Build daemon command with --listen-socket argument
-    cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script, allow_tty_prompt=allow_tty)
-    cmd.extend(['--listen-socket', socket_path])
-    print(f"IPC: Command: {' '.join(cmd)}")
+    # Try escalation tools with fallback on auth failure
+    last_error = None
+    process = None
     
-    # Launch daemon (it will create and listen on socket)
-    try:
-        # If the caller runs attached to a TTY (e.g. interactive terminal),
-        # keep both stdin and stdout inherited (None) so escalation tools like sudo
-        # can prompt for credentials and display messages. Only do this for socket mode:
-        # pipe mode relies on pipes and must not inherit these.
-        if allow_tty:
-            stdin_arg = None  # inherit parent's stdin/tty
-            stdout_arg = None # inherit parent's stdout/tty
-            print("IPC: Detected caller TTY; inheriting stdin and stdout for daemon (socket mode).")
-        else:
-            stdin_arg = subprocess.DEVNULL
-            stdout_arg = subprocess.DEVNULL
-
-        process = subprocess.Popen(
-            cmd,
-            stdin=stdin_arg,
-            stdout=stdout_arg,
-            stderr=subprocess.DEVNULL,
-            env=os.environ.copy(),
-        )
-        print(f"IPC: Daemon process started (PID: {process.pid}). Waiting for daemon socket/escalation...")
+    while True:
+        escalation_tool = _find_privilege_escalation_tool(exclude=tried_tools)
+        
+        if escalation_tool is None and os.getuid() != 0 and tried_tools:
+            # All tools exhausted after trying at least one
+            raise RuntimeError(f"All privilege escalation tools failed. Last error: {last_error}")
+        elif escalation_tool is None and os.getuid() != 0:
+            raise RuntimeError("No privilege escalation tool found. Cannot launch daemon as root.")
+        
         if escalation_tool:
-            tool_name = os.path.basename(escalation_tool)
-            print(f"IPC: Launching via {tool_name}. Please enter your user password if prompted.")
-    except Exception as e:
-        raise RuntimeError(f"Failed to launch daemon process: {e}") from e
+            print(f"IPC: Using privilege escalation: {escalation_tool}")
+        else:
+            print("IPC: Running as root, no escalation needed.")
+        
+        # Build daemon command with --listen-socket argument
+        cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script, allow_tty_prompt=allow_tty)
+        cmd.extend(['--listen-socket', socket_path])
+        print(f"IPC: Command: {' '.join(cmd)}")
+        
+        # Launch daemon (it will create and listen on socket)
+        try:
+            # If the caller runs attached to a TTY (e.g. interactive terminal),
+            # keep both stdin and stdout inherited (None) so escalation tools like sudo
+            # can prompt for credentials and display messages. Only do this for socket mode:
+            # pipe mode relies on pipes and must not inherit these.
+            if allow_tty:
+                stdin_arg = None  # inherit parent's stdin/tty
+                stdout_arg = None # inherit parent's stdout/tty
+                print("IPC: Detected caller TTY; inheriting stdin and stdout for daemon (socket mode).")
+            else:
+                stdin_arg = subprocess.DEVNULL
+                stdout_arg = subprocess.DEVNULL
+
+            process = subprocess.Popen(
+                cmd,
+                stdin=stdin_arg,
+                stdout=stdout_arg,
+                stderr=subprocess.DEVNULL,
+                env=os.environ.copy(),
+            )
+            print(f"IPC: Daemon process started (PID: {process.pid}). Waiting for daemon socket/escalation...")
+            if escalation_tool:
+                tool_name = os.path.basename(escalation_tool)
+                print(f"IPC: Launching via {tool_name}. Please enter your user password if prompted.")
+            break  # Success, exit the retry loop
+            
+        except Exception as e:
+            last_error = str(e)
+            if escalation_tool:
+                tried_tools.append(escalation_tool)
+                print(f"IPC: Escalation tool {os.path.basename(escalation_tool)} failed: {e}, trying next...", file=sys.stderr)
+                continue
+            raise RuntimeError(f"Failed to launch daemon process: {e}") from e
     
     # Connect to socket with retry and process monitoring
     client_sock = None  # Initialize before try block to avoid UnboundLocalError
@@ -540,94 +589,146 @@ def _launch_daemon_with_pipes(daemon_path: str, uid: int, gid: int, is_script: b
     print(f"IPC: Launching daemon from: {daemon_path} (script: {is_script})")
     print(f"IPC: User context: UID={uid}, GID={gid}")
     
-    # Find privilege escalation tool
-    escalation_tool = _find_privilege_escalation_tool()
-    if escalation_tool:
-        print(f"IPC: Using privilege escalation: {escalation_tool}")
-    else:
-        if os.getuid() != 0:
-            raise RuntimeError(
-                "No privilege escalation tool found (pkexec, doas, sudo). "
-                "Cannot launch daemon as root."
-            )
-        print("IPC: Running as root, no escalation needed.")
-    
-    # Build command
-    cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script)
-    print(f"IPC: Command: {' '.join(cmd)}")
-    
-    # Create pipes
-    pipe_to_daemon_r, pipe_to_daemon_w = -1, -1
-    pipe_from_daemon_r, pipe_from_daemon_w = -1, -1
-    
-    try:
-        # Parent->Daemon pipe (parent writes, daemon reads stdin)
-        pipe_to_daemon_r, pipe_to_daemon_w = os.pipe()
-        # Daemon->Parent pipe (daemon writes stdout, parent reads)
-        pipe_from_daemon_r, pipe_from_daemon_w = os.pipe()
-        
-        print(f"IPC: Pipes created: P->D ({pipe_to_daemon_r},{pipe_to_daemon_w}), "
-              f"D->P ({pipe_from_daemon_r},{pipe_from_daemon_w})")
-        
-    except OSError as e:
-        # Cleanup any created pipes
-        for fd in [pipe_to_daemon_r, pipe_to_daemon_w, 
-                   pipe_from_daemon_r, pipe_from_daemon_w]:
-            if fd != -1:
-                try: os.close(fd)
-                except: pass
-        raise OSError(f"Failed to create communication pipes: {e}") from e
-    
-    # Launch daemon process
-    process = None
-    try:
-        process = subprocess.Popen(
-            cmd,
-            stdin=pipe_to_daemon_r,     # Daemon reads from this
-            stdout=pipe_from_daemon_w,  # Daemon writes to this
-            stderr=subprocess.DEVNULL,  # Suppress stderr (daemon logs elsewhere)
-            env=os.environ.copy(),
+    # Get available escalation tools for fallback
+    available_tools = _get_privilege_escalation_tools()
+    if not available_tools and os.getuid() != 0:
+        raise RuntimeError(
+            "No privilege escalation tool found (pkexec, sudo, doas). "
+            "Cannot launch daemon as root."
         )
+    
+    # Determine if we can allow TTY prompts (for sudo password, etc.)
+    try:
+        allow_tty = sys.stdin.isatty()
+    except Exception:
+        allow_tty = False
+    
+    tried_tools = []  # Track failed tools for fallback
+    last_error = None
+    
+    while True:
+        escalation_tool = _find_privilege_escalation_tool(exclude=tried_tools)
         
-        # Parent closes the ends used by child
-        os.close(pipe_to_daemon_r)
-        os.close(pipe_from_daemon_w)
-        pipe_to_daemon_r = -1
-        pipe_from_daemon_w = -1
+        if escalation_tool is None and os.getuid() != 0 and tried_tools:
+            # All tools exhausted after trying at least one
+            raise RuntimeError(f"All privilege escalation tools failed. Last error: {last_error}")
+        elif escalation_tool is None and os.getuid() != 0:
+            raise RuntimeError("No privilege escalation tool found. Cannot launch daemon as root.")
         
-        print(f"IPC: Daemon launched (PID: {process.pid})")
-        
-        # Create transport wrapper BEFORE waiting for ready signal
-        # This way the FDs are properly wrapped and buffered
-        transport = PipeTransport(pipe_to_daemon_w, pipe_from_daemon_r)
-        buffered_transport = LineBufferedTransport(transport)
-        
-        # Wait for ready signal through the transport
-        wait_for_ready_signal(buffered_transport, process)
-        
-        print("IPC: Transport created successfully.")
-        return process, buffered_transport
-        
-    except Exception as e:
-        print(f"IPC: Error during daemon launch: {e}", file=sys.stderr)
-        
-        # Cleanup pipes
-        for fd in [pipe_to_daemon_r, pipe_to_daemon_w, 
-                   pipe_from_daemon_r, pipe_from_daemon_w]:
-            if fd != -1:
-                try: os.close(fd)
-                except Exception: pass
-        
-        # Terminate daemon if started
-        if process and process.poll() is None:
-            try:
-                process.terminate()
-                process.wait(timeout=constants.TERMINATE_SHORT_TIMEOUT)
-            except Exception:
-                pass
-        
-        # Re-raise appropriate exception
-        if isinstance(e, (RuntimeError, TimeoutError, OSError)):
-            raise
+        if escalation_tool:
+            print(f"IPC: Using privilege escalation: {escalation_tool}")
         else:
-            raise RuntimeError(f"Daemon launch failed: {e}") from e
+            print("IPC: Running as root, no escalation needed.")
+        
+        # Build command
+        cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script, allow_tty_prompt=allow_tty)
+        print(f"IPC: Command: {' '.join(cmd)}")
+        
+        # Create pipes
+        pipe_to_daemon_r, pipe_to_daemon_w = -1, -1
+        pipe_from_daemon_r, pipe_from_daemon_w = -1, -1
+        
+        try:
+            # Parent->Daemon pipe (parent writes, daemon reads stdin)
+            pipe_to_daemon_r, pipe_to_daemon_w = os.pipe()
+            # Daemon->Parent pipe (daemon writes stdout, parent reads)
+            pipe_from_daemon_r, pipe_from_daemon_w = os.pipe()
+            
+            print(f"IPC: Pipes created: P->D ({pipe_to_daemon_r},{pipe_to_daemon_w}), "
+                  f"D->P ({pipe_from_daemon_r},{pipe_from_daemon_w})")
+            
+        except OSError as e:
+            # Cleanup any created pipes
+            for fd in [pipe_to_daemon_r, pipe_to_daemon_w, 
+                       pipe_from_daemon_r, pipe_from_daemon_w]:
+                if fd != -1:
+                    try: os.close(fd)
+                    except: pass
+            raise OSError(f"Failed to create communication pipes: {e}") from e
+        
+        # Launch daemon process
+        process = None
+        transport = None
+        buffered_transport = None
+        try:
+            process = subprocess.Popen(
+                cmd,
+                stdin=pipe_to_daemon_r,     # Daemon reads from this
+                stdout=pipe_from_daemon_w,  # Daemon writes to this
+                stderr=sys.stderr,          # Inherit stderr to see escalation errors
+                env=os.environ.copy(),
+            )
+            
+            # Parent closes the ends used by child
+            os.close(pipe_to_daemon_r)
+            os.close(pipe_from_daemon_w)
+            pipe_to_daemon_r = -1
+            pipe_from_daemon_w = -1
+            
+            print(f"IPC: Daemon launched (PID: {process.pid})")
+            
+            # Create transport wrapper BEFORE waiting for ready signal
+            # This way the FDs are properly wrapped and buffered
+            transport = PipeTransport(pipe_to_daemon_w, pipe_from_daemon_r)
+            # Mark these as owned by transport now (don't double-close)
+            pipe_to_daemon_w = -1
+            pipe_from_daemon_r = -1
+            
+            buffered_transport = LineBufferedTransport(transport)
+            
+            # Wait for ready signal through the transport
+            wait_for_ready_signal(buffered_transport, process)
+            
+            print("IPC: Transport created successfully.")
+            return process, buffered_transport
+            
+        except Exception as e:
+            print(f"IPC: Error during daemon launch: {e}", file=sys.stderr)
+            
+            # Close transport first if it was created (it owns the FDs)
+            if buffered_transport:
+                try:
+                    buffered_transport.close()
+                except Exception:
+                    pass
+            elif transport:
+                try:
+                    transport.close()
+                except Exception:
+                    pass
+            else:
+                # Transport not created, close pipes manually
+                for fd in [pipe_to_daemon_r, pipe_to_daemon_w, 
+                           pipe_from_daemon_r, pipe_from_daemon_w]:
+                    if fd != -1:
+                        try: os.close(fd)
+                        except Exception: pass
+            
+            # Terminate daemon if started
+            if process and process.poll() is None:
+                try:
+                    process.terminate()
+                    process.wait(timeout=constants.TERMINATE_SHORT_TIMEOUT)
+                except Exception:
+                    pass
+            
+            # Check if this is an auth failure (exit codes 126, 127, or 1 for pkexec/sudo)
+            exit_code = process.returncode if process else None
+            is_auth_failure = exit_code in (1, 126, 127)
+            
+            if is_auth_failure and escalation_tool:
+                tried_tools.append(escalation_tool)
+                last_error = str(e)
+                tool_name = os.path.basename(escalation_tool)
+                remaining = len(available_tools) - len(tried_tools)
+                if remaining > 0:
+                    print(f"IPC: {tool_name} failed (exit {exit_code}), trying next escalation tool ({remaining} remaining)...", file=sys.stderr)
+                    continue
+                else:
+                    raise RuntimeError(f"All privilege escalation tools failed. Last error: {last_error}")
+            
+            # Re-raise appropriate exception
+            if isinstance(e, (RuntimeError, TimeoutError, OSError)):
+                raise
+            else:
+                raise RuntimeError(f"Daemon launch failed: {e}") from e
