@@ -56,8 +56,18 @@ def _signal_handler(signum, frame):
     """Handle termination signals."""
     sig_name = signal.Signals(signum).name if hasattr(signal, 'Signals') else str(signum)
     print(f"\nMAIN: Received {sig_name}, shutting down...", file=sys.stderr)
+    
+    # Ensure we break out of any blocking calls if possible
+    # For GUI apps, this might not be enough if the event loop is stuck, 
+    # but it helps for CLI/daemon modes.
+    
     _cleanup()
-    sys.exit(0)
+    
+    # Force exit if cleanup takes too long or hangs
+    # We use os._exit to bypass Python's cleanup handlers which might be stuck
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(0)
 
 def _sigtstp_handler(signum, frame):
     """Handle suspend signal (Ctrl+Z) by ignoring it and warning the user."""

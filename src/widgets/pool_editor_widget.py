@@ -567,8 +567,8 @@ class PoolEditorWidget(QWidget):
     def _select_device_dialog(self, title: str, message: str) -> Optional[str]:
         """Shows a dialog to select an available block device."""
         try:
-            # Use the client instance to list devices
-            devices = self.zfs_client.list_block_devices()
+            # Use the client instance to list devices - now returns dict with 'devices' key
+            result = self.zfs_client.list_block_devices()
         except (ZfsCommandError, ZfsClientCommunicationError, TimeoutError) as e:
             QMessageBox.critical(self, "Error Listing Devices", f"Could not fetch block devices: {e}")
             return None
@@ -576,6 +576,12 @@ class PoolEditorWidget(QWidget):
             QMessageBox.critical(self, "Error", f"Unexpected error listing block devices: {e}")
             return None
 
+        # Handle error in result
+        if result.get('error'):
+            QMessageBox.critical(self, "Error Listing Devices", f"Could not fetch block devices: {result['error']}")
+            return None
+
+        devices = result.get('devices', [])
         if not devices:
              QMessageBox.information(self, "No Devices", "No available block devices found to use.")
              return None
@@ -655,8 +661,9 @@ class PoolEditorWidget(QWidget):
         available_devices = []
         device_map = {}
         try:
-            available_devices = self.zfs_client.list_block_devices()
-            for dev in available_devices:
+            result = self.zfs_client.list_block_devices()
+            devices = result.get('devices', []) if not result.get('error') else []
+            for dev in devices:
                 display_name = dev.get('display_name', dev['name'])
                 device_map[display_name] = dev['name']
                 combo.addItem(display_name, dev['name']) # Store path as data
@@ -818,7 +825,8 @@ class PoolEditorWidget(QWidget):
             # NOTE: This uses the same function as the main pool creation dialog.
             # If the list here is wrong, the problem is likely in the shared
             # zfs_manager.list_block_devices() function or the system state.
-            devices = self.zfs_client.list_block_devices()
+            result = self.zfs_client.list_block_devices()
+            devices = result.get('devices', []) if not result.get('error') else []
             for dev in devices:
                  add_available_devices_map[dev['name']] = dev
                  item_text = dev.get('display_name', dev['name'])

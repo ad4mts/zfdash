@@ -2386,11 +2386,16 @@ function setupCreatePoolModal() {
     apiCall('/api/block_devices')
     .then(result => {
         availableList.innerHTML = ''; // Clear loading
-        if (!result.data || result.data.length === 0) {
+        const devices = result.data?.devices || [];
+        if (result.data?.error) {
+            availableList.innerHTML = `<li class="list-group-item text-danger">Error: ${result.data.error}</li>`;
+            return;
+        }
+        if (devices.length === 0) {
             availableList.innerHTML = '<li class="list-group-item text-muted">No suitable devices found.</li>';
             return;
         }
-        result.data.forEach(dev => {
+        devices.forEach(dev => {
             availableDevicesMap[dev.name] = dev; // Populate map
             const li = document.createElement('li');
             // --- START FIX #3: Add specific class ---
@@ -3515,8 +3520,9 @@ function promptAndExecuteDeviceSelect(title, message, onConfirm, allowMarkOnly =
                       apiCall('/api/block_devices')
                       .then(result => {
                           selectEl.options.length = allowMarkOnly ? 2 : 1;
-                          if (result.data?.length > 0) {
-                              result.data.forEach(dev => {
+                          const devices = result.data?.devices || [];
+                          if (devices.length > 0) {
+                              devices.forEach(dev => {
                                   selectEl.add(new Option(dev.display_name || dev.name, dev.name));
                               });
                               selectEl.options[0].textContent = "Select a device...";

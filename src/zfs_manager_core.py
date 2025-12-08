@@ -785,7 +785,7 @@ def export_pool(pool_name: str, force: bool = False, *, _log_enabled=False, _use
 
 # --- Block Device Listing (Cross-Platform) ---
 @adapt_common_kwargs
-def list_block_devices(*, _log_enabled=False, _user_uid=-1, include_all=False, **kwargs) -> Union[List[Dict[str, Any]], Dict[str, Any]]:
+def list_block_devices(*, _log_enabled=False, _user_uid=-1, **kwargs) -> Dict[str, Any]:
     """Lists available block devices for ZFS pool creation.
 
     Uses the Structured Adapter pattern via platform_block_devices module:
@@ -793,46 +793,32 @@ def list_block_devices(*, _log_enabled=False, _user_uid=-1, include_all=False, *
     - macOS: diskutil list -plist → Python plistlib
     - FreeBSD: sysctl -b kern.geom.confxml → Python xml.etree
 
-    Args:
-        include_all: If True, returns dict with 'all_devices' and 'devices' keys
-                     for future tree view support. If False (default), returns only
-                     filtered devices list (backward compatible).
-
     Returns:
-        On success (include_all=False): List of device dicts (filtered)
-        On success (include_all=True): Dict with 'all_devices', 'devices', 'platform'
-        On error: Dict with 'error' key containing error message and 'platform' key
+        Dict with:
+        - 'all_devices': List of ALL device dicts (for tree view, includes ineligible)
+        - 'devices': List of filtered/eligible device dicts (for pool creation)
+        - 'platform': Platform identifier string
+        - 'error': Error message if failed (only present on error)
     
     See platform_block_devices.list_block_devices() for full documentation.
     """
-    result = platform_block_devices.list_block_devices() #default filter
+    result = platform_block_devices.list_block_devices()  # default filter
+    
     if result.error:
-        # Return error info as a dict so callers can display it
-        return {'error': result.error, 'platform': result.platform}
+        return {'error': result.error, 'platform': result.platform, 'all_devices': [], 'devices': []}
     
-    if include_all:
-        # Convert DisableReason enum to string for JSON serialization
-        def serialize_device(dev):
-            dev_copy = dict(dev)
-            if 'disable_reason' in dev_copy:
-                dev_copy['disable_reason'] = dev_copy['disable_reason'].name
-            return dev_copy
-        
-        return {
-            'all_devices': [serialize_device(d) for d in result.all_devices],
-            'devices': [serialize_device(d) for d in result.devices],
-            'platform': result.platform,
-        }
-    
-    # Backward compatible: return only filtered list
-    # Also serialize disable_reason for JSON compatibility
-    devices = []
-    for dev in result.devices:
+    # Convert DisableReason enum to string for JSON serialization
+    def serialize_device(dev: Dict[str, Any]) -> Dict[str, Any]:
         dev_copy = dict(dev)
         if 'disable_reason' in dev_copy:
             dev_copy['disable_reason'] = dev_copy['disable_reason'].name
-        devices.append(dev_copy)
-    return devices
+        return dev_copy
+    
+    return {
+        'all_devices': [serialize_device(d) for d in result.all_devices],
+        'devices': [serialize_device(d) for d in result.devices],
+        'platform': result.platform,
+    }
 
 
 # --- POOL EDITING FUNCTIONS ---

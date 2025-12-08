@@ -94,9 +94,15 @@ class ZfsManagerClient:
         print("MANAGER_CLIENT: Reader thread started.", file=sys.stderr)
         while not self.shutdown_event.is_set():
             try:
-            # Check if there's data to read using select with a short timeout
+                # Check if there's data to read using select with a short timeout
                 # This allows checking the shutdown_event periodically
-                ready_to_read, _, _ = select.select([self.transport.fileno()], [], [], constants.READER_SELECT_TIMEOUT)
+                try:
+                    ready_to_read, _, _ = select.select([self.transport.fileno()], [], [], constants.READER_SELECT_TIMEOUT)
+                except (ValueError, OSError):
+                    # Handle case where file descriptor is closed/invalid
+                    if not self.shutdown_event.is_set():
+                        print("MANAGER_CLIENT: Transport file descriptor invalid/closed.", file=sys.stderr)
+                    break
 
                 if not ready_to_read:
                     continue # Timeout, loop back to check shutdown_event
@@ -371,14 +377,24 @@ class ZfsManagerClient:
         except (ZfsClientCommunicationError, TimeoutError) as e:
             return False, f"Communication error: {e}", []
 
-    def list_block_devices(self) -> List[Dict[str, Any]]:
+    def list_block_devices(self) -> Dict[str, Any]:
+        """Lists available block devices for ZFS pool creation.
+        
+        Returns:
+            Dict with 'all_devices', 'devices', 'platform' keys.
+            On error, dict includes 'error' key with message.
+        """
         try:
             response = self._send_request("list_block_devices", timeout=constants.CLIENT_REQUEST_TIMEOUT)
-            return response.get("data", [])
+            data = response.get("data", {})
+            # Ensure we always return a proper structure
+            if isinstance(data, dict):
+                return data
+            # Handle unexpected response format gracefully
+            return {'all_devices': [], 'devices': data if isinstance(data, list) else [], 'platform': 'unknown'}
         except (ZfsCommandError, ZfsClientCommunicationError, TimeoutError) as e:
             print(f"MANAGER_CLIENT: Error listing block devices: {e}", file=sys.stderr)
-            # Raise or return empty? Let's raise to signal failure clearly.
-            raise ZfsCommandError(f"Failed to list block devices: {e}") from e
+            return {'error': str(e), 'all_devices': [], 'devices': [], 'platform': 'unknown'}
 
     def shutdown_daemon(self) -> Tuple[bool, str]:
         """Attempts to send the shutdown command to the daemon."""
@@ -430,10 +446,14 @@ class ZfsManagerClient:
 
         # 4. Join reader thread
         if self.reader_thread and self.reader_thread.is_alive():
-            print("MANAGER_CLIENT: Joining reader thread...", file=sys.stderr)
-            self.reader_thread.join(timeout=constants.THREAD_JOIN_TIMEOUT)
-            if self.reader_thread.is_alive():
-                print("MANAGER_CLIENT: Warning: Reader thread did not exit cleanly.", file=sys.stderr)
+            # Only join if we are not calling from the reader thread itself
+            if threading.current_thread() != self.reader_thread:
+                print("MANAGER_CLIENT: Joining reader thread...", file=sys.stderr)
+                self.reader_thread.join(timeout=constants.THREAD_JOIN_TIMEOUT)
+                if self.reader_thread.is_alive():
+                    print("MANAGER_CLIENT: Warning: Reader thread did not exit cleanly.", file=sys.stderr)
+            else:
+                print("MANAGER_CLIENT: Skipping join (called from reader thread).", file=sys.stderr)
         self.reader_thread = None
 
         # 5. Terminate and wait for daemon process (skip if external daemon with pid=0)

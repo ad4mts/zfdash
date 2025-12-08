@@ -137,8 +137,18 @@ class CreatePoolDialog(QDialog):
         self.available_devices_list.clear()
         self._available_devices_map.clear()
         try:
-            # Use the client instance method
-            devices = self.zfs_client.list_block_devices()
+            # Use the client instance method - now returns dict with 'devices' key
+            result = self.zfs_client.list_block_devices() # Dict with devices, all devices, platform
+            
+            # Handle error case
+            if result.get('error'):
+                error_item = QListWidgetItem(f"Error: {result['error']}")
+                error_item.setForeground(QColor(Qt.GlobalColor.red))
+                error_item.setFlags(error_item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEnabled)
+                self.available_devices_list.addItem(error_item)
+                return
+            
+            devices = result.get('devices', [])
             if not devices:
                  # Add placeholder item that is not selectable
                  placeholder_item = QListWidgetItem("No suitable devices found.")
