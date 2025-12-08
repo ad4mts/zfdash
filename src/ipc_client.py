@@ -20,6 +20,10 @@ import socket
 import struct
 import subprocess
 import shutil
+try:
+    import termios
+except ImportError:
+    termios = None
 from paths import get_daemon_socket_path
 from abc import ABC, abstractmethod
 from typing import Optional, Tuple
@@ -422,6 +426,14 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
     
     # Determine if we can allow TTY prompts (for sudo password, etc.)
     allow_tty = sys.stdin.isatty()
+
+    # Save terminal settings if possible (to restore after sudo potentially messes them up, posix only)
+    old_tty_settings = None
+    if allow_tty and termios:
+        try:
+            old_tty_settings = termios.tcgetattr(sys.stdin.fileno())
+        except Exception:
+            pass
     
     # Build daemon command with --listen-socket argument
     cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script, allow_tty_prompt=allow_tty)
@@ -449,7 +461,10 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
             stderr=subprocess.DEVNULL,
             env=os.environ.copy(),
         )
-        print(f"IPC: Daemon launched (PID: {process.pid}), waiting for socket to be ready...")
+        print(f"IPC: Daemon process started (PID: {process.pid}). Waiting for daemon socket/escalation...")
+        if escalation_tool:
+            tool_name = os.path.basename(escalation_tool)
+            print(f"IPC: Launching via {tool_name}. Please enter your user password if prompted.")
     except Exception as e:
         raise RuntimeError(f"Failed to launch daemon process: {e}") from e
     
@@ -459,6 +474,13 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
         # Use IPC_LAUNCH_CONNECT_TIMEOUT and not IPC_CONNECT_TIMEOUT: This allows extra time for auth (polkit/sudo)
         client_sock = connect_to_unix_socket(socket_path, timeout=constants.IPC_LAUNCH_CONNECT_TIMEOUT, check_process=process)
         print(f"IPC: Connected to daemon socket at {socket_path}")
+
+        # Restore terminal settings if we saved them (posix only)
+        if old_tty_settings and termios:
+            try:
+                termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, old_tty_settings)
+            except Exception:
+                pass
         
         # Wrap socket in transport
         transport = SocketTransport(client_sock)
