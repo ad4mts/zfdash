@@ -3,7 +3,7 @@
 from PySide6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QFormLayout, QLineEdit, QComboBox,
     QListWidget, QAbstractItemView, QPushButton, QDialogButtonBox, QMessageBox,
-    QLabel, QGroupBox, QSplitter, QTreeWidget, QTreeWidgetItem,
+    QLabel, QGroupBox, QSplitter, QTreeWidget, QTreeWidgetItem, QTreeWidgetItemIterator, # <-- Added QTreeWidgetItemIterator
     QListWidgetItem, QWidget, QHeaderView, QInputDialog, QCheckBox # <-- Added QCheckBox
 )
 from PySide6.QtCore import Qt, Slot, Signal
@@ -47,7 +47,11 @@ class CreatePoolDialog(QDialog):
         self.zfs_client = zfs_client
         if self.zfs_client is None:
             raise ValueError("ZfsManagerClient instance is required for CreatePoolDialog.")
+        if self.zfs_client is None:
+            raise ValueError("ZfsManagerClient instance is required for CreatePoolDialog.")
         self._available_devices_map: Dict[str, Dict[str, Any]] = {} # Store full device info
+        self._safe_devices = []
+        self._all_devices = []
 
         layout = QVBoxLayout(self)
 
@@ -78,6 +82,13 @@ class CreatePoolDialog(QDialog):
         left_pane_widget = QWidget() # Now defined
         left_layout = QVBoxLayout(left_pane_widget)
         left_layout.addWidget(QLabel("Available Block Devices:"))
+        
+        # Add Show All Checkbox
+        self.show_all_checkbox = QCheckBox("Show All Devices")
+        self.show_all_checkbox.setToolTip("Show all detected block devices (including partitions and potentially unsafe ones).")
+        self.show_all_checkbox.toggled.connect(self._update_device_list_ui)
+        left_layout.addWidget(self.show_all_checkbox)
+
         self.available_devices_list = QListWidget()
         self.available_devices_list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.available_devices_list.setSortingEnabled(True)
@@ -133,60 +144,83 @@ class CreatePoolDialog(QDialog):
         self._populate_available_devices() # Populate the list
 
     def _populate_available_devices(self):
-        """Fetches and displays available block devices."""
-        self.available_devices_list.clear()
+        """Fetches block devices and updates the UI."""
         self._available_devices_map.clear()
         try:
-            # Use the client instance method - now returns dict with 'devices' key
-            result = self.zfs_client.list_block_devices() # Dict with devices, all devices, platform
+            # Fetch devices
+            result = self.zfs_client.list_block_devices()
             
-            # Handle error case
+            # Handle error
             if result.get('error'):
+                self.available_devices_list.clear() # Clear specific list
                 error_item = QListWidgetItem(f"Error: {result['error']}")
                 error_item.setForeground(QColor(Qt.GlobalColor.red))
                 error_item.setFlags(error_item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEnabled)
                 self.available_devices_list.addItem(error_item)
                 return
-            
-            devices = result.get('devices', [])
-            if not devices:
-                 # Add placeholder item that is not selectable
-                 placeholder_item = QListWidgetItem("No suitable devices found.")
-                 placeholder_item.setFlags(placeholder_item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEnabled)
-                 placeholder_item.setForeground(QColor(Qt.GlobalColor.gray))
-                 self.available_devices_list.addItem(placeholder_item)
-                 return
 
-            for dev in devices:
-                 self._available_devices_map[dev['name']] = dev # Store full info
-                 # --- *** IMPORTANT: Formatting now happens in zfs_manager_core *** ---
-                 # Ensure list_block_devices from the client *already* returns formatted display names
-                 # If not, the formatting logic needs to be added here again.
-                 # Assuming zfs_manager_core.list_block_devices formats it:
-                 item_text = dev.get('display_name', f"{dev['name']}")
-                 # Fallback if display_name isn't provided by core:
-                 # size_str = utils.format_size(utils.parse_size(dev.get('size_bytes', 0)))
-                 # item_text = dev.get('display_name', f"{dev['name']} ({size_str})")
-                 # --- *************************************************************** ---
-                 item = QListWidgetItem(item_text)
-                 item.setData(Qt.ItemDataRole.UserRole, dev['name']) # Store path in UserRole
-                 self.available_devices_list.addItem(item)
+            # Store lists
+            self._safe_devices = result.get('devices', [])
+            self._all_devices = result.get('all_devices', [])
+            
+            # Map ALL devices for lookup (so keys exist even if toggled)
+            for dev in self._all_devices:
+                self._available_devices_map[dev['name']] = dev
+
+            # Trigger UI update
+            self._update_device_list_ui()
 
         except (ZfsCommandError, ZfsClientCommunicationError, TimeoutError) as e:
-             # Handle communication or command errors
+             self.available_devices_list.clear()
              print(f"Error populating devices: {e}")
              error_item = QListWidgetItem(f"Error listing devices: {e}")
              error_item.setForeground(QColor(Qt.GlobalColor.red))
              error_item.setFlags(error_item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEnabled)
              self.available_devices_list.addItem(error_item)
         except Exception as e:
-             # Handle other unexpected errors
              import traceback
              print(f"Unexpected error populating devices: {e}\n{traceback.format_exc()}")
+             self.available_devices_list.clear()
              error_item = QListWidgetItem("Unexpected error listing devices!")
              error_item.setForeground(QColor(Qt.GlobalColor.red))
              error_item.setFlags(error_item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEnabled)
              self.available_devices_list.addItem(error_item)
+
+    def _update_device_list_ui(self):
+        """Updates the available devices list based on the checkbox filter."""
+        self.available_devices_list.clear()
+        
+        # Select source list
+        devices = self._all_devices if self.show_all_checkbox.isChecked() else self._safe_devices
+        
+        # Filter out devices that are already used in the VDEV config
+        # (This keeps the list clean if user removed a device from a VDEV) > no duplicates
+
+        
+        current_used_paths = set()
+        iterator = QTreeWidgetItemIterator(self.vdev_tree)
+        while iterator.value():
+            item = iterator.value()
+            path = item.data(0, DEVICE_PATH_ROLE) # Ensure DEVICE_PATH_ROLE is imported/avail
+            if path:
+                current_used_paths.add(path)
+            iterator += 1
+            
+        if not devices:
+             placeholder_item = QListWidgetItem("No suitable devices found.")
+             placeholder_item.setFlags(placeholder_item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEnabled)
+             placeholder_item.setForeground(QColor(Qt.GlobalColor.gray))
+             self.available_devices_list.addItem(placeholder_item)
+             return
+
+        for dev in devices:
+             if dev['name'] in current_used_paths:
+                 continue
+
+             item_text = dev.get('display_name', f"{dev['name']}")
+             item = QListWidgetItem(item_text)
+             item.setData(Qt.ItemDataRole.UserRole, dev['name'])
+             self.available_devices_list.addItem(item)
 
     def _get_min_devices_for_type(self, vdev_type: str) -> int:
         """Returns minimum number of devices for a given vdev type."""
@@ -272,8 +306,13 @@ class CreatePoolDialog(QDialog):
         for list_item in items_to_move:
              device_path = list_item.data(Qt.ItemDataRole.UserRole)
              device_info = self._available_devices_map.get(device_path, {})
-             size_str = utils.format_size(utils.parse_size(device_info.get('size_str', '0')))
+             # Fix for size display: Use size_bytes if available, formatted correctly
+             size_bytes = device_info.get('size_bytes', 0)
+             # fallback to size_str if bytes not present, but parse_size expects string
+             size_str = utils.format_size(utils.parse_size(str(size_bytes))) if size_bytes else utils.format_size(utils.parse_size(device_info.get('size_str', '0')))
+             
              label = device_info.get('label', '')
+             if not label or label == 'None': label = ''
 
              tree_child = QTreeWidgetItem(target_vdev_item)
              tree_child.setText(0, f"  {device_path} {label}".strip())

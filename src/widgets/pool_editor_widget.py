@@ -7,7 +7,7 @@ from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem, QPushButton,
     QMessageBox, QInputDialog, QComboBox, QLabel, QDialog, QDialogButtonBox,
     QHeaderView, QApplication, QAbstractItemView, QSplitter, QListWidget,
-    QListWidgetItem, QLineEdit, QCheckBox # <-- Added QCheckBox
+    QListWidgetItem, QLineEdit, QCheckBox, QTreeWidgetItemIterator # added QTreeWidgetItemIterator
 )
 from PySide6.QtCore import Qt, Signal, Slot
 from PySide6.QtGui import QIcon, QColor, QPalette
@@ -566,9 +566,61 @@ class PoolEditorWidget(QWidget):
 
     def _select_device_dialog(self, title: str, message: str) -> Optional[str]:
         """Shows a dialog to select an available block device."""
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle(title)
+        dialog.setLayout(QVBoxLayout())
+        
+        dialog.layout().addWidget(QLabel(message))
+        
+        combo = QComboBox()
+        dialog.layout().addWidget(combo)
+        
+        show_all_check = QCheckBox("Show All Devices")
+        dialog.layout().addWidget(show_all_check)
+        
+        button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
+        button_box.accepted.connect(dialog.accept)
+        button_box.rejected.connect(dialog.reject)
+        dialog.layout().addWidget(button_box)
+        
+        safe_devices = []
+        all_devices = []
+        device_map = {} # Maps display name -> path
+        
+        def _populate_combo():
+            combo.clear()
+            source = all_devices if show_all_check.isChecked() else safe_devices
+            
+            if not source:
+                 combo.addItem("No available devices found", None)
+                 combo.setEnabled(False)
+                 return
+
+            combo.setEnabled(True)
+            device_map.clear()
+            
+            # Sort source by display name
+            sorted_devs = sorted(source, key=lambda d: d.get('display_name', d['name']))
+            
+            for dev in sorted_devs:
+                name = dev['name']
+                display = dev.get('display_name', name)
+                device_map[display] = name
+                combo.addItem(display, name)
+        
+        show_all_check.toggled.connect(_populate_combo)
+
         try:
-            # Use the client instance to list devices - now returns dict with 'devices' key
             result = self.zfs_client.list_block_devices()
+            if result.get('error'):
+                 QMessageBox.critical(self, "Error Listing Devices", f"Could not fetch block devices: {result['error']}")
+                 return None
+            
+            safe_devices = result.get('devices', [])
+            all_devices = result.get('all_devices', [])
+            _populate_combo()
+            
         except (ZfsCommandError, ZfsClientCommunicationError, TimeoutError) as e:
             QMessageBox.critical(self, "Error Listing Devices", f"Could not fetch block devices: {e}")
             return None
@@ -576,26 +628,9 @@ class PoolEditorWidget(QWidget):
             QMessageBox.critical(self, "Error", f"Unexpected error listing block devices: {e}")
             return None
 
-        # Handle error in result
-        if result.get('error'):
-            QMessageBox.critical(self, "Error Listing Devices", f"Could not fetch block devices: {result['error']}")
-            return None
-
-        devices = result.get('devices', [])
-        if not devices:
-             QMessageBox.information(self, "No Devices", "No available block devices found to use.")
-             return None
-
-        # Create mapping from display name to actual path
-        device_map = {dev.get('display_name', dev['name']): dev['name'] for dev in devices}
-        display_names = sorted(device_map.keys())
-
-        # Use QInputDialog.getItem
-        dev_display, ok = QInputDialog.getItem(self, title, message, display_names, 0, False)
-
-        if ok and dev_display:
-            return device_map[dev_display] # Return the actual path
-        return None # User cancelled or no selection
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            return combo.currentData()
+        return None
 
     @Slot()
     def _attach_device(self):
@@ -658,19 +693,43 @@ class PoolEditorWidget(QWidget):
         layout.addWidget(QLabel(f"Select the new device to replace:\n'{old_device}'"))
         combo = QComboBox()
         combo.addItem("<Mark for replacement only (no new device)>", "") # Use empty string for 'mark only'
-        available_devices = []
-        device_map = {}
+        
+        replace_show_all_check = QCheckBox("Show All Devices")
+        
+        safe_devices = []
+        all_devices = []
+        
+        def _populate_replace_combo():
+            current_data = combo.currentData()
+            combo.clear()
+            combo.addItem("<Mark for replacement only (no new device)>", "")
+            
+            source = all_devices if replace_show_all_check.isChecked() else safe_devices
+            
+            sorted_devs = sorted(source, key=lambda d: d.get('display_name', d['name']))
+            
+            for dev in sorted_devs:
+                 display = dev.get('display_name', dev['name'])
+                 combo.addItem(display, dev['name'])
+            
+            # restore selection if possible
+            if current_data:
+                 idx = combo.findData(current_data)
+                 if idx >= 0: combo.setCurrentIndex(idx)
+
+        replace_show_all_check.toggled.connect(_populate_replace_combo)
+        
         try:
             result = self.zfs_client.list_block_devices()
-            devices = result.get('devices', []) if not result.get('error') else []
-            for dev in devices:
-                display_name = dev.get('display_name', dev['name'])
-                device_map[display_name] = dev['name']
-                combo.addItem(display_name, dev['name']) # Store path as data
+            if not result.get('error'):
+                safe_devices = result.get('devices', [])
+                all_devices = result.get('all_devices', [])
+                _populate_replace_combo()
         except Exception as e:
             QMessageBox.warning(dialog, "Device List Error", f"Could not list available devices: {e}")
 
         layout.addWidget(combo)
+        layout.addWidget(replace_show_all_check) # Add checkbox
         button_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel)
         button_box.accepted.connect(dialog.accept)
         button_box.rejected.connect(dialog.reject)
@@ -821,19 +880,66 @@ class PoolEditorWidget(QWidget):
 
         # --- Populate Available Devices ---
         add_available_devices_map = {}
-        try:
-            # NOTE: This uses the same function as the main pool creation dialog.
-            # If the list here is wrong, the problem is likely in the shared
-            # zfs_manager.list_block_devices() function or the system state.
-            result = self.zfs_client.list_block_devices()
-            devices = result.get('devices', []) if not result.get('error') else []
-            for dev in devices:
+        
+        # Add Show All Checkbox to Left Pane
+        add_show_all_check = QCheckBox("Show All Devices")
+        add_show_all_check.setToolTip("Show all detected block devices.")
+        left_layout.insertWidget(1, add_show_all_check) # Insert after label
+
+        add_safe_devices = []
+        add_all_devices = []
+
+        def _update_add_device_list():
+            add_available_list.clear() # Clear specific list
+            
+            source = add_all_devices if add_show_all_check.isChecked() else add_safe_devices
+            
+            # Map for access by other functions (using ALL so logic works even if not shown)
+            add_available_devices_map.clear()
+            for dev in add_all_devices:
                  add_available_devices_map[dev['name']] = dev
+
+            # Filter out devices already in the tree (similar to CreatePoolDialog)
+            current_used_paths = set()
+            iterator = QTreeWidgetItemIterator(add_vdev_tree)
+            while iterator.value():
+                item = iterator.value()
+                path = item.data(0, local_DEVICE_PATH_ROLE)
+                if path:
+                    current_used_paths.add(path)
+                iterator += 1
+            
+            if not source:
+                 item = QListWidgetItem("No devices found")
+                 item.setFlags(item.flags() & ~Qt.ItemIsSelectable & ~Qt.ItemIsEnabled)
+                 add_available_list.addItem(item)
+                 return
+
+            for dev in source:
+                 if dev['name'] in current_used_paths:
+                     continue
+
                  item_text = dev.get('display_name', dev['name'])
                  item = QListWidgetItem(item_text)
                  item.setData(Qt.ItemDataRole.UserRole, dev['name']) # Store path
                  item.setFlags(Qt.ItemIsEnabled | Qt.ItemIsSelectable) # Ensure selectable
                  add_available_list.addItem(item)
+
+        add_show_all_check.toggled.connect(_update_add_device_list)
+
+        try:
+            # NOTE: This uses the same function as the main pool creation dialog.
+            # If the list here is wrong, the problem is likely in the shared
+            # zfs_manager.list_block_devices() function or the system state.
+            result = self.zfs_client.list_block_devices()
+            if result.get('error'):
+                 error_item = QListWidgetItem(f"Error: {result['error']}")
+                 add_available_list.addItem(error_item)
+            else:
+                 add_safe_devices = result.get('devices', [])
+                 add_all_devices = result.get('all_devices', [])
+                 _update_add_device_list()
+                 
         except Exception as e:
             print(f"Error populating devices for add: {e}")
             error_item = QListWidgetItem("Error listing devices!")
@@ -889,8 +995,12 @@ class PoolEditorWidget(QWidget):
                 if dev_path and dev_path not in current_devices:
                     current_devices.append(dev_path)
                     dev_info = add_available_devices_map.get(dev_path, {})
-                    size_str = utils.format_size(utils.parse_size(dev_info.get('size_str', '0')))
+                    # Fix for size display: Use size_bytes if available
+                    size_bytes = dev_info.get('size_bytes', 0)
+                    size_str = utils.format_size(utils.parse_size(str(size_bytes))) if size_bytes else utils.format_size(utils.parse_size(dev_info.get('size_str', '0')))
+                    
                     label = dev_info.get('label', '')
+                    if not label or label == 'None': label = ''
                     child = QTreeWidgetItem(target_vdev_item)
                     child.setText(0, f"  {dev_path} {label}".strip())
                     child.setText(1, size_str)

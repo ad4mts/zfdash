@@ -34,7 +34,13 @@ export function handleCreatePool() {
         <h6>Pool Layout</h6>
         <div class="row">
             <div class="col-md-5">
-                <label class="form-label">Available Devices:</label>
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <label class="form-label mb-0">Available Devices:</label>
+                    <div class="form-check form-check-sm mb-0">
+                        <input class="form-check-input" type="checkbox" id="pool-show-all-devices-check">
+                        <label class="form-check-label small" for="pool-show-all-devices-check">Show All</label>
+                    </div>
+                </div>
                 <ul id="pool-available-devices" class="list-group list-group-flush border rounded" style="max-height: 200px; overflow-y: auto;">${availableDevicesHtml}</ul>
             </div>
             <div class="col-md-1 d-flex flex-column align-items-center justify-content-center">
@@ -46,8 +52,12 @@ export function handleCreatePool() {
                 <div id="pool-vdev-config" class="border rounded p-1 bg-light" style="min-height: 150px;">
                     <ul class="list-unstyled mb-0" id="pool-vdev-list"></ul>
                 </div>
-                <div class="text-end mt-1">
-                    <button type="button" id="pool-add-vdev-btn" class="btn btn-sm btn-success"><i class="bi bi-plus-circle"></i> Add VDEV Type</button>
+                <div class="input-group input-group-sm justify-content-end mt-1">
+                    <select class="form-select form-select-sm" id="pool-vdev-type-select" style="max-width: 150px;">
+                        ${VDEV_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
+                        <option value="custom">Custom...</option>
+                    </select>
+                    <button type="button" id="pool-add-vdev-btn" class="btn btn-sm btn-success"><i class="bi bi-plus-circle"></i> Add VDEV</button>
                 </div>
             </div>
         </div>
@@ -62,7 +72,7 @@ export function handleCreatePool() {
 export function setupCreatePoolModal() {
     const availableList = document.getElementById('pool-available-devices');
     const vdevList = document.getElementById('pool-vdev-list');
-    
+
     // Store map on modal body
     const modalBody = document.getElementById('actionModalBody');
     if (!modalBody) {
@@ -73,7 +83,11 @@ export function setupCreatePoolModal() {
     availableDevicesMap = modalBody.modalAvailableDevicesMap;
 
     // Add event listeners
-    document.getElementById('pool-add-vdev-btn')?.addEventListener('click', () => addVdevTypeToPoolConfig(vdevList));
+    document.getElementById('pool-add-vdev-btn')?.addEventListener('click', () => {
+        const selectEl = document.getElementById('pool-vdev-type-select');
+        const type = selectEl ? selectEl.value : null;
+        addVdevTypeToPoolConfig(vdevList, type);
+    });
     document.getElementById('pool-add-device-btn')?.addEventListener('click', () => addDeviceToPoolVdev(availableList, vdevList, availableDevicesMap));
     document.getElementById('pool-remove-device-btn')?.addEventListener('click', () => {
         const selectedVdev = getSelectedPoolVdev(vdevList);
@@ -89,31 +103,77 @@ export function setupCreatePoolModal() {
     });
 
     // Fetch available devices
+    // Checkbox listener
+    const showAllCheck = document.getElementById('pool-show-all-devices-check');
+    if (showAllCheck) {
+        showAllCheck.addEventListener('change', () => renderAvailableDevices());
+    }
+
+    // Helper to render devices
+    function renderAvailableDevices() {
+        const showAll = showAllCheck ? showAllCheck.checked : false;
+        const sourceDevices = showAll ? (modalBody.allDevices || []) : (modalBody.safeDevices || []);
+
+        // Filter out devices already in the vdev config
+        const usedPaths = new Set();
+        vdevList.querySelectorAll('.pool-vdev-device-item').forEach(li => {
+            usedPaths.add(li.dataset.path);
+        });
+
+        availableList.innerHTML = '';
+
+        if (sourceDevices.length === 0) {
+            availableList.innerHTML = '<li class="list-group-item text-muted">No devices found.</li>';
+            return;
+        }
+
+        const filteredDevices = sourceDevices.filter(d => !usedPaths.has(d.name));
+
+        if (filteredDevices.length === 0) {
+            availableList.innerHTML = '<li class="list-group-item text-muted">No suitable devices available.</li>';
+            return;
+        }
+
+        filteredDevices.forEach(dev => {
+            // Update map just in case
+            availableDevicesMap[dev.name] = dev;
+
+            const li = document.createElement('li');
+            li.className = 'list-group-item list-group-item-action py-1 pool-device-item';
+            // Use display_name if available
+            li.textContent = dev.display_name || dev.name;
+            li.dataset.path = dev.name;
+            li.onclick = (e) => e.currentTarget.classList.toggle('active');
+            availableList.appendChild(li);
+        });
+
+        // Sort
+        const items = Array.from(availableList.children);
+        items.sort((a, b) => a.textContent.localeCompare(b.textContent));
+        availableList.innerHTML = '';
+        items.forEach(item => availableList.appendChild(item));
+    }
+
+    // Fetch available devices
     apiCall('/api/block_devices')
         .then(result => {
             availableList.innerHTML = '';
-            const devices = result.data?.devices || [];
             if (result.data?.error) {
                 availableList.innerHTML = `<li class="list-group-item text-danger">Error: ${result.data.error}</li>`;
                 return;
             }
-            if (devices.length === 0) {
-                availableList.innerHTML = '<li class="list-group-item text-muted">No suitable devices found.</li>';
-                return;
-            }
-            devices.forEach(dev => {
+
+            // Store both lists
+            modalBody.safeDevices = result.data?.devices || [];
+            modalBody.allDevices = result.data?.all_devices || [];
+
+            // Initial population of the map (using all devices so lookups work)
+            (modalBody.allDevices).forEach(dev => {
                 availableDevicesMap[dev.name] = dev;
-                const li = document.createElement('li');
-                li.className = 'list-group-item list-group-item-action py-1 pool-device-item';
-                li.textContent = dev.display_name || dev.name;
-                li.dataset.path = dev.name;
-                li.onclick = (e) => e.currentTarget.classList.toggle('active');
-                availableList.appendChild(li);
             });
-            const items = Array.from(availableList.children);
-            items.sort((a, b) => a.textContent.localeCompare(b.textContent));
-            availableList.innerHTML = '';
-            items.forEach(item => availableList.appendChild(item));
+
+            // Initial Render
+            renderAvailableDevices();
         })
         .catch(error => {
             availableList.innerHTML = `<li class="list-group-item text-danger">Error loading devices: ${error.message}</li>`;
@@ -124,10 +184,18 @@ export function setupCreatePoolModal() {
  * Add VDEV type to pool config
  * Exported for use by pool-edit-actions.js
  */
-export function addVdevTypeToPoolConfig(vdevList) {
-    const vdevType = prompt(`Select VDEV Type:\n(${VDEV_TYPES.join(', ')})`, 'disk');
-    if (vdevType && VDEV_TYPES.includes(vdevType.toLowerCase())) {
+export function addVdevTypeToPoolConfig(vdevList, vdevType = null) {
+    if (!vdevType || vdevType === 'custom') {
+        vdevType = prompt(`Select VDEV Type:\n(${VDEV_TYPES.join(', ')})`, 'disk');
+    }
+    // Allow custom types if manually entered, but prefer standard list validation
+    if (vdevType) {
         const type = vdevType.toLowerCase();
+        // Warn if unknown but allow (ZFS is flexible, or future types)
+        if (!VDEV_TYPES.includes(type)) {
+            console.log(`Note: Using non-standard VDEV type '${type}'`);
+        }
+
         const vdevId = `vdev-${type}-${Date.now()}`;
         const li = document.createElement('li');
         li.className = 'list-group-item py-1 pool-vdev-item mb-1';
@@ -141,14 +209,14 @@ export function addVdevTypeToPoolConfig(vdevList) {
                 </button>
             </div>
             <ul class="list-unstyled ps-3 mb-0 device-list-in-vdev"></ul>`;
-        
+
         li.onclick = (e) => {
             if (e.target.classList.contains('pool-vdev-item') || e.target.closest('.d-flex')) {
                 vdevList.querySelectorAll('.pool-vdev-item.active, .pool-vdev-device-item.active').forEach(el => el.classList.remove('active'));
                 li.classList.add('active');
             }
         };
-        
+
         li.querySelector('.remove-vdev-btn').onclick = (e) => {
             e.stopPropagation();
             const availableListEl = document.getElementById('pool-available-devices');
@@ -156,7 +224,7 @@ export function addVdevTypeToPoolConfig(vdevList) {
             const map = modalBody?.modalAvailableDevicesMap || {};
             removeVdevFromPoolConfig(li, availableListEl, map);
         };
-        
+
         vdevList.appendChild(li);
     } else if (vdevType !== null) {
         alert("Invalid VDEV type selected.");
@@ -247,7 +315,7 @@ export function removeDeviceFromPoolVdev(availableList, vdevList, devicesMap) {
     availLi.dataset.path = path;
     availLi.onclick = (e) => e.currentTarget.classList.toggle('active');
     availableList.appendChild(availLi);
-    
+
     // Re-sort
     const items = Array.from(availableList.children);
     items.sort((a, b) => a.textContent.localeCompare(b.textContent));
@@ -272,7 +340,7 @@ export function removeVdevFromPoolConfig(vdevLiToRemove, availableList, devicesM
         availLi.onclick = (e) => e.currentTarget.classList.toggle('active');
         availableList.appendChild(availLi);
     });
-    
+
     // Re-sort
     const items = Array.from(availableList.children);
     items.sort((a, b) => a.textContent.localeCompare(b.textContent));
@@ -449,10 +517,10 @@ function setupImportPoolModal() {
                 a.innerHTML = `
                     <div class="d-flex w-100 justify-content-between">
                         <h6 class="mb-1">${pool.name}</h6>
-                        <small class="${pool.state !== 'ONLINE' ? 'text-danger fw-bold': 'text-muted'}">${pool.state || '?'}</small>
+                        <small class="${pool.state !== 'ONLINE' ? 'text-danger fw-bold' : 'text-muted'}">${pool.state || '?'}</small>
                     </div>
                     <p class="mb-1"><small>ID: ${pool.id || 'N/A'}</small></p>
-                    ${pool.action ? `<small class="text-info">${pool.action}</small>`: ''}
+                    ${pool.action ? `<small class="text-info">${pool.action}</small>` : ''}
                 `;
                 a.onclick = (e) => {
                     e.preventDefault();
