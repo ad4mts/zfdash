@@ -294,7 +294,8 @@ if __name__ == "__main__":
             else:
                 # GUI Mode (Default)
                 import gui_runner
-                gui_runner.start_gui(zfs_client=zfs_manager_client)
+                exit_code = gui_runner.start_gui(zfs_client=zfs_manager_client)
+                sys.exit(exit_code)
 
         except ImportError as e:
             _show_startup_error("Import Error", f"Failed to import required {mode} components:\n{e}")

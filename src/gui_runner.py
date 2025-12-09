@@ -102,6 +102,16 @@ def start_gui(zfs_client: ZfsManagerClient):
         sys.exit(1)
 
     # --- Start Event Loop ---
-    sys.exit(app.exec())
+    exit_code = app.exec()
+
+    # --- Cleanup ---
+    # Explicitly delete Python references to Qt objects to encourage destruction
+    # BEFORE Python's shutdown phase (Py_Finalize).
+    try:
+        del main_win
+    except NameError:
+        pass
+    
+    return exit_code
 
 # --- END OF FILE src/gui_runner.py ---
