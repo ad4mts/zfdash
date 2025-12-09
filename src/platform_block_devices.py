@@ -374,6 +374,7 @@ def _list_block_devices_linux() -> tuple:
 
             # Only include disk and part types
             if dev_type in ('disk', 'part'):
+                # print(f"DEBUG: {dev_path} | Type: '{dev_type}' | FSType: '{fstype}' | Reason: {disable_reason}")
                 device = _make_device_dict(
                     name=dev_path,
                     size_bytes=node.get('size'),
@@ -468,7 +469,8 @@ def _list_block_devices_macos(
                 continue
             
             size_bytes = disk_info.get('TotalSize') or disk_info.get('Size', 0)
-            fstype = disk_info.get('FilesystemType', '') or disk_info.get('Content', '')
+            content = disk_info.get('Content', '')
+            fstype = disk_info.get('FilesystemType', '') or content
             mountpoint = disk_info.get('MountPoint', '')
             is_virtual = disk_info.get('VirtualOrPhysical', '') == 'Virtual'
             media_name = disk_info.get('MediaName', '')
@@ -491,10 +493,14 @@ def _list_block_devices_macos(
                 disable_reason = DisableReason.MOUNTED
             elif fstype:
                 fstype_lower = fstype.lower()
-                if 'zfs' in fstype_lower:
+                if 'zfs' in fstype_lower or 'linux filesystem' in fstype_lower:
                     disable_reason = DisableReason.ZFS_MEMBER
+                elif 'efi' in content.lower():
+                    disable_reason = DisableReason.SYSTEM_DISK
                 elif any(fs in fstype_lower for fs in CRITICAL_FS_MACOS):
                     disable_reason = DisableReason.CRITICAL_FS
+
+            # print(f"DEBUG: {dev_path} | Content: '{content}' | FSType: '{fstype}' | Reason: {disable_reason}")
 
             device = _make_device_dict(
                 name=dev_path,
@@ -512,7 +518,7 @@ def _list_block_devices_macos(
             )
             all_devices.append(device)
 
-        # Apply parent blocking
+        # Apply parent blocking (only adds PARENT_BLOCKED as disable reason)
         _apply_parent_blocking(all_devices)
 
     except plistlib.InvalidFileException as e:
@@ -617,6 +623,8 @@ def _list_block_devices_freebsd(
                         if is_mounted:
                             disable_reason = DisableReason.MOUNTED
 
+                        # print(f"DEBUG: {dev_path} | Type: 'DISK' | Model: '{info.get('model')}' | Reason: {disable_reason}")
+
                         device = _make_device_dict(
                             name=dev_path,
                             size_bytes=size_bytes,
@@ -666,6 +674,8 @@ def _list_block_devices_freebsd(
                             disable_reason = DisableReason.ZFS_MEMBER
                         elif part_type_lower in CRITICAL_FS_FREEBSD:
                             disable_reason = DisableReason.CRITICAL_FS
+
+                        # print(f"DEBUG: {dev_path} | Type: 'PART' | FSType: '{part_type}' | Reason: {disable_reason}")
 
                         device = _make_device_dict(
                             name=dev_path,
