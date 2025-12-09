@@ -143,7 +143,7 @@ if __name__ == "__main__":
     client_group.add_argument('-w', '--web', action='store_true', help='Run the Web UI (serve the web interface).')
     client_group.add_argument('--host', default='127.0.0.1', help='Host/IP to bind the Web UI server.')
     client_group.add_argument('-p', '--port', default=5001, type=int, help='Port to bind the Web UI server.')
-    client_group.add_argument('--debug', action='store_true', help='Enable debug mode for the Web UI server (verbose logging).')
+    client_group.add_argument('--debug', action='store_true', help='Enable debug mode with verbose logging (affects both client and daemon).')
     client_group.add_argument('--socket', action='store_true', help='Use Unix socket IPC instead of pipes, and launch daemon automatically (experimental).')
     client_group.add_argument('--connect-socket', type=str, metavar='PATH', nargs='?', const='',
                               help='Connect to existing daemon socket instead of launching one. If PATH not specified, uses default from get_daemon_socket_path(uid).')
@@ -266,7 +266,7 @@ if __name__ == "__main__":
             print(f"MAIN: {mode} mode requested. Launching dedicated daemon...", file=sys.stderr)
             try:
                 print("MAIN: Launching daemon...", file=sys.stderr)
-                daemon_process, transport = launch_daemon(use_socket=args.socket)
+                daemon_process, transport = launch_daemon(use_socket=args.socket, debug=args.debug)
                 _daemon_process = daemon_process  # Register for cleanup (before client created)
                 print(f"MAIN: Daemon launched successfully (PID: {daemon_process.pid}). Creating client...", file=sys.stderr)
 

@@ -1,4 +1,17 @@
 # ZfDash Changelog #always use same format
+## v1.9.0-beta
+*   **Feature:** GUI/WebUI: Added checkboxes to show all block devices (disable safety filters for advanced users).
+*   **Feature:** WebUI: Improved adding VDEV types with better UI controls.
+*   **Feature:** Cross-platform block device listing for Linux, macOS, and FreeBSD.
+*   **Feature:** Privilege escalation fallbacks with improved sudo support for pipe mode.
+*   **Feature:** Docker: Added Docker support for Linux arm64 and x86_64.
+*   **Improvement:** Experimental support for macOS and FreeBSD when running from source with uv.
+*   **Improvement:** Better sudo prompts on FreeBSD/macOS with proper terminal settings restoration.
+*   **Fix:** Block device filter fix for macOS compatibility.
+*   **Fix:** Socket mode fallback when pkexec authentication fails.
+*   **Fix:** Reader thread join handling for platform block devices.
+*   **Fix:** Attempted fix for harmless segmentation fault at exit when built with GitHub runner.
+
 ## v1.8.10-beta
 *   **Improvement** Better signal handling and cleanup to prevent zombie processes.
 *   **Improvement** New improved installation scripts (install.sh and uninstall.sh) that handle upgrades and user data correctly.

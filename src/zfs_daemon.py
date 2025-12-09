@@ -20,7 +20,7 @@ from zfs_manager_core import ZfsCommandError
 try:
     import config_manager
     # --- ADD IMPORT FOR PASSWORD FUNC --- (and default creation)
-    from config_manager import update_user_password, create_default_credentials_if_missing
+    from config_manager import update_user_password, create_default_credentials_if_missing, ensure_flask_secret_key
     # Import log path function from paths module
     from paths import get_daemon_log_file_path
 except ImportError as e:
@@ -32,6 +32,7 @@ except ImportError as e:
         return f"/tmp/{log_name}.err"
     def update_user_password(u, p): print("DAEMON: ERROR - Dummy update_user_password called!", file=sys.stderr); return False
     def create_default_credentials_if_missing(): print("DAEMON: ERROR - Dummy create_default_credentials_if_missing called!", file=sys.stderr)
+    def ensure_flask_secret_key(uid, gid): print("DAEMON: ERROR - Dummy ensure_flask_secret_key called!", file=sys.stderr); return False
 
 
 # Removed SOCKET_NAME, SOCKET_PATH constants
@@ -153,78 +154,97 @@ def main():
     target_uid = args.uid
     target_gid = args.gid
 
+    # -----------------------------
+    # --- Unified Logging Setup ---
+    # -----------------------------
+    original_stderr = sys.stderr
+
+    class Tee:
+        def __init__(self, *files): self.files = files
+        def write(self, d): 
+            for f in self.files: 
+                try: f.write(d); f.flush() 
+                except: pass
+        def flush(self): 
+            for f in self.files: 
+                try: f.flush() 
+                except: pass
+
+    try:
+        log_path = get_daemon_log_file_path(target_uid, DAEMON_STDERR_FILENAME)
+        try:
+            if os.path.exists(log_path):
+                os.remove(log_path)
+        except OSError:
+            pass
+        
+        log_f = open(log_path, 'w', buffering=1, encoding='utf-8', errors='replace')
+        try:
+            os.chmod(log_path, 0o666)
+        except OSError:
+            pass
+        
+        # Redirect stderr: Debug -> Tee(Term, File); Normal -> File
+        sys.stderr = Tee(original_stderr, log_f) if args.debug else log_f
+    except Exception as e:
+        print(f"DAEMON: Log setup failed: {e}", file=original_stderr)
+        log_path = "terminal fallback"
+
+    def log(msg, level="INFO"):
+        txt = f"DAEMON [{level}]: {msg}"
+        # Write to system stderr (handles routing to file and optional debug terminal)
+        print(txt, file=sys.stderr)
+        
+        # Critical override: Force terminal for errors if not already in debug mode
+        if not args.debug and level in ("ERROR", "CRITICAL") and sys.stderr != original_stderr:
+             try:
+                 print(txt, file=original_stderr)
+             except:
+                 pass
+
+    log(f"Logging to {log_path}" + (" + terminal" if args.debug else ""), "INFO")
+
+    # ---------------------
+
     # Handle default socket path if --listen-socket flag present without path
     if args.listen_socket == '':
         from paths import get_daemon_socket_path
         args.listen_socket = get_daemon_socket_path(target_uid)
-        print(f"DAEMON: Using default socket path: {args.listen_socket}", file=sys.stderr)
+        log(f"Using default socket path: {args.listen_socket}", "INFO")
 
-    # --- Setup stderr logging: Write to BOTH terminal and log file ---
-    original_stderr = sys.stderr
-
-    # Simple wrapper that writes to multiple destinations
-    class Tee:
-        def __init__(self, *files):
-            self.files = files
-        def write(self, data):
-            for f in self.files:
-                try: f.write(data); f.flush()
-                except: pass
-        def flush(self):
-            for f in self.files:
-                try: f.flush()
-                except: pass
-
-    try:
-        # Compute path for daemon stderr logs using centralized helper; use the
-        # target UID (args.uid) so stderr/log files are colocated with the
-        # user's runtime directory alongside sockets/logs.
-        stderr_log_path = get_daemon_log_file_path(target_uid, DAEMON_STDERR_FILENAME)
-        try: os.remove(stderr_log_path)  # Remove old log (avoid permission errors)
-        except: pass
-        log_file = open(stderr_log_path, 'w', buffering=1, encoding='utf-8', errors='replace')
-        try:
-            os.chmod(stderr_log_path, 0o666)  # Readable by all for debugging
-        except Exception:
-            pass
-        # Enable Tee if --debug flag is present
-        ENABLE_TEE = args.debug
-        if ENABLE_TEE:
-            sys.stderr = Tee(original_stderr, log_file)  # Send stderr to both terminal and file
-            print(f"DAEMON: Logging stderr to {stderr_log_path} + terminal", file=sys.stderr)
-        else:
-            # Send stderr to file only; avoid printing to user's terminal.
-            sys.stderr = log_file
-    except Exception as e:
-        print(f"DAEMON: Logging stderr setup failed: {e}", file=original_stderr)
-    # --- End logging setup ---
-
-    # Initial Checks
+    # Initial checks with proper log levels
     if os.geteuid() != 0:
-        print("DAEMON: Error - Must run as root.", file=sys.stderr)
+        log("Must run as root", "CRITICAL")
         sys.exit(1)
     if not zfs_manager_core.ZFS_CMD_PATH or not zfs_manager_core.ZPOOL_CMD_PATH:
-        print("DAEMON: Error - zfs/zpool command not found.", file=sys.stderr)
+        log("zfs/zpool command not found", "CRITICAL")
         sys.exit(1)
     if target_uid < 0 or target_gid < 0:
-        print(f"DAEMON: Error - Invalid UID ({target_uid}) or GID ({target_gid}) received.", file=sys.stderr)
+        log(f"Invalid UID ({target_uid}) or GID ({target_gid}) received", "CRITICAL")
         sys.exit(1)
 
     # Determine paths based on the target user UID
     daemon_log_file_path = get_daemon_log_file_path(target_uid)
-    print(f"DAEMON: Using log file path (for ZfsManagerCore): {daemon_log_file_path}", file=sys.stderr)
+    log(f"Using log file path (for ZfsManagerCore): {daemon_log_file_path}", "INFO")
 
     # --- Ensure default credentials file exists (create if missing) ---
     # This is done by the daemon (root) as it has permissions
     create_default_credentials_if_missing()
-    # --- End Credentials Check ---
+    # --- Ensure Flask Secret Key exists ---
+    # Daemon (root) creates it with ownership set to target_uid (WebUI user)
+    # This fixes permissions issues when running from source
+    if ensure_flask_secret_key(target_uid, target_gid):
+         log("Flask secret key verified/created", "INFO")
+    else:
+         log("Failed to ensure Flask secret key!", "ERROR")
+    # --- End Flask Key Check ---
 
 
     # --- Setup Communication Channel (Simplified with ipc_server) ---
     try:
         if args.listen_socket:
             # Socket server mode
-            print(f"DAEMON: Creating socket server: {args.listen_socket}", file=sys.stderr)
+            log(f"Creating socket server: {args.listen_socket}", "INFO")
             transport = SocketServerTransport(
                 socket_path=args.listen_socket,
                 uid=target_uid,
@@ -232,37 +252,37 @@ def main():
             )
             transport_mode = f"Socket: {args.listen_socket}"
             
-            print(f"DAEMON: Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", file=sys.stderr)
+            log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
             
             # Socket Accept Loop
             try:
                 while not should_shutdown:
-                    print("DAEMON: Waiting for client connection...", file=sys.stderr)
+                    log("Waiting for client connection...", "DEBUG")
                     try:
                         transport.accept_connection()
-                        print("DAEMON: Client connected", file=sys.stderr)
+                        log("Client connected", "INFO")
                         
                         transport.send_line(json.dumps({"status": "ready"}))
-                        print("DAEMON: Sent ready signal to client", file=sys.stderr)
+                        log("Sent ready signal to client", "DEBUG")
                         
                         run_command_loop(transport)
-                        print("DAEMON: Client session ended", file=sys.stderr)
+                        log("Client session ended", "INFO")
                         
                     except KeyboardInterrupt:
                         raise
                     except Exception as e:
-                        print(f"DAEMON: Error in client session: {e}", file=sys.stderr)
+                        log(f"Error in client session: {e}", "ERROR")
                         # Continue to accept next client unless shutdown
             finally:
                 transport.close()
 
         else:
             # Pipe mode (stdin/stdout)
-            print("DAEMON: Using pipe transport (stdin/stdout)", file=sys.stderr)
+            log("Using pipe transport (stdin/stdout)", "INFO")
             transport = PipeServerTransport()
             transport_mode = "Pipe (stdin/stdout)"
             
-            print(f"DAEMON: Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", file=sys.stderr)
+            log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
             
             try:
                 transport.accept_connection()
@@ -272,12 +292,12 @@ def main():
                 transport.close()
         
     except KeyboardInterrupt:
-        print("\nDAEMON: Interrupted by user (Ctrl+C), shutting down...", file=sys.stderr)
+        log("Interrupted by user (Ctrl+C), shutting down...", "WARNING")
     except Exception as e:
-        print(f"DAEMON: Failed to setup transport or fatal error: {e}", file=sys.stderr)
+        log(f"Failed to setup transport or fatal error: {e}", "CRITICAL")
         sys.exit(1)
     finally:
-        print("DAEMON: Exiting main function.", file=sys.stderr)
+        log("Exiting main function", "INFO")
 
 
 if __name__ == "__main__":

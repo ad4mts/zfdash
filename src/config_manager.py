@@ -8,7 +8,7 @@ import binascii # Needed for hex conversion of salt/hash bytes
 import tempfile # For atomic writes
 import logging
 
-from paths import CREDENTIALS_FILE_PATH, PERSISTENT_DATA_DIR, USER_CONFIG_DIR, USER_CONFIG_FILE_PATH
+from paths import CREDENTIALS_FILE_PATH, PERSISTENT_DATA_DIR, USER_CONFIG_DIR, USER_CONFIG_FILE_PATH, FLASK_KEY_PERSISTENT_PATH
 
 # --- Hashing Constants (Standard Library) ---
 # OWASP recommendation as of early 2023 for PBKDF2-HMAC-SHA256
@@ -249,5 +249,57 @@ def create_default_credentials_if_missing():
     except Exception as e:
         # Catch any unexpected errors during hash generation or file writing setup
         log.exception(f"An unexpected error occurred while trying to create default credentials: {e}")
+
+def ensure_flask_secret_key(target_uid: int, target_gid: int) -> bool:
+    """
+    Ensures that a Flask secret key exists at the persistent path.
+    If not, generates a new secure key and saves it with permissions 
+    readable by the target user (WebUI process).
+    
+    Args:
+        target_uid: The UID of the user running the WebUI (to own the file)
+        target_gid: The GID of the user running the WebUI
+        
+    Returns:
+        bool: True if key exists or was created successfully, False otherwise.
+    """
+    if os.path.exists(FLASK_KEY_PERSISTENT_PATH):
+        # Key already exists. 
+        # Optional: We could check permissions here, but let's assume if it exists it's fine 
+        # or was fixed by a previous run.
+        return True
+
+    log.info(f"Flask secret key not found at {FLASK_KEY_PERSISTENT_PATH}. Generatng new secure key.")
+    
+    try:
+        # Generate 32 bytes of random data for the key (hex encoded)
+        secret_key = os.urandom(32).hex()
+        
+        # Ensure data dir exists
+        os.makedirs(str(PERSISTENT_DATA_DIR), mode=0o755, exist_ok=True)
+        
+        # Write key to file
+        with open(FLASK_KEY_PERSISTENT_PATH, 'w') as f:
+            f.write(secret_key)
+            
+        # Set permissions: Read-only for owner (600) is best practice
+        os.chmod(FLASK_KEY_PERSISTENT_PATH, 0o600)
+        
+        # Set ownership to the target user so they can read it
+        # This is CRITICAL because the daemon runs as root but WebUI runs as regular user
+        try:
+             os.chown(FLASK_KEY_PERSISTENT_PATH, target_uid, target_gid)
+             log.info(f"Successfully generated Flask secret key and set ownership to UID {target_uid}.")
+        except OSError as e:
+             log.warning(f"Could not chown Flask secret key to {target_uid}:{target_gid}. WebUI might fail to read it. Error: {e}")
+             # If we can't chown (e.g. non-root daemon?), maybe fallback to 644?
+             # But daemon should be root.
+             return False
+
+        return True
+        
+    except Exception as e:
+        log.exception(f"Failed to generate or save Flask secret key: {e}")
+        return False
 
 # --- END OF FILE config_manager.py ---

@@ -301,7 +301,8 @@ def _find_privilege_escalation_tool(exclude: Optional[list] = None) -> Optional[
 def _build_daemon_command(daemon_path: str, uid: int, gid: int, 
                          escalation_tool: Optional[str] = None,
                          is_script: bool = False,
-                         allow_tty_prompt: bool = False) -> list:
+                         allow_tty_prompt: bool = False,
+                         debug: bool = False) -> list:
     """
     Build the command array to launch the daemon.
     
@@ -323,6 +324,10 @@ def _build_daemon_command(daemon_path: str, uid: int, gid: int,
     else:
         # Frozen executable - run directly
         base_cmd = [daemon_path, '--daemon', '--uid', str(uid), '--gid', str(gid)]
+    
+    # Add debug flag if requested
+    if debug:
+        base_cmd.append('--debug')
     
     if escalation_tool is None:
         # Running as root or no escalation needed
@@ -353,12 +358,13 @@ def _build_daemon_command(daemon_path: str, uid: int, gid: int,
 
 
 
-def launch_daemon(use_socket: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
+def launch_daemon(use_socket: bool = False, debug: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
     """
     Launch privileged daemon with auto-detected path and user context.
     
     Args:
         use_socket: If True, use Unix socket IPC instead of pipes
+        debug: If True, pass --debug flag to daemon for verbose logging
     
     Returns:
         Tuple of (subprocess.Popen, LineBufferedTransport)
@@ -376,10 +382,10 @@ def launch_daemon(use_socket: bool = False) -> Tuple[subprocess.Popen, LineBuffe
     if not os.path.exists(DAEMON_SCRIPT_PATH):
         raise RuntimeError(f"Daemon path not found: {DAEMON_SCRIPT_PATH}")
     
-    return launch_daemon_process(DAEMON_SCRIPT_PATH, uid, gid, DAEMON_IS_SCRIPT, use_socket)
+    return launch_daemon_process(DAEMON_SCRIPT_PATH, uid, gid, DAEMON_IS_SCRIPT, use_socket, debug)
 
 
-def launch_daemon_process(daemon_path: str, uid: int, gid: int, is_script: bool = False, use_socket: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
+def launch_daemon_process(daemon_path: str, uid: int, gid: int, is_script: bool = False, use_socket: bool = False, debug: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
     """
     Launch privileged daemon process and establish communication.
     
@@ -389,6 +395,7 @@ def launch_daemon_process(daemon_path: str, uid: int, gid: int, is_script: bool 
         gid: Group ID to pass to daemon (for permission context)
         is_script: True if daemon_path is a Python script (needs sys.executable)
         use_socket: If True, daemon creates Unix socket and acts as server; client connects
+        debug: If True, pass --debug flag to daemon for verbose logging
     
     Returns:
         Tuple of (subprocess.Popen, LineBufferedTransport)
@@ -399,12 +406,12 @@ def launch_daemon_process(daemon_path: str, uid: int, gid: int, is_script: bool 
         OSError: If pipe/socket connection fails
     """
     if use_socket:
-        return _launch_daemon_with_socket_server(daemon_path, uid, gid, is_script)
+        return _launch_daemon_with_socket_server(daemon_path, uid, gid, is_script, debug)
     else:
-        return _launch_daemon_with_pipes(daemon_path, uid, gid, is_script)
+        return _launch_daemon_with_pipes(daemon_path, uid, gid, is_script, debug)
 
 
-def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_script: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
+def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_script: bool = False, debug: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
     """
     Launch daemon as socket server - daemon creates socket and listens, client connects.
     
@@ -419,6 +426,7 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
         uid: User ID to pass to daemon (for permission context)
         gid: Group ID to pass to daemon (for permission context)
         is_script: True if daemon_path is a Python script (needs sys.executable)
+        debug: If True, pass --debug flag to daemon for verbose logging
     
     Returns:
         Tuple of (subprocess.Popen, LineBufferedTransport)
@@ -478,7 +486,7 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
             print("IPC: Running as root, no escalation needed.")
         
         # Build daemon command with --listen-socket argument
-        cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script, allow_tty_prompt=allow_tty)
+        cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script, allow_tty_prompt=allow_tty, debug=debug)
         cmd.extend(['--listen-socket', socket_path])
         print(f"IPC: Command: {' '.join(cmd)}")
         
@@ -581,7 +589,7 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
             raise RuntimeError(f"Failed to launch daemon process: {e}") from e
 
 
-def _launch_daemon_with_pipes(daemon_path: str, uid: int, gid: int, is_script: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
+def _launch_daemon_with_pipes(daemon_path: str, uid: int, gid: int, is_script: bool = False, debug: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
     """
     Launch privileged daemon process using anonymous pipe communication.
     
@@ -597,6 +605,7 @@ def _launch_daemon_with_pipes(daemon_path: str, uid: int, gid: int, is_script: b
         uid: User ID to pass to daemon (for permission context)
         gid: Group ID to pass to daemon (for permission context)
         is_script: True if daemon_path is a Python script (needs sys.executable)
+        debug: If True, pass --debug flag to daemon for verbose logging
     
     Returns:
         Tuple of (subprocess.Popen, LineBufferedTransport)
@@ -644,7 +653,7 @@ def _launch_daemon_with_pipes(daemon_path: str, uid: int, gid: int, is_script: b
             print("IPC: Running as root, no escalation needed.")
         
         # Build command
-        cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script, allow_tty_prompt=allow_tty)
+        cmd = _build_daemon_command(daemon_path, uid, gid, escalation_tool, is_script, allow_tty_prompt=allow_tty, debug=debug)
         print(f"IPC: Command: {' '.join(cmd)}")
         
         # Create pipes
