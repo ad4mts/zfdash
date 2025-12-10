@@ -6,7 +6,7 @@
 
 import * as state from './state.js';
 import dom from './dom-elements.js';
-import { VDEV_GROUP_PATTERNS, DEVICE_PATTERN_RE } from './constants.js';
+
 
 // Track current pool status view mode and cached data
 let currentPoolStatusView = 'status'; // 'status', 'layout', or 'iostat'
@@ -50,7 +50,7 @@ export function setPoolStatusButtonsEnabled(enabled) {
  * @returns {Promise<string>} - The fetched data
  */
 async function fetchPoolData(poolName, dataType) {
-    const endpoint = dataType === 'layout' 
+    const endpoint = dataType === 'layout'
         ? `/api/pool/${encodeURIComponent(poolName)}/list_verbose`
         : `/api/pool/${encodeURIComponent(poolName)}/iostat_verbose`;
     try {
@@ -121,10 +121,10 @@ export function initPoolStatusView(poolName, statusText) {
         // Just update status cache
         cachedPoolStatusData.status = statusText;
     }
-    
+
     // Enable buttons when pool is selected
     setPoolStatusButtonsEnabled(true);
-    
+
     // If currently viewing status, update display
     if (currentPoolStatusView === 'status') {
         renderPoolStatus(statusText);
@@ -176,223 +176,156 @@ export function renderPoolStatus(statusText) {
 
 /**
  * Render pool edit layout tree
- * @param {string} statusText - Pool status text to parse
+ * @param {string} statusText - Pool status text (fallback if vdev_tree unavailable)
  */
 export function renderPoolEditLayout(statusText) {
     if (!dom.poolEditTreeContainer) return;
-    
+
     dom.poolEditTreeContainer.innerHTML = '';
-    
-    if (!statusText || !state.currentSelection || state.currentSelection.obj_type !== 'pool') {
+
+    if (!state.currentSelection || state.currentSelection.obj_type !== 'pool') {
         dom.poolEditTreeContainer.innerHTML = '<div class="text-center p-3 text-muted">Pool layout details not available or item is not a pool.</div>';
         updatePoolEditActionStates(null);
         return;
     }
 
-    const lines = statusText.split('\n');
     const poolName = state.currentSelection.name;
+    const vdevTree = state.currentSelection.vdev_tree;
 
     // Create root element for the tree structure
     const rootUl = document.createElement('ul');
     rootUl.className = 'list-unstyled mb-0 pool-edit-tree-root';
 
-    // Create the top-level pool item
-    const poolLi = document.createElement('li');
-    poolLi.dataset.indent = -1;
-    poolLi.dataset.name = poolName;
-    poolLi.dataset.itemType = 'pool';
-    poolLi.dataset.vdevType = 'pool';
-
-    // Extract overall pool state and scan info
-    let poolState = 'UNKNOWN';
-    let scanInfo = '';
-    for (const line of lines) {
-        const trimmed = line.trim();
-        if (trimmed.startsWith('state:')) { poolState = trimmed.substring(6).trim(); }
-        else if (trimmed.startsWith('scan:')) { scanInfo = trimmed.substring(5).trim(); }
-        else if (trimmed.startsWith('config:')) { break; }
-    }
-    poolLi.dataset.state = poolState;
-
-    // Set display text and icon
-    let poolStateClass = 'text-muted';
-    if (poolState === 'ONLINE') poolStateClass = 'text-success';
-    else if (poolState === 'DEGRADED') poolStateClass = 'text-warning';
-    else if (poolState === 'FAULTED' || poolState === 'UNAVAIL' || poolState === 'REMOVED') poolStateClass = 'text-danger';
-    else if (poolState === 'OFFLINE') poolStateClass = 'text-muted fw-light';
-
-    poolLi.innerHTML = `<i class="bi bi-hdd-rack-fill me-1 ${poolStateClass}"></i> ${poolName} <span class="badge bg-light ${poolStateClass} float-end">${poolState}</span>`;
-    poolLi.title = `Pool: ${poolName}\nState: ${poolState}\nScan: ${scanInfo}`;
-    poolLi.classList.add('pool-edit-item', 'fw-bold');
-    
-    poolLi.onclick = (e) => {
-        e.stopPropagation();
-        dom.poolEditTreeContainer.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
-        poolLi.classList.add('selected');
-        updatePoolEditActionStates(poolLi);
-    };
-    rootUl.appendChild(poolLi);
-
-    // Regexes for parsing
-    const itemRe = /^(\s+)(.+?)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)/;
-    const groupRe = /^(\s+)(\S+.*)/;
-
-    let inConfigSection = false;
-    let parentStack = [poolLi];
-
-    // Process config section
-    for (const line of lines) {
-        const lineStrip = line.trim();
-        if (lineStrip.startsWith("config:")) {
-            inConfigSection = true;
-            continue;
-        }
-        if (!inConfigSection || !lineStrip) continue;
-        if (lineStrip.startsWith("errors:")) break;
-
-        // Parse line data
-        let matchItem = itemRe.exec(line);
-        let matchGroup = groupRe.exec(line);
-        let indent = 0;
-        let name = "";
-        let itemState = "N/A";
-        let r = 'N/A', w = 'N/A', c = 'N/A';
-
-        if (matchItem) {
-            let indentStr = matchItem[1];
-            name = matchItem[2].trim();
-            itemState = matchItem[3];
-            r = matchItem[4]; w = matchItem[5]; c = matchItem[6];
-            indent = indentStr.length;
-        } else if (matchGroup) {
-            let indentStr = matchGroup[1];
-            name = matchGroup[2].trim();
-            indent = indentStr.length;
-        } else {
-            console.warn("Pool Edit: Skipping unparseable line:", lineStrip);
-            continue;
-        }
-
-        // Skip header row and pool name repetition
-        if (name === "NAME" && itemState === "STATE") continue;
-        if (name === poolName && parentStack.length === 1 && parentStack[0] === poolLi) continue;
-
-        // Adjust parent stack based on indentation
-        while (parentStack.length > 1 && indent <= parseInt(parentStack[parentStack.length - 1].dataset.indent || '0')) {
-            parentStack.pop();
-        }
-        let currentParentLi = parentStack[parentStack.length - 1];
-        
-        // Ensure the parent has a UL child
-        let currentParentUl = currentParentLi.querySelector(':scope > ul.pool-edit-children');
-        if (!currentParentUl) {
-            currentParentUl = document.createElement('ul');
-            currentParentUl.className = 'list-unstyled mb-0 ps-3 pool-edit-children';
-            currentParentLi.appendChild(currentParentUl);
-        }
-
-        // Determine item type
-        let itemType = 'unknown';
-        let vdevType = 'unknown';
-        let isVdevGroup = false;
-        let isDevice = false;
-        let devicePathForRole = null;
-
-        for (const vtype in VDEV_GROUP_PATTERNS) {
-            if (VDEV_GROUP_PATTERNS[vtype].test(name)) {
-                itemType = 'vdev';
-                vdevType = vtype;
-                isVdevGroup = true;
-                break;
-            }
-        }
-
-        const parentVdevType = currentParentLi.dataset.vdevType;
-        const isUnderKnownVdevGroup = parentVdevType && parentVdevType !== 'unknown' && parentVdevType !== 'pool';
-
-        if (!isVdevGroup && DEVICE_PATTERN_RE.test(name)) {
-            if (matchItem || isUnderKnownVdevGroup) {
-                itemType = 'device';
-                isDevice = true;
-                devicePathForRole = name;
-                if (isUnderKnownVdevGroup) {
-                    vdevType = parentVdevType;
-                } else if (currentParentLi === poolLi) {
-                    vdevType = 'disk';
-                }
-            } else if (currentParentLi === poolLi && !matchItem) {
-                itemType = 'vdev';
-                vdevType = 'disk';
-                devicePathForRole = name;
-            }
-        } else if (!isVdevGroup && !isDevice && currentParentLi === poolLi) {
-            itemType = 'vdev';
-            vdevType = 'disk';
-            devicePathForRole = name;
-        }
-
-        if (itemType === 'unknown') {
-            console.warn("Pool Edit: Could not determine item type for:", name, "under", currentParentLi.dataset.name);
-        }
-
-        // Create the list item
-        const li = document.createElement('li');
-        li.classList.add('pool-edit-item');
-        li.dataset.indent = indent;
-        li.dataset.name = name;
-        li.dataset.itemType = itemType;
-        li.dataset.vdevType = vdevType;
-        li.dataset.state = itemState;
-        if (devicePathForRole) li.dataset.devicePath = devicePathForRole;
-
-        // Determine icon
-        let iconClass = 'bi-question-circle';
-        if (itemType === 'pool') iconClass = 'bi-hdd-rack-fill';
-        else if (itemType === 'vdev') {
-            if (vdevType === 'disk') iconClass = 'bi-hdd';
-            else if (['log', 'cache', 'spare', 'special'].includes(vdevType)) iconClass = 'bi-drive-fill';
-            else iconClass = 'bi-hdd-stack';
-        } else if (itemType === 'device') iconClass = 'bi-disc';
-
-        // Set text and state badge
-        let stateHtml = '';
-        if (itemState !== 'N/A' && itemState !== name) {
-            let stateClass = 'text-muted';
-            if (itemState === 'ONLINE') stateClass = 'text-success';
-            else if (itemState === 'DEGRADED') stateClass = 'text-warning';
-            else if (itemState === 'FAULTED' || itemState === 'UNAVAIL' || itemState === 'REMOVED') stateClass = 'text-danger';
-            else if (itemState === 'OFFLINE') stateClass = 'text-muted fw-light';
-            stateHtml = `<span class="badge bg-light ${stateClass} float-end">${itemState}</span>`;
-        }
-
-        // Display errors if present
-        let errorHtml = '';
-        if (matchItem && (r !== '0' || w !== '0' || c !== '0')) {
-            errorHtml = ` <small class="text-danger">(${r}R ${w}W ${c}C)</small>`;
-        }
-
-        li.innerHTML = `<i class="bi ${iconClass} me-1"></i> ${name}${errorHtml}${stateHtml}`;
-        li.title = `Type: ${itemType}\nVDEV Type: ${vdevType}\nState: ${itemState}${devicePathForRole ? '\nPath: '+devicePathForRole : ''}${errorHtml ? `\nErrors: ${r}R ${w}W ${c}C` : ''}`;
-
-        // Add click handler
-        li.onclick = (e) => {
-            e.stopPropagation();
-            dom.poolEditTreeContainer.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
-            li.classList.add('selected');
-            updatePoolEditActionStates(li);
-        };
-
-        currentParentUl.appendChild(li);
-
-        // If it's a VDEV group, push it onto the stack
-        if (itemType === 'vdev' || itemType === 'pool') {
-            parentStack.push(li);
-        }
+    // Prefer structured vdev_tree if available
+    if (vdevTree && Object.keys(vdevTree).length > 0) {
+        renderVdevTreeFromJson(rootUl, vdevTree, poolName);
+    } else {
+        dom.poolEditTreeContainer.innerHTML = '<div class="text-center p-3 text-muted">Pool layout details not available.</div>';
+        updatePoolEditActionStates(null);
+        return;
     }
 
     dom.poolEditTreeContainer.appendChild(rootUl);
     updatePoolEditActionStates(null);
 }
+
+/**
+ * Render VDEV tree from structured JSON (vdev_tree)
+ * @param {HTMLElement} rootUl - Root UL element
+ * @param {Object} vdevTree - Structured vdev tree from backend
+ * @param {string} poolName - Pool name
+ */
+function renderVdevTreeFromJson(rootUl, vdevTree, poolName) {
+    // Create the top-level pool item
+    const poolState = vdevTree.state || 'UNKNOWN';
+    const poolLi = createPoolEditItem(poolName, 'pool', 'pool', poolState, null);
+    poolLi.dataset.indent = -1;
+    rootUl.appendChild(poolLi);
+
+    // Add children recursively
+    const children = vdevTree.children || [];
+    if (children.length > 0) {
+        const childUl = document.createElement('ul');
+        childUl.className = 'list-unstyled mb-0 ps-3 pool-edit-children';
+        addVdevChildrenFromJson(childUl, children);
+        poolLi.appendChild(childUl);
+    }
+}
+
+/**
+ * Recursively add VDEV children from JSON
+ * @param {HTMLElement} parentUl - Parent UL element
+ * @param {Array} children - Array of child vdev objects
+ */
+function addVdevChildrenFromJson(parentUl, children) {
+    for (const child of children) {
+        const name = child.name || 'unknown';
+        const vdevType = child.type || 'unknown';
+        const itemState = child.state || 'UNKNOWN';
+        const devicePath = child.path || null;
+        const readErrors = child.read_errors || '0';
+        const writeErrors = child.write_errors || '0';
+        const checksumErrors = child.checksum_errors || '0';
+
+        // Determine item type
+        const isLeafDevice = vdevType === 'disk' && devicePath;
+        const itemType = isLeafDevice ? 'device' : 'vdev';
+
+        const li = createPoolEditItem(name, itemType, vdevType, itemState, devicePath, readErrors, writeErrors, checksumErrors);
+        parentUl.appendChild(li);
+
+        // Recurse for children
+        const childChildren = child.children || [];
+        if (childChildren.length > 0) {
+            const childUl = document.createElement('ul');
+            childUl.className = 'list-unstyled mb-0 ps-3 pool-edit-children';
+            addVdevChildrenFromJson(childUl, childChildren);
+            li.appendChild(childUl);
+        }
+    }
+}
+
+/**
+ * Create a pool edit tree item element
+ * @param {string} name - Item name
+ * @param {string} itemType - Item type (pool, vdev, device)
+ * @param {string} vdevType - VDEV type (mirror, raidz, disk, etc.)
+ * @param {string} itemState - State (ONLINE, OFFLINE, etc.)
+ * @param {string|null} devicePath - Device path (for devices)
+ * @param {string} r - Read errors
+ * @param {string} w - Write errors
+ * @param {string} c - Checksum errors
+ * @returns {HTMLElement} - LI element
+ */
+function createPoolEditItem(name, itemType, vdevType, itemState, devicePath, r = '0', w = '0', c = '0') {
+    const li = document.createElement('li');
+    li.classList.add('pool-edit-item');
+    li.dataset.name = name;
+    li.dataset.itemType = itemType;
+    li.dataset.vdevType = vdevType;
+    li.dataset.state = itemState;
+    if (devicePath) li.dataset.devicePath = devicePath;
+
+    // Determine icon
+    let iconClass = 'bi-question-circle';
+    if (itemType === 'pool') iconClass = 'bi-hdd-rack-fill';
+    else if (itemType === 'vdev') {
+        if (vdevType === 'disk') iconClass = 'bi-hdd';
+        else if (['log', 'cache', 'spare', 'special'].includes(vdevType)) iconClass = 'bi-drive-fill';
+        else iconClass = 'bi-hdd-stack';
+    } else if (itemType === 'device') iconClass = 'bi-disc';
+
+    // Set text and state badge
+    let stateClass = 'text-muted';
+    if (itemState === 'ONLINE') stateClass = 'text-success';
+    else if (itemState === 'DEGRADED') stateClass = 'text-warning';
+    else if (['FAULTED', 'UNAVAIL', 'REMOVED'].includes(itemState)) stateClass = 'text-danger';
+    else if (itemState === 'OFFLINE') stateClass = 'text-muted fw-light';
+
+    const stateHtml = `<span class="badge bg-light ${stateClass} float-end">${itemState}</span>`;
+
+    // Display errors if present
+    let errorHtml = '';
+    if (r !== '0' || w !== '0' || c !== '0') {
+        errorHtml = ` <small class="text-danger">(${r}R ${w}W ${c}C)</small>`;
+    }
+
+    li.innerHTML = `<i class="bi ${iconClass} me-1"></i> ${name}${errorHtml}${stateHtml}`;
+    li.title = `Type: ${itemType}\nVDEV Type: ${vdevType}\nState: ${itemState}${devicePath ? '\nPath: ' + devicePath : ''}${errorHtml ? `\nErrors: ${r}R ${w}W ${c}C` : ''}`;
+
+    // Add click handler
+    li.onclick = (e) => {
+        e.stopPropagation();
+        dom.poolEditTreeContainer.querySelectorAll('.selected').forEach(el => el.classList.remove('selected'));
+        li.classList.add('selected');
+        updatePoolEditActionStates(li);
+    };
+
+    return li;
+}
+
+
+
 
 /**
  * Update pool edit action button states based on selection

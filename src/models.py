@@ -27,6 +27,7 @@ class Pool(ZfsObject):
     dedup: str = "off"
     guid: str = ""
     status_details: str = "" # Full output from zpool status
+    vdev_tree: Dict[str, Any] = field(default_factory=dict)  # Parsed VDEV tree from zpool status -j
     obj_type: str = "pool"
 
     # Exclude children from comparison

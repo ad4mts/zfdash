@@ -279,9 +279,10 @@ class ZfsManagerClient:
         pools_raw_data = response_pools.get("data", [])
         items_raw_data = response_items.get("data", [])
         pool_statuses = {}
+        pool_vdev_trees = {}  # Structured VDEV trees from zpool status -j
         status_fetch_errors = []
 
-        # Fetch pool statuses individually (correct indentation)
+        # Fetch pool statuses and VDEV trees individually (correct indentation)
         for pool_props in pools_raw_data:
             pool_name = pool_props.get("name")
             if not pool_name: continue
@@ -297,6 +298,17 @@ class ZfsManagerClient:
                  # Correct indentation for except
                  status_fetch_errors.append(f"Pool '{pool_name}': Exception fetching status: {e}")
                  pool_statuses[pool_name] = f"Exception fetching status: {e}"
+            
+            # Fetch structured VDEV tree (new)
+            try:
+                response_structure = self._send_request("get_pool_status_structure", pool_name, timeout=timeout)
+                vdev_data = response_structure.get("data", {})
+                # Extract the pool's vdev_tree from the response
+                pool_vdev_trees[pool_name] = vdev_data.get("pools", {}).get(pool_name, {}).get("vdev_tree", {})
+            except Exception as e:
+                 # Non-fatal: log but continue - GUI/WebUI can fall back to raw text
+                 print(f"MANAGER_CLIENT: Warning - Failed to get vdev_tree for '{pool_name}': {e}", file=sys.stderr)
+                 pool_vdev_trees[pool_name] = {}
 
         # Correct indentation
         if status_fetch_errors:
@@ -307,7 +319,7 @@ class ZfsManagerClient:
         pool_objects = {}
         for props in pools_raw_data: # Create Pools
             pool_name = props.get('name','?')
-            pool = Pool(name=pool_name, health=props.get('health','?'), size=utils.parse_size(props.get('size')), alloc=utils.parse_size(props.get('alloc')), free=utils.parse_size(props.get('free')), frag=props.get('frag','-'), cap=props.get('cap','-'), dedup=props.get('dedup','?'), guid=props.get('guid',''), properties=props, status_details=pool_statuses.get(pool_name, "Status unavailable"))
+            pool = Pool(name=pool_name, health=props.get('health','?'), size=utils.parse_size(props.get('size')), alloc=utils.parse_size(props.get('alloc')), free=utils.parse_size(props.get('free')), frag=props.get('frag','-'), cap=props.get('cap','-'), dedup=props.get('dedup','?'), guid=props.get('guid',''), properties=props, status_details=pool_statuses.get(pool_name, "Status unavailable"), vdev_tree=pool_vdev_trees.get(pool_name, {}))
             flat_list.append(pool); pool_objects[pool_name] = pool
         for props in items_raw_data: # Create Datasets/Snapshots
             item_type = props.get('type'); name = props.get('name', '?')

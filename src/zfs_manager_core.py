@@ -13,6 +13,7 @@ import traceback # Added traceback import
 import utils # <-- Import utils here
 import platform_block_devices  # Cross-platform block device enumeration
 from functools import wraps
+from parsers.zpool import ZPoolParser  # ZFS status JSON parser
 
 # Import constants, config manager, and path functions
 try:
@@ -397,6 +398,39 @@ def get_pool_status(pool_name: str, *, _log_enabled=False, _user_uid=-1, **kwarg
     retcode, stdout, stderr = builder.run(_log_enabled=_log_enabled, _user_uid=_user_uid)
     if retcode != 0: raise ZfsCommandError(f"Failed to get status for pool '{pool_name}'.", builder.build(), stderr, retcode)
     return stdout.strip()
+
+@adapt_common_kwargs
+def get_pool_status_structure(pool_name: Optional[str] = None, *, _log_enabled=False, _user_uid=-1, **kwargs) -> Dict[str, Any]:
+    """
+    Get pool status as a structured dictionary.
+    Delegates to ZPoolParser to determine whether to use JSON (-j) or legacy text parsing.
+
+    Args:
+        pool_name: Optional pool name. If None, returns all pools.
+
+    Returns:
+        A standardized dictionary with the VDEV tree structure.
+    """
+    # Ask ZPoolParser for the correct command (JSON vs Legacy)
+    cmd = ZPoolParser.get_status_command(pool_name)
+    
+    # Ensure we use the resolved ZFS command path
+    if cmd and cmd[0] == 'zpool':
+        cmd[0] = ZPOOL_CMD_PATH
+
+    # Use _run_command for consistency with logging and user_uid handling
+    retcode, stdout, stderr = _run_command(
+        cmd,
+        log_enabled=_log_enabled,
+        user_uid=_user_uid
+    )
+
+    if retcode != 0:
+        raise ZfsCommandError(f"Failed to get pool status structure: {stderr.strip()}", cmd, stderr, retcode)
+    
+    # Delegate parsing to ZPoolParser (it handles JSON decoding or text parsing)
+    return ZPoolParser.parse_status(stdout, pool_name)
+
 
 @adapt_common_kwargs
 def get_pool_list_verbose(pool_name: str, *, _log_enabled=False, _user_uid=-1, **kwargs) -> str:
@@ -983,6 +1017,7 @@ COMMAND_MAP = {
     # Getters
     "list_pools": list_pools,
     "get_pool_status": get_pool_status,
+    "get_pool_status_structure": get_pool_status_structure,  # JSON-parsed VDEV tree
     "get_pool_list_verbose": get_pool_list_verbose,
     "get_pool_iostat_verbose": get_pool_iostat_verbose,
     "list_all_datasets_snapshots": list_all_datasets_snapshots,

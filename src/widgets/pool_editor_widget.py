@@ -1,6 +1,5 @@
 # --- START OF FILE widgets/pool_editor_widget.py ---
 
-import re
 from typing import Optional, Dict, List, Any # Import necessary types
 
 from PySide6.QtWidgets import (
@@ -70,7 +69,7 @@ class PoolEditorWidget(QWidget):
     def __init__(self, zfs_client: ZfsManagerClient, parent=None):
         super().__init__(parent)
         self._current_pool: Optional[Pool] = None
-        self._current_pool_status_text: str = "" # Store the text used for parsing
+
         # Store the client instance
         self.zfs_client = zfs_client
         if self.zfs_client is None:
@@ -128,7 +127,7 @@ class PoolEditorWidget(QWidget):
         self._update_button_states()
 
     def set_pool(self, pool: Optional[Pool]):
-        """Populates the editor using the status_details from the Pool object."""
+        """Populates the editor using the vdev_tree or status_details from the Pool object."""
         self._current_pool = pool
         self.pool_tree.clear()
 
@@ -137,251 +136,97 @@ class PoolEditorWidget(QWidget):
              self._update_button_states()
              return
 
-        # --- Use the status_details directly from the Pool object ---
-        status_text = getattr(pool, 'status_details', '') # Use getattr for safety
-
-        if not status_text:
-            print(f"PoolEditorWidget: Warning - Pool '{pool.name}' object provided has empty status_details.", file=sys.stderr)
+        # Prefer structured vdev_tree if available (from zpool status -j)
+        vdev_tree = getattr(pool, 'vdev_tree', {})
+        if vdev_tree:
+            self.status_message.emit(f"Loading layout for {pool.name}...")
+            self._build_tree_from_vdev_tree(vdev_tree, pool.name)
+            self.status_message.emit("")
+        else:
+            # No vdev_tree available (legacy fallback is now handled in backend or not at all)
+            print(f"PoolEditorWidget: Warning - Pool '{pool.name}' has no vdev_tree.", file=sys.stderr)
             error_item = QTreeWidgetItem(self.pool_tree)
             error_item.setText(0, f"Status details unavailable for {pool.name}")
             error_item.setIcon(0, QIcon.fromTheme("dialog-warning"))
-            self._current_pool_status_text = ""
             self._update_button_states()
             return
-        # -------------------------------------------------------------
-
-        # Store the text and proceed with parsing
-        self._current_pool_status_text = status_text
-        self.status_message.emit(f"Parsing status for {pool.name}...")
-        self._parse_pool_status() # Parse the stored text
-        self.status_message.emit("") # Clear status
 
         self.pool_tree.expandAll()
         if self.pool_tree.topLevelItemCount() > 0:
             self.pool_tree.setCurrentItem(self.pool_tree.topLevelItem(0))
         self._update_button_states()
 
+    def _build_tree_from_vdev_tree(self, vdev_node: Dict[str, Any], pool_name: str):
+        """Recursively builds the QTreeWidget from the structured vdev_tree dictionary."""
+        app_palette = QApplication.palette()
 
-    def _parse_pool_status(self):
-        """
-        Parses the 'zpool status -vP' output (stored in _current_pool_status_text)
-        to populate the tree. Relies on relative indentation and pattern matching.
-        """
-        if not self._current_pool or not self._current_pool_status_text:
-            return
-
-        pool_name = self._current_pool.name
-        lines = self._current_pool_status_text.splitlines()
-
-        self.pool_tree.clear() # Clear previous content before parsing
-
+        # Create the root pool item
         pool_item = QTreeWidgetItem(self.pool_tree)
         pool_item.setText(0, pool_name)
         pool_item.setData(0, ITEM_TYPE_ROLE, 'pool')
-        pool_item.setData(0, ITEM_INDENT_ROLE, -1) # Special indent for root
+        pool_item.setData(0, ITEM_INDENT_ROLE, -1)
         pool_item.setIcon(0, QIcon.fromTheme("drive-harddisk"))
 
-        # Regex to capture lines with state/error columns
-        item_re = re.compile(r'^(\s+)(.+?)\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)')
-        # Regex to capture lines *without* state/error columns (likely VDEV groups)
-        group_re = re.compile(r'^(\s+)(\S+.*)')
-        # Regex to identify potential device paths/names more broadly
-        # linux-only: device paths like '/dev/sd*' and '/dev/nvme*' are Linux-specific naming conventions; other OSes may differ
-        device_pattern_re = re.compile(r'^(/dev/\S+|ata-|wwn-|scsi-|nvme-|usb-|dm-|zd\d+|[a-z]+[0-9]+|gpt/.*|disk/by-.*)', re.IGNORECASE)
-        # Regex for standard VDEV group names
-        vdev_group_patterns = {
-            'mirror': re.compile(r'^mirror-\d+'), 'raidz1': re.compile(r'^raidz1-\d+'),
-            'raidz2': re.compile(r'^raidz2-\d+'), 'raidz3': re.compile(r'^raidz3-\d+'),
-            'draid': re.compile(r'^draid\d*:'), 'log': re.compile(r'^logs$'),
-            'cache': re.compile(r'^cache$'), 'spare': re.compile(r'^spares$'),
-            'special': re.compile(r'^special$'),
-        }
-
-        in_config_section = False
-        parent_stack: List[QTreeWidgetItem] = [pool_item] # Stack to track current parent based on indent
-        app_palette = QApplication.palette() # Get palette for coloring
-        pool_state = "UNKNOWN"
-        scan_info = ""
-
-        # First pass to get overall state and scan info cleanly
-        for line in lines:
-            line_strip = line.strip()
-            if line_strip.startswith("pool:"):
-                pass
-            elif line_strip.startswith("state:"):
-                pool_state = line_strip.split(":", 1)[1].strip()
-            elif line_strip.startswith("status:"):
-                pass
-            elif line_strip.startswith("action:"):
-                pass
-            elif line_strip.startswith("scan:"):
-                 scan_info = line_strip.split(":", 1)[1].strip()
-            elif line_strip.startswith("config:"):
-                 break
-
-        pool_item.setToolTip(0, f"Pool: {pool_name}\nState: {pool_state}\nScan: {scan_info}")
-
-        # Second pass for config section
-        for line in lines:
-            line_strip = line.strip()
-            if line_strip.startswith("config:"):
-                in_config_section = True
-                continue
-            if not in_config_section or not line_strip: # Skip empty lines within config
-                continue
-            if line_strip.startswith("errors:"):
-                break # Stop at errors section
-
-            # --- *** FIX: Handle both line types (with and without state/errors) *** ---
-            match_item = item_re.match(line)
-            match_group = group_re.match(line) # Try matching group line as well
-            item = None # The QTreeWidgetItem to be created
-            indent = 0
-            name = ""
-            state = "N/A" # Default state if not parsed
-            r, w, c = ('N/A',)*3 # Default errors if not parsed
-
-            if match_item:
-                # Line has state/error columns (likely device or pool name repeat)
-                indent_str, name_capture, state, r, w, c = match_item.groups()
-                indent = len(indent_str)
-                name = name_capture.strip()
-
-                # Skip header row and the pool name repetition under config
-                if name == "NAME" and state == "STATE": continue
-                if name == pool_name and len(parent_stack) == 1 and parent_stack[-1] == pool_item: continue
-
-            elif match_group:
-                # Line does NOT have state/error columns (likely VDEV group name)
-                indent_str, name_capture = match_group.groups()
-                indent = len(indent_str)
-                name = name_capture.strip()
-                # Check if it's the pool name repetition (can happen without state cols too)
-                if name == pool_name and len(parent_stack) == 1 and parent_stack[-1] == pool_item: continue
-                # Leave state/errors as N/A for VDEV groups
-
-            else:
-                # Line doesn't match either pattern, skip it
-                print(f"PoolEditorWidget: Skipping unparseable line: '{line.strip()}'", file=sys.stderr)
-                continue
-
-            # Adjust parent stack based on indentation
-            while len(parent_stack) > 1 and indent <= parent_stack[-1].data(0, ITEM_INDENT_ROLE):
-                parent_stack.pop()
-            current_parent = parent_stack[-1]
-
-            # Determine item type based on name and context
-            item_type = 'unknown'
-            vdev_type = 'unknown' # VDEV type (mirror, raidz1, disk, log, etc.)
-            is_vdev_group = False # Is it a grouping like mirror-0?
-            is_device = False     # Is it a leaf device path?
-            device_path_for_role = None # Store the actual path if it's a device
-
-            # Check if it's a known VDEV group (mirror-N, raidzN-N, logs, cache, etc.)
-            for vtype, pattern in vdev_group_patterns.items():
-                if pattern.match(name):
-                    vdev_type = vtype
-                    item_type = 'vdev'
-                    is_vdev_group = True
-                    break
-
-            # If not a group, check if it looks like a device path
-            # This check should happen ONLY if match_item was successful (line had state/errors)
-            # OR if it's under a known VDEV group parent (mirror, raidz, log, etc.)
-            parent_vdev_type = current_parent.data(0, VDEV_TYPE_ROLE) if current_parent and current_parent != pool_item else None
-            is_under_known_vdev_group = parent_vdev_type and parent_vdev_type != 'unknown'
-
-            if not is_vdev_group and (match_item or is_under_known_vdev_group):
-                 if device_pattern_re.match(name):
-                      item_type = 'device'
-                      is_device = True
-                      device_path_for_role = name # Assume name is the path
-                      # Inherit vdev_type from parent if it's a known group
-                      if is_under_known_vdev_group:
-                           # Add this device path to the parent VDEV's device list
-                           parent_devices = current_parent.data(0, VDEV_DEVICES_ROLE) or []
-                           if device_path_for_role not in parent_devices:
-                               parent_devices.append(device_path_for_role)
-                               current_parent.setData(0, VDEV_DEVICES_ROLE, parent_devices)
-                           # Set the vdev_type for the device item itself
-                           if parent_vdev_type:
-                                vdev_type = parent_vdev_type
-                      # If it's directly under pool, it acts as a 'disk' vdev
-                      elif current_parent == pool_item:
-                           vdev_type = 'disk'
-                           item_type = 'vdev' # Treat single disk as a VDEV conceptually
-                           is_vdev_group = False # It's not a group like mirror-N
-                           is_device = False # Conceptually a VDEV, not just a device leaf
-                           # Store its own path in its device list
-                           item_devices = [device_path_for_role]
-                           # We'll set VDEV_DEVICES_ROLE later when creating the item
-
-            # If it's directly under the pool, not a known group, and didn't match device pattern
-            # it might still be a single disk VDEV (e.g., a file path used as vdev)
-            elif not is_vdev_group and not is_device and current_parent == pool_item:
-                 vdev_type = 'disk' # Assume disk
-                 item_type = 'vdev' # Treat it as a VDEV conceptually
-                 is_vdev_group = False
-                 is_device = False
-                 item_devices = [name] # Use the name as the 'path'
-                 # Don't set device_path_for_role unless it matched device pattern
-
-            # Log if type couldn't be determined (should be less common now)
-            if item_type == 'unknown':
-                 print(f"PoolEditorWidget: Warning - Unidentified item type: '{name}' under '{current_parent.text(0)}'", file=sys.stderr)
-
-
-            # Create the tree item
-            item = QTreeWidgetItem(current_parent)
-            item.setText(0, name)
-            item.setText(1, state)
-            item.setText(2, r)
-            item.setText(3, w)
-            item.setText(4, c)
-
-            # Store metadata in roles
-            item.setData(0, ITEM_INDENT_ROLE, indent)
-            item.setData(0, ITEM_TYPE_ROLE, item_type)
-            item.setData(0, VDEV_TYPE_ROLE, vdev_type)
-            item.setData(0, DEVICE_STATE_ROLE, state)
-            if device_path_for_role:
-                item.setData(0, DEVICE_PATH_ROLE, device_path_for_role)
-            # Store the list of devices for VDEV items (single disk or group)
-            if item_type == 'vdev':
-                # Initialize with item_devices if it's a single disk vdev, else empty list for groups
-                item.setData(0, VDEV_DEVICES_ROLE, item_devices if vdev_type == 'disk' else [])
-
-            # Set tooltip and icon
-            tooltip_text = f"Name: {name}\nState: {state}\nType: {item_type}"
-            icon = QIcon.fromTheme("emblem-important") # Default unknown/error icon
-            if item_type == 'vdev':
-                 tooltip_text += f"\nVDEV Type: {vdev_type}"
-                 if vdev_type == 'disk': icon = QIcon.fromTheme("drive-harddisk")
-                 elif vdev_type in ['log', 'cache', 'spare', 'special']: icon = QIcon.fromTheme("drive-removable-media")
-                 elif vdev_type != 'unknown': icon = QIcon.fromTheme("drive-multidisk")
-            elif item_type == 'device':
-                 icon = QIcon.fromTheme("media-floppy")
-                 tooltip_text += f"\nPart of VDEV type: {vdev_type}"
-
-            item.setIcon(0, icon)
-            item.setToolTip(0, tooltip_text)
-
-            # Set background color based on state
-            self._set_item_state_color(item, 1, state, app_palette)
-
-            # Push onto stack if it's a VDEV group that can have children
-            # (e.g., mirror, raidz, logs, cache, spares, special)
-            # Single disk VDEVs don't get pushed.
-            if is_vdev_group or (item_type == 'vdev' and vdev_type != 'disk'):
-                 # Check if it *could* have children based on type
-                 if vdev_type not in ['disk']: # Only push actual groups
-                      parent_stack.append(item)
-            # --- *** END FIX *** ---
-
-        # Set final state on the pool item itself
+        pool_state = vdev_node.get('state', 'UNKNOWN')
         pool_item.setText(1, pool_state)
         pool_item.setData(0, DEVICE_STATE_ROLE, pool_state)
         self._set_item_state_color(pool_item, 1, pool_state, app_palette)
+
+        # Recursively add children
+        self._add_vdev_children(pool_item, vdev_node.get('children', []), app_palette)
+
+    def _add_vdev_children(self, parent_item: QTreeWidgetItem, children: List[Dict[str, Any]], palette: QPalette):
+        """Recursively adds child VDEVs/devices to the tree."""
+        for child in children:
+            item = QTreeWidgetItem(parent_item)
+            name = child.get('name', 'unknown')
+            vdev_type = child.get('type', 'unknown')
+            state = child.get('state', 'UNKNOWN')
+            read_errors = child.get('read_errors', '0')
+            write_errors = child.get('write_errors', '0')
+            checksum_errors = child.get('checksum_errors', '0')
+            device_path = child.get('path')  # Only present for leaf devices
+
+            item.setText(0, name)
+            item.setText(1, state)
+            item.setText(2, read_errors)
+            item.setText(3, write_errors)
+            item.setText(4, checksum_errors)
+
+            # Determine item type
+            is_leaf_device = vdev_type == 'disk' and device_path
+            item_type = 'device' if is_leaf_device else 'vdev'
+
+            item.setData(0, ITEM_TYPE_ROLE, item_type)
+            item.setData(0, VDEV_TYPE_ROLE, vdev_type)
+            item.setData(0, DEVICE_STATE_ROLE, state)
+            if device_path:
+                item.setData(0, DEVICE_PATH_ROLE, device_path)
+
+            # Set icon based on type
+            if is_leaf_device:
+                item.setIcon(0, QIcon.fromTheme("media-floppy"))
+            elif vdev_type in ['log', 'cache', 'spare', 'special']:
+                item.setIcon(0, QIcon.fromTheme("drive-removable-media"))
+            elif vdev_type in ['mirror', 'raidz', 'raidz1', 'raidz2', 'raidz3', 'draid']:
+                item.setIcon(0, QIcon.fromTheme("drive-multidisk"))
+            else:
+                item.setIcon(0, QIcon.fromTheme("drive-harddisk"))
+
+            # Set tooltip
+            tooltip = f"Name: {name}\nType: {vdev_type}\nState: {state}"
+            if device_path:
+                tooltip += f"\nPath: {device_path}"
+            item.setToolTip(0, tooltip)
+
+            # Set state color
+            self._set_item_state_color(item, 1, state, palette)
+
+            # Recurse for children
+            child_children = child.get('children', [])
+            if child_children:
+                self._add_vdev_children(item, child_children, palette)
+
 
 
     def _set_item_state_color(self, item: QTreeWidgetItem, column: int, state: str, palette: QPalette):
