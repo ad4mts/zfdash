@@ -345,7 +345,7 @@ function handleAddVdevConfirm() {
     }
 
     let layoutValid = true;
-    const minDevicesMap = { 'mirror': 2, 'raidz1': 3, 'raidz2': 4, 'raidz3': 5 };
+    const minDevicesMap = { 'mirror': 2, 'raidz1': 3, 'raidz2': 4, 'raidz3': 5, 'special mirror': 2, 'dedup mirror': 2 };
 
     vdevItems.forEach(vdevLi => {
         const vdevType = vdevLi.dataset.vdevType;

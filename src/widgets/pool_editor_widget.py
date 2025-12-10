@@ -802,10 +802,12 @@ class PoolEditorWidget(QWidget):
             if vtype == 'raidz1': return 3
             if vtype == 'raidz2': return 4
             if vtype == 'raidz3': return 5
+            if vtype == 'special mirror': return 2
+            if vtype == 'dedup mirror': return 2
             return 1
 
         def _add_vdev_type_action():
-            vdev_types = ['disk', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'log', 'cache', 'spare']
+            vdev_types = ['disk', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'log', 'cache', 'spare', 'special', 'special mirror', 'dedup', 'dedup mirror']
             vdev_type, ok = QInputDialog.getItem(add_dialog, "Add VDEV", "Select VDEV Type:", vdev_types, 0, False)
             if ok and vdev_type:
                 vdev_item = QTreeWidgetItem(add_vdev_tree)
@@ -815,9 +817,9 @@ class PoolEditorWidget(QWidget):
                 vdev_item.setData(0, local_VDEV_DEVICES_ROLE, []) # Store device paths here
                 # Set icon based on type
                 icon = QIcon.fromTheme("drive-harddisk") # Default
-                if vdev_type in ['mirror', 'raidz1', 'raidz2', 'raidz3']:
+                if vdev_type in ['mirror', 'raidz1', 'raidz2', 'raidz3', 'special mirror', 'dedup mirror']:
                     icon = QIcon.fromTheme("drive-multidisk")
-                elif vdev_type in ['log', 'cache', 'spare']:
+                elif vdev_type in ['log', 'cache', 'spare', 'special', 'dedup']:
                     icon = QIcon.fromTheme("drive-removable-media")
                 vdev_item.setIcon(0, icon)
 

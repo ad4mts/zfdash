@@ -356,7 +356,8 @@ class ZpoolCommandBuilder(CommandBuilder):
                 if vdev is None: continue # Should not happen if validation is strict
                 vdev_type = vdev['type']; devices = vdev['devices']
                 # Don't add 'disk' type explicitly, just devices
-                if vdev_type != 'disk': self._add_args(vdev_type)
+                # Split type to handle 'special mirror', 'dedup mirror', etc.
+                if vdev_type != 'disk': self._add_args(*vdev_type.split())
                 self._add_arg_list(devices)
                 valid_vdevs_added += 1
             except ZfsCommandError as e:

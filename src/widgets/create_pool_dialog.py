@@ -229,13 +229,15 @@ class CreatePoolDialog(QDialog):
         elif vdev_type == 'raidz1': return 3 # Technically 2 data + 1 parity
         elif vdev_type == 'raidz2': return 4 # Technically 2 data + 2 parity
         elif vdev_type == 'raidz3': return 5 # Technically 3 data + 3 parity
-        else: return 1 # disk, log, cache, spare
+        elif vdev_type == 'special mirror': return 2
+        elif vdev_type == 'dedup mirror': return 2
+        else: return 1 # disk, log, cache, spare, special, dedup
 
     @Slot()
     def _add_vdev_dialog(self):
         """Shows a dialog or modifies UI to add a VDEV configuration."""
         # Simple approach: Ask for VDEV type first
-        vdev_types = ['disk', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'log', 'cache', 'spare']
+        vdev_types = ['disk', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'log', 'cache', 'spare', 'special', 'special mirror', 'dedup', 'dedup mirror']
         # Ensure QInputDialog is imported
         try:
             from PySide6.QtWidgets import QInputDialog
@@ -254,9 +256,9 @@ class CreatePoolDialog(QDialog):
             vdev_item.setFlags(vdev_item.flags() | Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             # Choose icon based on type
             icon = QIcon.fromTheme("drive-harddisk") # Default
-            if vdev_type in ['mirror', 'raidz1', 'raidz2', 'raidz3']:
+            if vdev_type in ['mirror', 'raidz1', 'raidz2', 'raidz3', 'special mirror', 'dedup mirror']:
                 icon = QIcon.fromTheme("drive-multidisk")
-            elif vdev_type in ['log', 'cache', 'spare']:
+            elif vdev_type in ['log', 'cache', 'spare', 'special', 'dedup']:
                 icon = QIcon.fromTheme("drive-removable-media")
             vdev_item.setIcon(0, icon)
 

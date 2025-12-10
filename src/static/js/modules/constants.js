@@ -12,7 +12,7 @@ export const SELECTED_SELECTION_KEY = 'zfdash_selected_item_v1';
 // --- Define which properties use zpool set/inherit (pool-level only) ---
 export const POOL_LEVEL_PROPERTIES = new Set([
     'comment', 'cachefile', 'bootfs', 'failmode', 'autoreplace', 'autotrim',
-    'delegation', 'autoexpand', 'listsnapshots', 'readonly', 'multihost', 
+    'delegation', 'autoexpand', 'listsnapshots', 'readonly', 'multihost',
     'compatibility'
 ]);
 
@@ -44,7 +44,7 @@ export const EDITABLE_PROPERTIES_WEB = {
     'mountpoint': { internalName: 'mountpoint', displayName: 'Mount Point', editor: 'lineedit' },
     'quota': { internalName: 'quota', displayName: 'Quota', editor: 'lineedit', placeholder: 'e.g., 100G, none', validation: 'sizeOrNone' },
     'reservation': { internalName: 'reservation', displayName: 'Reservation', editor: 'lineedit', placeholder: 'e.g., 5G, none', validation: 'sizeOrNone' },
-    'recordsize': { internalName: 'recordsize', displayName: 'Record Size', editor: 'combobox', options: ['inherit', '512', ...Array.from({length: 11-7+1}, (_, i) => `${2**(i+7)}K`), '1M'] },
+    'recordsize': { internalName: 'recordsize', displayName: 'Record Size', editor: 'combobox', options: ['inherit', '512', ...Array.from({ length: 11 - 7 + 1 }, (_, i) => `${2 ** (i + 7)}K`), '1M'] },
     'compression': { internalName: 'compression', displayName: 'Compression', editor: 'combobox', options: ['inherit', 'off', 'on', 'lz4', 'gzip', 'gzip-1', 'gzip-9', 'zle', 'lzjb', 'zstd', 'zstd-fast'] },
     'atime': { internalName: 'atime', displayName: 'Access Time (atime)', editor: 'combobox', options: ['inherit', 'on', 'off'] },
     'relatime': { internalName: 'relatime', displayName: 'Relative Access Time', editor: 'combobox', options: ['inherit', 'on', 'off'] },
@@ -54,7 +54,7 @@ export const EDITABLE_PROPERTIES_WEB = {
     'sharesmb': { internalName: 'sharesmb', displayName: 'SMB Share', editor: 'combobox', options: ['inherit', 'off', 'on'], readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
     'logbias': { internalName: 'logbias', displayName: 'Log Bias', editor: 'combobox', options: ['inherit', 'latency', 'throughput'], readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
     'sync': { internalName: 'sync', displayName: 'Sync Policy', editor: 'combobox', options: ['inherit', 'standard', 'always', 'disabled'], readOnlyFunc: (obj) => obj?.obj_type === 'snapshot' },
-    'volblocksize': { internalName: 'volblocksize', displayName: 'Volume Block Size', editor: 'combobox', options: ['inherit'].concat(Array.from({length: 17-9+1}, (_, i) => `${2**(i+9)}K`)).concat(['1M']), readOnlyFunc: (obj) => !(obj?.obj_type === 'volume') },
+    'volblocksize': { internalName: 'volblocksize', displayName: 'Volume Block Size', editor: 'combobox', options: ['inherit'].concat(Array.from({ length: 17 - 9 + 1 }, (_, i) => `${2 ** (i + 9)}K`)).concat(['1M']), readOnlyFunc: (obj) => !(obj?.obj_type === 'volume') },
     'comment': { internalName: 'comment', displayName: 'Pool Comment', editor: 'lineedit', readOnlyFunc: (obj) => obj?.obj_type !== 'pool' },
     'cachefile': { internalName: 'cachefile', displayName: 'Cache File', editor: 'lineedit', readOnlyFunc: (obj) => obj?.obj_type !== 'pool' },
     'bootfs': { internalName: 'bootfs', displayName: 'Boot FS', editor: 'lineedit', readOnlyFunc: (obj) => obj?.obj_type !== 'pool' },
@@ -99,12 +99,14 @@ export const DEVICE_PATTERN_RE = /^(\/dev\/\S+|ata-|wwn-|scsi-|nvme-|usb-|dm-|zd
 export const RESERVED_POOL_NAMES = ['log', 'spare', 'cache', 'mirror', 'raidz', 'raidz1', 'raidz2', 'raidz3', 'replacing', 'initializing'];
 
 // --- VDEV Types for Pool Creation ---
-export const VDEV_TYPES = ['disk', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'log', 'cache', 'spare'];
+export const VDEV_TYPES = ['disk', 'mirror', 'raidz1', 'raidz2', 'raidz3', 'log', 'cache', 'spare', 'special', 'special mirror', 'dedup', 'dedup mirror'];
 
 // --- Minimum Devices per VDEV Type ---
 export const MIN_DEVICES_PER_VDEV = {
     'mirror': 2,
     'raidz1': 3,
     'raidz2': 4,
-    'raidz3': 5
+    'raidz3': 5,
+    'special mirror': 2,
+    'dedup mirror': 2
 };
