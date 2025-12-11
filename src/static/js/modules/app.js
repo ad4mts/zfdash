@@ -33,10 +33,10 @@
  */
 
 // Import modules
-import { 
-    EDITABLE_PROPERTIES_WEB, 
-    POOL_LEVEL_PROPERTIES, 
-    AUTO_SNAPSHOT_PROPS, 
+import {
+    EDITABLE_PROPERTIES_WEB,
+    POOL_LEVEL_PROPERTIES,
+    AUTO_SNAPSHOT_PROPS,
     AUTO_SNAPSHOT_SORT_ORDER_WEB,
     initializeAutoSnapshotProperties
 } from './constants.js';
@@ -51,70 +51,70 @@ import { formatSize, findObjectByPath, validateSizeOrNone } from './utils.js';
 // Note: Use default import 'dom' to get the mutable object
 import dom, { initDomElements } from './dom-elements.js';
 
-import { setLoadingState, updateStatus, showModal, hideModal, showErrorAlert } from './ui.js';
+import { setLoadingState, updateStatus, showModal, hideModal, showErrorAlert, showConfirmModal, showTripleChoiceModal } from './ui.js';
 
-import { 
-    updateAuthStateUI, 
-    checkAuthStatus, 
-    handleLogin, 
-    handleLogout, 
+import {
+    updateAuthStateUI,
+    checkAuthStatus,
+    handleLogin,
+    handleLogout,
     handleChangePassword,
     setAuthCallbacks  // Required to enable fetchAndRenderData call after successful auth
 } from './auth.js';
 
-import { 
-    buildTreeHtml, 
-    renderTree, 
-    handleTreeItemClick, 
-    handleTreeToggle, 
+import {
+    buildTreeHtml,
+    renderTree,
+    handleTreeItemClick,
+    handleTreeToggle,
     clearSelection,
     setTreeCallbacks  // Required to enable tree item click handling
 } from './tree.js';
 
 import { renderDashboard } from './dashboard.js';
 
-import { 
-    renderSnapshots, 
-    handleCreateSnapshot, 
-    handleDeleteSnapshot, 
-    handleRollbackSnapshot, 
-    handleCloneSnapshot 
+import {
+    renderSnapshots,
+    handleCreateSnapshot,
+    handleDeleteSnapshot,
+    handleRollbackSnapshot,
+    handleCloneSnapshot
 } from './snapshots.js';
 
-import { 
-    renderPoolStatus, 
-    renderPoolEditLayout, 
+import {
+    renderPoolStatus,
+    renderPoolEditLayout,
     updatePoolEditActionStates,
     initPoolStatusButtons
 } from './pool-status.js';
 
-import { 
-    renderEncryptionInfo, 
-    handleLoadKey, 
-    handleUnloadKey, 
-    handleChangeKey, 
-    handleChangeKeyLocation 
+import {
+    renderEncryptionInfo,
+    handleLoadKey,
+    handleUnloadKey,
+    handleChangeKey,
+    handleChangeKeyLocation
 } from './encryption.js';
 
 import { renderProperties, handleEditProperty, handleInheritProperty } from './property-editor.js';
 
-import { 
-    handleCreatePool, 
-    handleImportPool, 
-    handlePoolAction 
+import {
+    handleCreatePool,
+    handleImportPool,
+    handlePoolAction
 } from './pool-actions.js';
 
-import { 
-    handleCreateDataset, 
-    handleDestroyDataset, 
-    handleRenameDataset, 
-    handlePromoteDataset, 
-    handleDatasetAction 
+import {
+    handleCreateDataset,
+    handleDestroyDataset,
+    handleRenameDataset,
+    handlePromoteDataset,
+    handleDatasetAction
 } from './dataset-actions.js';
 
-import { 
-    handlePoolEditAction, 
-    handleAddVdevDialog 
+import {
+    handlePoolEditAction,
+    handleAddVdevDialog
 } from './pool-edit-actions.js';
 
 import { renderDetails, updateActionStates } from './details.js';
@@ -135,7 +135,7 @@ async function fetchAndRenderData() {
         setLoadingState(false);
         return;
     }
-    
+
     setLoadingState(true);
     const activeTabEl = document.querySelector('#details-tab .nav-link.active');
     const activeTabId = activeTabEl ? activeTabEl.id : 'properties-tab-button';
@@ -149,7 +149,7 @@ async function fetchAndRenderData() {
         let objectStillExists = false;
         let selectedPath = null;
         let selectedType = null;
-        
+
         if (state.currentSelection) {
             selectedPath = state.currentSelection.name;
             selectedType = state.currentSelection.obj_type;
@@ -219,7 +219,7 @@ async function fetchAndRenderData() {
     } catch (error) {
         console.error("Failed to fetch ZFS data:", error);
         dom.zfsTree.innerHTML = `<div class="alert alert-danger" role="alert">Failed to load ZFS data: ${error.message}</div>`;
-        showErrorAlert("Data Load Error", `Could not load pool/dataset information. Please ensure the ZFS daemon is running and accessible.\n\nError: ${error.message}${error.details ? '\nDetails: '+error.details : ''}`);
+        showErrorAlert("Data Load Error", `Could not load pool/dataset information. Please ensure the ZFS daemon is running and accessible.\n\nError: ${error.message}${error.details ? '\nDetails: ' + error.details : ''}`);
         state.setZfsDataCache(null);
         clearSelection();
         updateActionStates();
@@ -252,31 +252,31 @@ function handleShutdownDaemon() {
  * 7. checkAuthStatus() - Check if user is logged in and fetch data if so
  */
 document.addEventListener('DOMContentLoaded', () => {
-    
+
     // Initialize auto-snapshot properties in editable properties
     initializeAutoSnapshotProperties();
-    
+
     // STEP 1: Initialize DOM element references
     // This populates the 'dom' object with actual DOM element references
     // Must be called first since other code depends on dom.* being populated
     initDomElements();
-    
+
     // STEP 2: Initialize state from localStorage (expanded nodes, etc.)
     state.initializeState();
-    
+
     // STEP 3: Set up callbacks for tree module
     // This allows tree.js to call renderDetails() when an item is clicked
     setTreeCallbacks(renderDetails, updateActionStates, clearSelection);
-    
+
     // STEP 4: Set up callback for api module to enable automatic refresh
     // This allows api.js to trigger a full data refresh after actions
     setFetchAndRenderDataRef(fetchAndRenderData);
-    
+
     // STEP 5: Set up callbacks for auth module
     // CRITICAL: This enables fetchAndRenderData() to be called after successful authentication
     // Without this, the app will authenticate but never load data!
     setAuthCallbacks(fetchAndRenderData, clearSelection);
-    
+
     // STEP 6: Set up event listeners for UI interactions
     // --- Authentication Related Listeners ---
     if (dom.loginForm) {
@@ -288,7 +288,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (dom.changePasswordConfirmButton) {
         dom.changePasswordConfirmButton.addEventListener('click', handleChangePassword);
     }
-    
+
     // Clear change password modal messages when shown
     if (dom.changePasswordModalElement) {
         dom.changePasswordModalElement.addEventListener('show.bs.modal', () => {
@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Fix for encryption tab spacing ---
     const encryptionTab = document.getElementById('encryption-tab-button');
     if (encryptionTab) {
-        encryptionTab.addEventListener('shown.bs.tab', function() {
+        encryptionTab.addEventListener('shown.bs.tab', function () {
             const encryptionPane = document.getElementById('encryption-tab-pane');
             if (encryptionPane) {
                 const tabsNav = document.querySelector('.nav-tabs');
@@ -318,7 +318,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         margin: '0'
                     });
                 }
-                
+
                 encryptionPane.querySelectorAll('table, th, td').forEach(el => {
                     Object.assign(el.style, {
                         margin: '0',
@@ -326,7 +326,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         padding: '2px 8px'
                     });
                 });
-                
+
                 encryptionPane.querySelectorAll('h5').forEach(h => {
                     Object.assign(h.style, {
                         marginTop: '0',
@@ -347,7 +347,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const btn = document.getElementById(id);
         if (btn) btn.classList.add('disabled');
     });
-    
+
     // These are always enabled initially
     document.getElementById('create-pool-button')?.classList.remove('disabled');
     document.getElementById('import-pool-button')?.classList.remove('disabled');
@@ -371,17 +371,26 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Global Action Buttons (Pool Actions) ---
     document.getElementById('create-pool-button')?.addEventListener('click', handleCreatePool);
     document.getElementById('import-pool-button')?.addEventListener('click', handleImportPool);
-    document.getElementById('destroy-pool-button')?.addEventListener('click', () => 
-        handlePoolAction('destroy_pool', true, `DANGER ZONE!\n\nDestroy pool '${state.currentSelection?.name}' and ALL data?\nTHIS CANNOT BE UNDONE.`));
-    document.getElementById('export-pool-button')?.addEventListener('click', () => { 
-        const force = confirm("Force export?"); 
-        handlePoolAction('export_pool', true, `Export pool '${state.currentSelection?.name}'?`, [], { force: force }); 
+    document.getElementById('destroy-pool-button')?.addEventListener('click', () =>
+        handlePoolAction('destroy_pool', true, `DANGER ZONE!<br><br>Destroy pool <strong>'${state.currentSelection?.name}'</strong> and ALL data?<br>THIS CANNOT BE UNDONE.`));
+    document.getElementById('export-pool-button')?.addEventListener('click', async () => {
+        const choice = await showTripleChoiceModal(
+            "Export Pool",
+            `Export pool <strong>'${state.currentSelection?.name}'</strong>?<br><br>Choose export type:<br>• <strong>Normal</strong>: Safe export (fails if datasets are in use)<br>• <strong>Force</strong>: Forces export even if in use (may cause issues)`,
+            "Normal Export", "btn-primary",
+            "Force Export", "btn-warning"
+        );
+        if (choice === 'optionA') {
+            handlePoolAction('export_pool', false, null, [], { force: false });
+        } else if (choice === 'optionB') {
+            handlePoolAction('export_pool', false, null, [], { force: true });
+        }
     });
-    document.getElementById('scrub-start-button')?.addEventListener('click', () => 
+    document.getElementById('scrub-start-button')?.addEventListener('click', () =>
         handlePoolAction('scrub_pool', false, null, [], { stop: false }));
-    document.getElementById('scrub-stop-button')?.addEventListener('click', () => 
+    document.getElementById('scrub-stop-button')?.addEventListener('click', () =>
         handlePoolAction('scrub_pool', false, null, [], { stop: true }));
-    document.getElementById('clear-errors-button')?.addEventListener('click', () => 
+    document.getElementById('clear-errors-button')?.addEventListener('click', () =>
         handlePoolAction('clear_pool_errors', true, `Clear persistent errors for pool '${state.currentSelection?.name}'?`));
 
     // --- Dataset Button Listeners ---
@@ -399,20 +408,20 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('clone-snapshot-button')?.addEventListener('click', handleCloneSnapshot);
 
     // --- Pool Edit Tab Buttons ---
-    document.getElementById('attach-device-button')?.addEventListener('click', () => 
+    document.getElementById('attach-device-button')?.addEventListener('click', () =>
         handlePoolEditAction('attach', dom.poolEditTreeContainer.querySelector('.selected')));
-    document.getElementById('detach-device-button')?.addEventListener('click', () => 
+    document.getElementById('detach-device-button')?.addEventListener('click', () =>
         handlePoolEditAction('detach', dom.poolEditTreeContainer.querySelector('.selected')));
-    document.getElementById('replace-device-button')?.addEventListener('click', () => 
+    document.getElementById('replace-device-button')?.addEventListener('click', () =>
         handlePoolEditAction('replace', dom.poolEditTreeContainer.querySelector('.selected')));
-    document.getElementById('offline-device-button')?.addEventListener('click', () => 
+    document.getElementById('offline-device-button')?.addEventListener('click', () =>
         handlePoolEditAction('offline', dom.poolEditTreeContainer.querySelector('.selected')));
-    document.getElementById('online-device-button')?.addEventListener('click', () => 
+    document.getElementById('online-device-button')?.addEventListener('click', () =>
         handlePoolEditAction('online', dom.poolEditTreeContainer.querySelector('.selected')));
     document.getElementById('add-pool-vdev-button')?.addEventListener('click', handleAddVdevDialog);
-    document.getElementById('remove-pool-vdev-button')?.addEventListener('click', () => 
+    document.getElementById('remove-pool-vdev-button')?.addEventListener('click', () =>
         handlePoolEditAction('remove_vdev', dom.poolEditTreeContainer.querySelector('.selected')));
-    document.getElementById('split-pool-button')?.addEventListener('click', () => 
+    document.getElementById('split-pool-button')?.addEventListener('click', () =>
         handlePoolEditAction('split', dom.poolEditTreeContainer.querySelector('.selected')));
 
     // --- Pool Status View Buttons ---

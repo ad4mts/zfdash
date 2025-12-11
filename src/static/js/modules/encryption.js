@@ -6,7 +6,8 @@
 
 import * as state from './state.js';
 import { executeActionWithRefresh } from './api.js';
-import { showModal, hideModal } from './ui.js';
+import { showModal, hideModal, showConfirmModal, showInputModal } from './ui.js';
+import { showError, showWarning } from './notifications.js';
 
 /**
  * Render encryption information for an encrypted dataset
@@ -93,7 +94,7 @@ export function renderEncryptionInfo(obj, disableOnly = false) {
  */
 export function handleLoadKey() {
     if (!state.currentSelection || !state.currentSelection.is_encrypted) return;
-    
+
     const dsName = state.currentSelection.name;
     const keyLocation = state.currentSelection.properties?.keylocation || 'prompt';
     const keyFormat = state.currentSelection.properties?.keyformat || 'passphrase';
@@ -107,12 +108,12 @@ export function handleLoadKey() {
                 <label for="load-key-pass" class="form-label">Passphrase:</label>
                 <input type="password" id="load-key-pass" class="form-control" required>
             </div>`;
-        
+
         showModal("Load Encryption Key", modalHtml, () => {
             const passInput = document.getElementById('load-key-pass');
             const passphrase = passInput.value;
             if (passphrase === "") {
-                alert("Passphrase cannot be empty.");
+                showError("Passphrase cannot be empty.");
                 passInput.focus();
                 return;
             }
@@ -127,7 +128,7 @@ export function handleLoadKey() {
         });
         return;
     } else if (locationToSend && !locationToSend.startsWith('file:///')) {
-        alert(`Invalid key location '${keyLocation}'. Cannot load key.`);
+        showError(`Invalid key location '${keyLocation}'. Cannot load key.`);
         return;
     }
 
@@ -142,27 +143,31 @@ export function handleLoadKey() {
 /**
  * Handle unload key action
  */
-export function handleUnloadKey() {
+export async function handleUnloadKey() {
     if (!state.currentSelection || !state.currentSelection.is_encrypted) return;
-    
+
     const dsName = state.currentSelection.name;
     if (state.currentSelection.is_mounted || state.currentSelection.properties?.mounted === 'yes') {
-        alert(`Dataset '${dsName}' must be unmounted before its key can be unloaded.`);
+        showWarning(`Dataset '${dsName}' must be unmounted before its key can be unloaded.`);
         return;
     }
-    
+
     let recursive = false;
     if (state.currentSelection.children?.some(c => c.is_encrypted)) {
-        recursive = confirm(`Unload keys recursively for child datasets under '${dsName}'?`);
+        recursive = await showConfirmModal(
+            "Recursive Key Unload",
+            `Unload keys <strong>recursively</strong> for child datasets under '<strong>${dsName}</strong>'?`,
+            "Yes, Recursive", "btn-warning"
+        );
     }
-    
+
     executeActionWithRefresh(
         'unload_key',
         [],
         { dataset_name: dsName, recursive: recursive },
         `Key unload initiated for '${dsName}'.`,
         true,
-        `Unload encryption key${recursive ? ' recursively' : ''} for '${dsName}'?\nData will become inaccessible.`
+        `Unload encryption key${recursive ? ' recursively' : ''} for '<strong>${dsName}</strong>'?<br>Data will become inaccessible.`
     );
 }
 
@@ -171,10 +176,10 @@ export function handleUnloadKey() {
  */
 export function handleChangeKey() {
     if (!state.currentSelection || !state.currentSelection.is_encrypted || state.currentSelection.properties?.keystatus !== 'available') {
-        alert("Key must be loaded (available) to change it.");
+        showWarning("Key must be loaded (available) to change it.");
         return;
     }
-    
+
     const dsName = state.currentSelection.name;
     const keyFormat = state.currentSelection.properties?.keyformat || 'passphrase';
 
@@ -189,16 +194,16 @@ export function handleChangeKey() {
                 <label for="change-key-confirm-pass" class="form-label">Confirm New Passphrase:</label>
                 <input type="password" id="change-key-confirm-pass" class="form-control">
             </div>`;
-        
+
         showModal("Change Passphrase", modalHtml, () => {
             const pass1 = document.getElementById('change-key-new-pass').value;
             const pass2 = document.getElementById('change-key-confirm-pass').value;
             if (!pass1) {
-                alert("New passphrase cannot be empty.");
+                showError("New passphrase cannot be empty.");
                 return;
             }
             if (pass1 !== pass2) {
-                alert("New passphrases do not match.");
+                showError("New passphrases do not match.");
                 return;
             }
             const changeInfo = `${pass1}\n${pass1}\n`;
@@ -206,33 +211,39 @@ export function handleChangeKey() {
             executeActionWithRefresh(
                 'change_key',
                 [],
-                { dataset_name: dsName, load_key: true, recursive: false, options: {keyformat: 'passphrase'}, passphrase_change_info: changeInfo },
+                { dataset_name: dsName, load_key: true, recursive: false, options: { keyformat: 'passphrase' }, passphrase_change_info: changeInfo },
                 `Passphrase change initiated for '${dsName}'.`
             );
         });
     } else {
-        alert("Changing key files via the web UI is not yet implemented. Use 'Change Key Location' instead if you only want to point to a different existing key file.");
+        showWarning("Changing key files via the web UI is not yet implemented. Use 'Change Key Location' instead if you only want to point to a different existing key file.");
     }
 }
 
 /**
  * Handle change key location action
  */
-export function handleChangeKeyLocation() {
+export async function handleChangeKeyLocation() {
     if (!state.currentSelection || !state.currentSelection.is_encrypted) return;
-    
+
     const dsName = state.currentSelection.name;
     const currentLoc = state.currentSelection.properties?.keylocation || 'prompt';
-    const newLoc = prompt(`Enter new key location for '${dsName}':\n(Current: ${currentLoc})\nUse 'prompt' or 'file:///path/to/key'`, currentLoc);
-    
+    const newLoc = await showInputModal(
+        "Change Key Location",
+        `Enter new key location for '<strong>${dsName}</strong>':<br><small class="text-muted">Current: ${currentLoc}</small><br><small>Use 'prompt' or 'file:///path/to/key'</small>`,
+        currentLoc,
+        "prompt or file:///path/to/key",
+        "Change", "btn-primary"
+    );
+
     if (newLoc === null || newLoc.trim() === "" || newLoc.trim() === currentLoc) return;
-    
+
     const newLocation = newLoc.trim();
     if (newLocation !== 'prompt' && !newLocation.startsWith('file:///')) {
-        alert("Invalid location format. Use 'prompt' or 'file:///...'");
+        showError("Invalid location format. Use 'prompt' or 'file:///...'");
         return;
     }
-    
+
     executeActionWithRefresh(
         'set_dataset_property',
         [dsName, 'keylocation', newLocation],

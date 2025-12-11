@@ -30,6 +30,19 @@ except ImportError:
     zfs_manager = MockZFSManager()
     utils = MockUtils()
 
+# --- NEW: Import Help Strings ---
+try:
+    # Try importing from src.help_strings if running as module
+    from help_strings import HELP
+except ImportError:
+    try:
+        # Try relative import if running from package
+        from ..help_strings import HELP
+    except ImportError:
+        # Fallback if path issues
+        print("Warning: Could not import help_strings. Using fallback strings.")
+        HELP = {}
+
 
 # Constants for tree widget data roles
 VDEV_TYPE_ROLE = Qt.UserRole + 1
@@ -64,7 +77,7 @@ class CreatePoolDialog(QDialog):
         top_layout.addLayout(form_layout, 1) # Give form layout more space
 
         self.force_checkbox = QCheckBox("Force (-f)")
-        self.force_checkbox.setToolTip("Allow using devices of different sizes (dangerous) or potentially override other checks.")
+        self.force_checkbox.setToolTip(HELP.get("tooltips", {}).get("force_checkbox", "Override safety checks."))
         top_widget = QWidget() # Use a widget to align checkbox better
         top_widget_layout = QVBoxLayout(top_widget)
         top_widget_layout.addStretch() # Push checkbox down
@@ -85,7 +98,7 @@ class CreatePoolDialog(QDialog):
         
         # Add Show All Checkbox
         self.show_all_checkbox = QCheckBox("Show All Devices")
-        self.show_all_checkbox.setToolTip("Show all detected block devices (including partitions and potentially unsafe ones).")
+        self.show_all_checkbox.setToolTip(HELP.get("tooltips", {}).get("show_all_devices", "Show all block devices."))
         self.show_all_checkbox.toggled.connect(self._update_device_list_ui)
         left_layout.addWidget(self.show_all_checkbox)
 
@@ -110,6 +123,31 @@ class CreatePoolDialog(QDialog):
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         right_layout.addWidget(self.vdev_tree)
+        
+        # --- NEW: VDEV Info Label ---
+        self.vdev_info_label = QLabel("")
+        self.vdev_info_label.setWordWrap(True)
+        self.vdev_info_label.setStyleSheet("color: gray; font-style: italic;")
+        right_layout.addWidget(self.vdev_info_label)
+
+        # --- NEW: Empty State Label ---
+        empty_state_help = HELP.get("empty_states", {}).get("create_pool_vdev_tree", {})
+        steps_html = ""
+        if "steps" in empty_state_help:
+            steps_items = "".join([f"<li style='text-align:left;'>{step}</li>" for step in empty_state_help["steps"]])
+            steps_html = f"<ol style='display:inline-block; text-align:left;'>{steps_items}</ol>"
+
+        empty_state_html = f"""
+            <html><body style='text-align:center; color:gray;'>
+            <h3>{empty_state_help.get("title", "No VDEVs configured")}</h3>
+            <p>{empty_state_help.get("message", "Add a VDEV to start.")}</p>
+            {steps_html}
+            </body></html>
+        """
+        self.empty_state_label = QLabel(empty_state_html)
+        self.empty_state_label.setAlignment(Qt.AlignCenter)
+        # Note: We'll toggle visibility in a method
+        right_layout.addWidget(self.empty_state_label)
 
         # Buttons to manage VDEVs and Devices
         button_layout = QHBoxLayout()
@@ -142,6 +180,32 @@ class CreatePoolDialog(QDialog):
 
         self.setLayout(layout)
         self._populate_available_devices() # Populate the list
+
+        self._populate_available_devices() # Populate the list
+        self._update_empty_state()
+
+    def _update_empty_state(self):
+        """Updates visibility of tree and empty state label."""
+        has_items = self.vdev_tree.topLevelItemCount() > 0
+        self.vdev_tree.setVisible(has_items)
+        self.empty_state_label.setVisible(not has_items)
+        # Also toggle buttons slightly if needed, but not strictly required
+
+    def _update_vdev_info_label(self, vdev_type):
+        """Updates the info label based on VDEV type."""
+        if not HELP: return
+        info = HELP.get("vdev_types", {}).get(vdev_type.lower(), {})
+        
+        text = f"<b>{info.get('name', vdev_type)}</b>: {info.get('short', '')}"
+        style = "color: gray;"
+        
+        if info.get("warning"):
+            text += f"<br><span style='color:red;'>⚠️ {info['warning']}</span>"
+        elif info.get("tip"):
+            text += f"<br><span style='color:green;'>💡 {info['tip']}</span>"
+            
+        self.vdev_info_label.setText(text)
+        self.vdev_info_label.setVisible(True)
 
     def _populate_available_devices(self):
         """Fetches block devices and updates the UI."""
@@ -248,6 +312,9 @@ class CreatePoolDialog(QDialog):
         vdev_type, ok = QInputDialog.getItem(self, "Add VDEV", "Select VDEV Type:", vdev_types, 0, False)
 
         if ok and vdev_type:
+            # Show help for the added type (momentarily, future clicks on tree will update it if we add listener)
+            self._update_vdev_info_label(vdev_type)
+            
             vdev_item = QTreeWidgetItem(self.vdev_tree)
             vdev_item.setText(0, f"VDEV ({vdev_type})")
             vdev_item.setText(1, vdev_type.upper())
@@ -261,6 +328,8 @@ class CreatePoolDialog(QDialog):
             elif vdev_type in ['log', 'cache', 'spare', 'special', 'dedup']:
                 icon = QIcon.fromTheme("drive-removable-media")
             vdev_item.setIcon(0, icon)
+            
+            self._update_empty_state()
 
 
     @Slot()
@@ -352,6 +421,7 @@ class CreatePoolDialog(QDialog):
                          self._return_device_to_available(device_path)
                 # Remove VDEV item from tree
                 (self.vdev_tree.invisibleRootItem()).removeChild(item_to_remove)
+                self._update_empty_state()
         else:
             # It's a device within a VDEV
             device_path = item_to_remove.data(0, DEVICE_PATH_ROLE)
@@ -370,6 +440,8 @@ class CreatePoolDialog(QDialog):
                     parent_vdev_item.removeChild(item_to_remove)
                     # Return device to available list
                     self._return_device_to_available(device_path)
+                    
+            self._update_empty_state()
 
     def _return_device_to_available(self, device_path: str):
         """Adds a device back to the available list widget."""

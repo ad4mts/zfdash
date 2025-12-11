@@ -8,6 +8,8 @@ import { formatSize } from './utils.js';
 import { executeActionWithRefresh } from './api.js';
 import * as state from './state.js';
 import dom from './dom-elements.js';
+import { showConfirmModal, showInputModal } from './ui.js';
+import { showError, showWarning } from './notifications.js';
 
 /**
  * Render snapshots table
@@ -15,9 +17,9 @@ import dom from './dom-elements.js';
  */
 export function renderSnapshots(snapshots) {
     if (!dom.snapshotsTableBody) return;
-    
+
     dom.snapshotsTableBody.innerHTML = '';
-    
+
     // Reset button state
     document.getElementById('delete-snapshot-button').disabled = true;
     document.getElementById('rollback-snapshot-button').disabled = true;
@@ -41,18 +43,18 @@ export function renderSnapshots(snapshots) {
             <td class="text-end">${formatSize(snap.referenced)}</td>
             <td>${snap.creation_time || snap.properties?.creation || '-'}</td>
         `;
-        
+
         row.style.cursor = 'pointer';
         row.onclick = () => {
             // Remove selected class from other rows
             dom.snapshotsTableBody.querySelectorAll('tr.table-active').forEach(r => r.classList.remove('table-active'));
             row.classList.add('table-active');
-            
+
             // Enable action buttons
             document.getElementById('delete-snapshot-button').disabled = false;
             document.getElementById('rollback-snapshot-button').disabled = false;
             document.getElementById('clone-snapshot-button').disabled = false;
-            
+
             // Store selected snapshot name
             dom.snapshotsTableBody.dataset.selectedSnapshot = fullSnapName;
         };
@@ -62,31 +64,41 @@ export function renderSnapshots(snapshots) {
 /**
  * Handle create snapshot action
  */
-export function handleCreateSnapshot() {
+export async function handleCreateSnapshot() {
     if (!state.currentSelection) return;
-    
+
     const datasetName = state.currentSelection.name;
-    const snapName = prompt(`Enter snapshot name for:\n${datasetName}\n(Result: ${datasetName}@<name>)`, "");
-    
+    const snapName = await showInputModal(
+        "Create Snapshot",
+        `Enter snapshot name for:<br><strong>${datasetName}</strong><br><small class="text-muted">Result: ${datasetName}@&lt;name&gt;</small>`,
+        "",
+        "snapshot-name",
+        "Create", "btn-primary"
+    );
+
     if (snapName === null) return;
-    
+
     const namePart = snapName.trim();
     if (!namePart) {
-        alert("Snapshot name cannot be empty.");
+        showError("Snapshot name cannot be empty.");
         return;
     }
     if (/[@\/ ]/.test(namePart)) {
-        alert("Snapshot name cannot contain '@', '/', or spaces.");
+        showError("Snapshot name cannot contain '@', '/', or spaces.");
         return;
     }
     if (!/^[a-zA-Z0-9][a-zA-Z0-9_\-:.%]*$/.test(namePart)) {
-        alert("Snapshot name contains invalid characters.");
+        showError("Snapshot name contains invalid characters.");
         return;
     }
 
     let recursive = false;
     if (state.currentSelection.children && state.currentSelection.children.some(c => c.obj_type === 'dataset' || c.obj_type === 'volume')) {
-        recursive = confirm(`Create snapshots recursively for all child datasets/volumes under ${datasetName}?`);
+        recursive = await showConfirmModal(
+            "Recursive Snapshot",
+            `Create snapshots <strong>recursively</strong> for all child datasets/volumes under <strong>${datasetName}</strong>?`,
+            "Yes, Recursive", "btn-info"
+        );
     }
 
     executeActionWithRefresh(
@@ -103,17 +115,17 @@ export function handleCreateSnapshot() {
 export function handleDeleteSnapshot() {
     const selectedSnapFullName = dom.snapshotsTableBody?.dataset.selectedSnapshot;
     if (!selectedSnapFullName) {
-        alert("Please select a snapshot from the table first.");
+        showWarning("Please select a snapshot from the table first.");
         return;
     }
-    
+
     executeActionWithRefresh(
         'destroy_snapshot',
         [selectedSnapFullName],
         {},
         `Snapshot '${selectedSnapFullName}' deletion initiated.`,
         true,
-        `Are you sure you want to permanently delete snapshot:\n${selectedSnapFullName}?`
+        `Are you sure you want to permanently delete snapshot:<br><strong>${selectedSnapFullName}</strong>?`
     );
 }
 
@@ -123,54 +135,73 @@ export function handleDeleteSnapshot() {
 export function handleRollbackSnapshot() {
     const selectedSnapFullName = dom.snapshotsTableBody?.dataset.selectedSnapshot;
     if (!selectedSnapFullName) {
-        alert("Please select a snapshot from the table first.");
+        showWarning("Please select a snapshot from the table first.");
         return;
     }
-    
+
     const datasetName = selectedSnapFullName.split('@')[0];
-    
+
     executeActionWithRefresh(
         'rollback_snapshot',
         [selectedSnapFullName],
         {},
         `Rollback to '${selectedSnapFullName}' initiated.`,
         true,
-        `DANGER ZONE!\n\nRolling back dataset '${datasetName}' to snapshot:\n${selectedSnapFullName}\n\nThis will DESTROY ALL CHANGES made since the snapshot.\nTHIS CANNOT BE UNDONE.\n\nProceed?`
+        `<span class="text-danger"><strong>DANGER ZONE!</strong></span><br><br>Rolling back dataset '<strong>${datasetName}</strong>' to snapshot:<br><strong>${selectedSnapFullName}</strong><br><br>This will <strong>DESTROY ALL CHANGES</strong> made since the snapshot.<br><strong>THIS CANNOT BE UNDONE.</strong><br><br>Proceed?`
     );
 }
 
 /**
  * Handle clone snapshot action
  */
-export function handleCloneSnapshot() {
+export async function handleCloneSnapshot() {
     const selectedSnapFullName = dom.snapshotsTableBody?.dataset.selectedSnapshot;
     if (!selectedSnapFullName) {
-        alert("Please select a snapshot from the table first.");
+        showWarning("Please select a snapshot from the table first.");
         return;
     }
-    
+
     const sourceDatasetName = selectedSnapFullName.split('@')[0];
     const poolName = sourceDatasetName.split('/')[0];
-    const defaultTarget = `${sourceDatasetName}-clone`;
+    // Default: poolname/clone or poolname/nested/path_clone
+    const defaultTarget = sourceDatasetName.includes('/')
+        ? `${sourceDatasetName}_clone`
+        : `${sourceDatasetName}/clone`;
 
-    const targetName = prompt(`Enter the FULL PATH for the new dataset/volume cloned from:\n${selectedSnapFullName}`, defaultTarget);
+    const targetName = await showInputModal(
+        "Clone Snapshot",
+        `Enter the <strong>full path</strong> for the new dataset/volume cloned from:<br><strong>${selectedSnapFullName}</strong>`,
+        defaultTarget,
+        "pool/path/to/clone",
+        "Clone", "btn-primary"
+    );
     if (targetName === null) return;
-    
+
     const targetPath = targetName.trim();
-    if (!targetPath || targetPath.includes(' ') || !targetPath.includes('/') || targetPath.endsWith('/')) {
-        alert(`Invalid target path. Must be like '${poolName}/myclone'.`);
+    if (!targetPath || targetPath.includes(' ') || targetPath.endsWith('/')) {
+        showError(`Invalid target path. Cannot be empty, contain spaces, or end with '/'.`);
+        return;
+    }
+    // Must contain a '/' and start with the same pool name
+    if (!targetPath.includes('/')) {
+        showError(`Target must include a path (e.g., '${poolName}/myname').`);
+        return;
+    }
+    const targetPoolName = targetPath.split('/')[0];
+    if (targetPoolName !== poolName) {
+        showError(`Target must be in the same pool '${poolName}'.`);
         return;
     }
     if (targetPath === sourceDatasetName) {
-        alert("Target cannot be the same as the source.");
+        showError("Target cannot be the same as the source.");
         return;
     }
     if (!/^[a-zA-Z0-9]/.test(targetPath.split('/').pop())) {
-        alert("Final component of target name must start with letter/number.");
+        showError("Final component of target name must start with letter/number.");
         return;
     }
     if (/[^a-zA-Z0-9_\-:.%/]/.test(targetPath)) {
-        alert("Target path contains invalid characters.");
+        showError("Target path contains invalid characters.");
         return;
     }
 

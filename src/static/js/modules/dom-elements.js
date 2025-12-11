@@ -24,7 +24,7 @@
 const dom = {
     // Body Element
     bodyElement: null,
-    
+
     // Authentication Elements
     loginSection: null,
     appSection: null,
@@ -35,7 +35,7 @@ const dom = {
     logoutButton: null,
     shutdownButtonItem: null,
     navbarContentLoggedIn: null,
-    
+
     // Change Password Modal Elements
     changePasswordModalElement: null,
     changePasswordModal: null,
@@ -43,7 +43,7 @@ const dom = {
     changePasswordError: null,
     changePasswordSuccess: null,
     changePasswordConfirmButton: null,
-    
+
     // Main UI Elements
     zfsTree: null,
     statusIndicator: null,
@@ -51,29 +51,43 @@ const dom = {
     detailsContent: null,
     detailsTitle: null,
     detailsTabContent: null,
-    
+
     // Tables
     propertiesTable: null,
     propertiesTableBody: null,
     snapshotsTable: null,
     snapshotsTableBody: null,
-    
+
     // Pool Status & Edit
     poolStatusContent: null,
     poolEditTreeContainer: null,
     poolStatusBtn: null,
     poolLayoutBtn: null,
     poolIostatBtn: null,
-    
+
     // Refresh Button
     refreshButton: null,
-    
+
     // Action Modal Elements
     modalElement: null,
     actionModal: null,
     actionModalBody: null,
     actionModalLabel: null,
-    actionModalFooter: null
+    actionModalFooter: null,
+
+    // Error Modal Elements
+    errorModalElement: null,
+    errorModal: null,
+    errorModalBody: null,
+    errorModalLabel: null,
+
+    // Confirm Modal Elements (dedicated for yes/no confirmations)
+    confirmModalElement: null,
+    confirmModal: null,
+    confirmModalBody: null,
+    confirmModalLabel: null,
+    confirmModalFooter: null,
+    confirmModalConfirmBtn: null
 };
 
 /**
@@ -133,6 +147,20 @@ export function initDomElements() {
     dom.actionModalBody = document.getElementById('actionModalBody');
     dom.actionModalLabel = document.getElementById('actionModalLabel');
     dom.actionModalFooter = document.getElementById('actionModalFooter');
+
+    // --- Error Modal Elements ---
+    dom.errorModalElement = document.getElementById('errorModal');
+    dom.errorModal = dom.errorModalElement ? new bootstrap.Modal(dom.errorModalElement) : null;
+    dom.errorModalBody = document.getElementById('errorModalBody');
+    dom.errorModalLabel = document.getElementById('errorModalLabel');
+
+    // --- Confirm Modal Elements (dedicated for yes/no confirmations) ---
+    dom.confirmModalElement = document.getElementById('confirmModal');
+    dom.confirmModal = dom.confirmModalElement ? new bootstrap.Modal(dom.confirmModalElement) : null;
+    dom.confirmModalBody = document.getElementById('confirmModalBody');
+    dom.confirmModalLabel = document.getElementById('confirmModalLabel');
+    dom.confirmModalFooter = document.getElementById('confirmModalFooter');
+    dom.confirmModalConfirmBtn = document.getElementById('confirmModalConfirmBtn');
 }
 
 /**

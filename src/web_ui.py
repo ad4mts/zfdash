@@ -583,6 +583,17 @@ def version_info():
     info['python_version'] = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
     return jsonify(status="success", **info)
 
+@app.route('/api/help_strings')
+def get_help_strings():
+    """Return help strings for the UI (tooltips, warnings, empty states, etc.)."""
+    try:
+        from help_strings import HELP
+        return jsonify(status="success", help=HELP)
+    except ImportError as e:
+        app.logger.error(f"Could not import help_strings: {e}")
+        return jsonify(status="error", error="Help strings not available"), 500
+
+
 @app.route('/api/check_updates')
 @login_required
 def check_updates():

@@ -7,8 +7,10 @@
 import * as state from './state.js';
 import dom from './dom-elements.js';
 import { apiCall, executeActionWithRefresh } from './api.js';
-import { showModal, hideModal, updateStatus } from './ui.js';
+import { showModal, hideModal, updateStatus, showConfirmModal, showInputModal } from './ui.js';
 import { RESERVED_POOL_NAMES, VDEV_TYPES, MIN_DEVICES_PER_VDEV } from './constants.js';
+import { showError, showSuccess, showWarning } from './notifications.js';
+import { renderVdevTypeInfo, hideVdevTypeInfo, loadHelpStrings, renderEmptyState } from './help.js';
 
 // Store available devices map during modal operations
 let availableDevicesMap = {};
@@ -50,8 +52,10 @@ export function handleCreatePool() {
             <div class="col-md-6">
                 <label class="form-label">VDEVs in Pool:</label>
                 <div id="pool-vdev-config" class="border rounded p-1 bg-light" style="min-height: 150px;">
+                    <div id="pool-vdev-empty-state"></div>
                     <ul class="list-unstyled mb-0" id="pool-vdev-list"></ul>
                 </div>
+                <div id="pool-vdev-type-info" class="alert alert-info small py-2 px-3 mt-2" style="display:none;"></div>
                 <div class="input-group input-group-sm justify-content-end mt-1">
                     <select class="form-select form-select-sm" id="pool-vdev-type-select" style="max-width: 150px;">
                         ${VDEV_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
@@ -82,12 +86,49 @@ export function setupCreatePoolModal() {
     modalBody.modalAvailableDevicesMap = {};
     availableDevicesMap = modalBody.modalAvailableDevicesMap;
 
+    // Load help strings
+    loadHelpStrings().catch(e => console.warn('Could not load help strings:', e));
+
+    // VDEV type select change handler - show info
+    const vdevTypeSelect = document.getElementById('pool-vdev-type-select');
+    const vdevTypeInfoContainer = document.getElementById('pool-vdev-type-info');
+    if (vdevTypeSelect && vdevTypeInfoContainer) {
+        vdevTypeSelect.addEventListener('change', () => {
+            const type = vdevTypeSelect.value;
+            if (type && type !== 'custom') {
+                renderVdevTypeInfo(type, vdevTypeInfoContainer);
+            } else {
+                hideVdevTypeInfo(vdevTypeInfoContainer);
+            }
+        });
+        // Show info for initial selection
+        if (vdevTypeSelect.value && vdevTypeSelect.value !== 'custom') {
+            renderVdevTypeInfo(vdevTypeSelect.value, vdevTypeInfoContainer);
+        }
+    }
+
     // Add event listeners
     document.getElementById('pool-add-vdev-btn')?.addEventListener('click', () => {
         const selectEl = document.getElementById('pool-vdev-type-select');
         const type = selectEl ? selectEl.value : null;
         addVdevTypeToPoolConfig(vdevList, type);
+        updateEmptyState();
     });
+
+    // Function to update empty state visibility
+    function updateEmptyState() {
+        const emptyState = document.getElementById('pool-vdev-empty-state');
+        if (emptyState) {
+            const hasItems = vdevList.children.length > 0;
+            emptyState.style.display = hasItems ? 'none' : 'block';
+            if (!hasItems) {
+                renderEmptyState('create_pool_vdev_tree', emptyState);
+            }
+        }
+    }
+
+    // Initial render of empty state
+    updateEmptyState();
     document.getElementById('pool-add-device-btn')?.addEventListener('click', () => addDeviceToPoolVdev(availableList, vdevList, availableDevicesMap));
     document.getElementById('pool-remove-device-btn')?.addEventListener('click', () => {
         const selectedVdev = getSelectedPoolVdev(vdevList);
@@ -98,7 +139,7 @@ export function setupCreatePoolModal() {
         } else if (selectedVdev) {
             removeVdevFromPoolConfig(selectedVdev, availableList, availableDevicesMap);
         } else {
-            alert("Please select a VDEV or a device within a VDEV to remove.");
+            showWarning("Please select a VDEV or a device within a VDEV to remove.");
         }
     });
 
@@ -184,9 +225,15 @@ export function setupCreatePoolModal() {
  * Add VDEV type to pool config
  * Exported for use by pool-edit-actions.js
  */
-export function addVdevTypeToPoolConfig(vdevList, vdevType = null) {
+export async function addVdevTypeToPoolConfig(vdevList, vdevType = null) {
     if (!vdevType || vdevType === 'custom') {
-        vdevType = prompt(`Select VDEV Type:\n(${VDEV_TYPES.join(', ')})`, 'disk');
+        vdevType = await showInputModal(
+            "Custom VDEV Type",
+            `Enter VDEV type:<br><small class="text-muted">(${VDEV_TYPES.join(', ')})</small>`,
+            "disk",
+            "e.g., disk, mirror, raidz",
+            "Add", "btn-primary"
+        );
     }
     // Allow custom types if manually entered, but prefer standard list validation
     if (vdevType) {
@@ -227,7 +274,7 @@ export function addVdevTypeToPoolConfig(vdevList, vdevType = null) {
 
         vdevList.appendChild(li);
     } else if (vdevType !== null) {
-        alert("Invalid VDEV type selected.");
+        showWarning("Invalid VDEV type selected.");
     }
 }
 
@@ -254,12 +301,12 @@ export function getSelectedPoolDeviceInVdev(vdevList) {
 export function addDeviceToPoolVdev(availableList, vdevList, devicesMap) {
     const selectedVdevLi = getSelectedPoolVdev(vdevList);
     if (!selectedVdevLi) {
-        alert("Please select a VDEV in the pool layout first.");
+        showWarning("Please select a VDEV in the pool layout first.");
         return;
     }
     const selectedAvailableItems = availableList.querySelectorAll('.pool-device-item.active');
     if (selectedAvailableItems.length === 0) {
-        alert("Please select one or more available devices to add.");
+        showWarning("Please select one or more available devices to add.");
         return;
     }
 
@@ -270,7 +317,7 @@ export function addDeviceToPoolVdev(availableList, vdevList, devicesMap) {
         const display = devInfo?.display_name || path;
 
         if (deviceListInVdev.querySelector(`li[data-path="${CSS.escape(path)}"]`)) {
-            console.log(`Device ${path} already in this VDEV.`);
+            showWarning(`Device ${path} is already in this VDEV.`);
             return;
         }
 
@@ -299,7 +346,7 @@ export function removeDeviceFromPoolVdev(availableList, vdevList, devicesMap) {
         if (selectedVdevLi) {
             removeVdevFromPoolConfig(selectedVdevLi, availableList, devicesMap);
         } else {
-            alert("Please select a device within a VDEV in the pool layout to remove.");
+            showWarning("Please select a device within a VDEV in the pool layout to remove.");
         }
         return;
     }
@@ -360,22 +407,22 @@ function handleCreatePoolConfirm() {
     const forceCreate = forceCheckbox.checked;
 
     if (!poolName || poolName.includes(' ') || poolName.includes('/')) {
-        alert("Pool name is required and cannot contain spaces or '/'.");
+        showError("Pool name is required and cannot contain spaces or '/'.");
         poolNameInput.classList.add('is-invalid');
         return;
     }
     if (!/^[a-zA-Z]/.test(poolName)) {
-        alert("Pool name must start with a letter.");
+        showError("Pool name must start with a letter.");
         poolNameInput.classList.add('is-invalid');
         return;
     }
     if (/[^a-zA-Z0-9_\-:.%]/.test(poolName)) {
-        alert("Pool name contains invalid characters. Allowed: A-Z a-z 0-9 _ - : . %");
+        showError("Pool name contains invalid characters. Allowed: A-Z a-z 0-9 _ - : . %");
         poolNameInput.classList.add('is-invalid');
         return;
     }
     if (RESERVED_POOL_NAMES.includes(poolName.toLowerCase())) {
-        alert(`Pool name cannot be a reserved keyword ('${poolName}').`);
+        showError(`Pool name cannot be a reserved keyword ('${poolName}').`);
         poolNameInput.classList.add('is-invalid');
         return;
     }
@@ -384,7 +431,7 @@ function handleCreatePoolConfirm() {
     const vdevSpecs = [];
     const vdevItems = document.querySelectorAll('#pool-vdev-list > .pool-vdev-item');
     if (vdevItems.length === 0) {
-        alert("Pool layout is empty. Please add at least one VDEV with devices.");
+        showWarning("Pool layout is empty. Please add at least one VDEV with devices.");
         return;
     }
 
@@ -399,7 +446,7 @@ function handleCreatePoolConfirm() {
 
         const minDevices = MIN_DEVICES_PER_VDEV[vdevType] || 1;
         if (devices.length < minDevices) {
-            alert(`VDEV type '${vdevType}' requires at least ${minDevices} device(s). Found ${devices.length}.`);
+            showError(`VDEV type '${vdevType}' requires at least ${minDevices} device(s). Found ${devices.length}.`);
             layoutValid = false;
             return;
         }
@@ -413,7 +460,7 @@ function handleCreatePoolConfirm() {
     if (!layoutValid) return;
 
     if (!hasDataVdev) {
-        alert("Pool must contain at least one data VDEV (disk, mirror, raidz).");
+        showError("Pool must contain at least one data VDEV (disk, mirror, raidz).");
         return;
     }
 
@@ -449,8 +496,9 @@ export function handleImportPool() {
     showModal('Import ZFS Pools', modalHtml, null, {
         footerHtml: modalFooterHtml,
         setupFunc: setupImportPoolModal,
-        onConfirmAll: () => {
-            if (!confirm("Are you sure you want to attempt importing ALL listed pools?")) return;
+        onConfirmAll: async () => {
+            const confirmed = await showConfirmModal("Import All Pools", "Are you sure you want to attempt importing <strong>ALL</strong> listed pools?", "Import All", "btn-warning");
+            if (!confirmed) return;
             const force = document.getElementById('import-force-check').checked;
             hideModal();
             executeActionWithRefresh(
@@ -482,11 +530,11 @@ function setupImportPoolModal() {
         const force = forceCheck.checked;
 
         if (newName && !/^[a-zA-Z][a-zA-Z0-9_\-:.%]*$/.test(newName)) {
-            alert("Invalid new pool name format.");
+            showError("Invalid new pool name format.");
             return;
         }
         if (newName && RESERVED_POOL_NAMES.includes(newName.toLowerCase())) {
-            alert(`New pool name cannot be a reserved keyword ('${newName}').`);
+            showError(`New pool name cannot be a reserved keyword ('${newName}').`);
             return;
         }
 

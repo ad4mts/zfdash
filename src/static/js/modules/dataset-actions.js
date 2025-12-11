@@ -6,8 +6,9 @@
 
 import * as state from './state.js';
 import { executeActionWithRefresh } from './api.js';
-import { showModal, hideModal, showErrorAlert } from './ui.js';
+import { showModal, hideModal, showErrorAlert, showConfirmModal, showInputModal } from './ui.js';
 import { validateSizeOrNone } from './utils.js';
+import { showError, showWarning } from './notifications.js';
 
 /**
  * Handle create dataset action
@@ -15,7 +16,7 @@ import { validateSizeOrNone } from './utils.js';
 export function handleCreateDataset() {
     if (!state.currentSelection || !['pool', 'dataset', 'volume'].includes(state.currentSelection.obj_type)) {
         console.error("handleCreateDataset called without valid selection:", state.currentSelection);
-        alert("Please select a pool or dataset first.");
+        showWarning("Please select a pool or dataset first.");
         return;
     }
     const parentName = state.currentSelection.name;
@@ -159,7 +160,7 @@ export function setupCreateDatasetModal() {
         passphraseGroup.style.display = isPass ? 'flex' : 'none';
         keylocGroup.style.display = isPass ? 'none' : 'flex';
     };
-    
+
     // Initial state
     encOptionsDiv.style.display = encEnableCheck.checked ? 'block' : 'none';
     const isPassInitial = encFormatSelect.value === 'passphrase';
@@ -178,24 +179,24 @@ function handleCreateDatasetConfirm() {
     const volSize = document.getElementById('create-ds-volsize').value.trim();
 
     if (!namePart || namePart.includes(' ') || namePart.includes('/') || namePart.includes('@')) {
-        alert("Invalid dataset/volume name part.");
+        showError("Invalid dataset/volume name part.");
         return;
     }
     if (!/^[a-zA-Z0-9]/.test(namePart)) {
-        alert("Name part must start with letter/number.");
+        showError("Name part must start with letter/number.");
         return;
     }
     if (/[^a-zA-Z0-9_\-:.%]/.test(namePart)) {
-        alert("Name part contains invalid characters.");
+        showError("Name part contains invalid characters.");
         return;
     }
 
     if (isVolume && !volSize) {
-        alert("Volume Size is required for volumes.");
+        showError("Volume Size is required for volumes.");
         return;
     }
     if (isVolume && !validateSizeOrNone(volSize)) {
-        alert("Invalid volume size format.");
+        showError("Invalid volume size format.");
         return;
     }
 
@@ -209,7 +210,7 @@ function handleCreateDatasetConfirm() {
     const quota = document.getElementById('create-ds-quota').value.trim();
     if (quota && quota.toLowerCase() !== 'none') {
         if (!validateSizeOrNone(quota)) {
-            alert("Invalid Quota format.");
+            showError("Invalid Quota format.");
             return;
         }
         options.quota = quota;
@@ -225,18 +226,18 @@ function handleCreateDatasetConfirm() {
             const pass1 = document.getElementById('create-ds-enc-pass').value;
             const pass2 = document.getElementById('create-ds-enc-confirm').value;
             if (!pass1) {
-                alert("Passphrase cannot be empty when encryption is enabled.");
+                showError("Passphrase cannot be empty when encryption is enabled.");
                 return;
             }
             if (pass1 !== pass2) {
-                alert("Passphrases do not match.");
+                showError("Passphrases do not match.");
                 return;
             }
             encPassphrase = pass1;
         } else {
             const keyloc = document.getElementById('create-ds-enc-keyloc').value.trim();
             if (!keyloc || !keyloc.startsWith('file:///')) {
-                alert("Key Location (file URI) is required for hex/raw format.");
+                showError("Key Location (file URI) is required for hex/raw format.");
                 return;
             }
             options.keylocation = keyloc;
@@ -261,25 +262,32 @@ function handleCreateDatasetConfirm() {
 /**
  * Handle destroy dataset action
  */
-export function handleDestroyDataset() {
+export async function handleDestroyDataset() {
     if (!state.currentSelection || !['dataset', 'volume'].includes(state.currentSelection.obj_type)) return;
-    
+
     const dsName = state.currentSelection.name;
     const typeStr = state.currentSelection.obj_type;
 
     let recursive = false;
-    let confirmMsg = `Are you sure you want to permanently destroy ${typeStr} '${dsName}'?`;
+    let confirmMsg = `Are you sure you want to permanently destroy ${typeStr} <strong>'${dsName}'</strong>?`;
 
     const hasChildren = state.currentSelection.children?.length > 0;
     const hasSnapshots = state.currentSelection.snapshots?.length > 0;
 
     if (hasChildren || hasSnapshots) {
-        if (confirm(`WARNING: ${typeStr} '${dsName}' contains child items and/or snapshots.\n\nDo you want to destroy it RECURSIVELY (including all children and snapshots)?`)) {
+        const recursiveConfirm = await showConfirmModal(
+            "Recursive Destroy Required",
+            `WARNING: ${typeStr} <strong>'${dsName}'</strong> contains child items and/or snapshots.<br><br>Do you want to destroy it <strong>RECURSIVELY</strong> (including all children and snapshots)?`,
+            "Yes, Recursive Destroy",
+            "btn-danger"
+        );
+
+        if (recursiveConfirm) {
             recursive = true;
-            confirmMsg = `DANGER ZONE! Are you sure you want to RECURSIVELY destroy ${typeStr} '${dsName}' and ALL its contents (children, snapshots)?\n\nTHIS CANNOT BE UNDONE.`;
+            confirmMsg = `DANGER ZONE! Are you sure you want to RECURSIVELY destroy ${typeStr} <strong>'${dsName}'</strong> and ALL its contents?<br><br>THIS CANNOT BE UNDONE.`;
         } else {
             recursive = false;
-            confirmMsg = `Attempt to destroy ONLY ${typeStr} '${dsName}' (may fail if children/snapshots exist)?`;
+            confirmMsg = `Attempt to destroy ONLY ${typeStr} <strong>'${dsName}'</strong> (may fail if children/snapshots exist)?`;
         }
     }
 
@@ -296,32 +304,38 @@ export function handleDestroyDataset() {
 /**
  * Handle rename dataset action
  */
-export function handleRenameDataset() {
+export async function handleRenameDataset() {
     if (!state.currentSelection || !['dataset', 'volume'].includes(state.currentSelection.obj_type)) return;
-    
+
     const oldName = state.currentSelection.name;
     const typeStr = state.currentSelection.obj_type;
-    const newName = prompt(`Enter the new FULL PATH for ${typeStr}:\n${oldName}`, oldName);
-    
+    const newName = await showInputModal(
+        `Rename ${typeStr.charAt(0).toUpperCase() + typeStr.slice(1)}`,
+        `Enter the <strong>new full path</strong> for ${typeStr}:<br><strong>${oldName}</strong>`,
+        oldName,
+        "pool/new/path",
+        "Rename", "btn-primary"
+    );
+
     if (newName === null || newName.trim() === "" || newName.trim() === oldName) return;
-    
+
     const newPath = newName.trim();
 
     if (newPath.includes(' ') || !newPath.includes('/') || newPath.endsWith('/')) {
-        alert(`Invalid target path format.`);
+        showError(`Invalid target path format.`);
         return;
     }
     if (!/^[a-zA-Z0-9]/.test(newPath.split('/').pop())) {
-        alert("Final component of new name must start with letter/number.");
+        showError("Final component of new name must start with letter/number.");
         return;
     }
     if (/[^a-zA-Z0-9_\-:.%/]/.test(newPath)) {
-        alert("New path contains invalid characters.");
+        showError("New path contains invalid characters.");
         return;
     }
 
     let recursive = false;
-    const force = confirm("Force unmount if dataset is busy? (Use with caution)");
+    const force = await showConfirmModal("Force Unmount?", "Force unmount if dataset is busy? (Use with caution)", "Yes, Force", "btn-warning");
 
     executeActionWithRefresh(
         'rename_dataset',
@@ -329,7 +343,7 @@ export function handleRenameDataset() {
         { recursive: recursive, force_unmount: force },
         `${typeStr.charAt(0).toUpperCase() + typeStr.slice(1)} '${oldName}' rename to '${newPath}' initiated.`,
         true,
-        `Rename ${typeStr} '${oldName}' to '${newPath}'? ${force ? '(Force unmount)' : ''}`
+        `Rename ${typeStr} <strong>'${oldName}'</strong> to <strong>'${newPath}'</strong>? ${force ? '<br>(Force unmount)' : ''}`
     );
 }
 
@@ -338,23 +352,23 @@ export function handleRenameDataset() {
  */
 export function handlePromoteDataset() {
     if (!state.currentSelection || !['dataset', 'volume'].includes(state.currentSelection.obj_type)) return;
-    
+
     const dsName = state.currentSelection.name;
     const props = state.currentSelection.properties || {};
     const origin = props.origin;
-    
+
     if (!origin || origin === '-') {
-        alert(`'${dsName}' is not a clone and cannot be promoted.`);
+        showWarning(`'${dsName}' is not a clone and cannot be promoted.`);
         return;
     }
-    
+
     executeActionWithRefresh(
         'promote_dataset',
         [dsName],
         {},
         `Promotion of clone '${dsName}' initiated.`,
         true,
-        `Promote clone '${dsName}'? This breaks its dependency on the origin snapshot.`
+        `Promote clone <strong>'${dsName}'</strong>? This breaks its dependency on the origin snapshot.`
     );
 }
 
@@ -363,7 +377,7 @@ export function handlePromoteDataset() {
  */
 export function handleDatasetAction(actionName, requireConfirm = false, confirmMsg = null, extraArgs = [], extraKwargs = {}) {
     if (!state.currentSelection || !['dataset', 'volume'].includes(state.currentSelection.obj_type)) return;
-    
+
     const dsName = state.currentSelection.name;
     executeActionWithRefresh(
         actionName,
@@ -371,6 +385,6 @@ export function handleDatasetAction(actionName, requireConfirm = false, confirmM
         extraKwargs,
         `Dataset action '${actionName}' initiated for '${dsName}'.`,
         requireConfirm,
-        confirmMsg || `Are you sure you want to perform '${actionName}' on '${dsName}'?`
+        confirmMsg || `Are you sure you want to perform '${actionName}' on <strong>'${dsName}'</strong>?`
     );
 }

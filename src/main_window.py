@@ -914,40 +914,56 @@ class MainWindow(QMainWindow):
         if dialog.exec():
              import_details = dialog.get_import_details()
              if import_details:
-                  pool_id_or_name = import_details.get("pool_id_or_name")
+                  action = import_details.get("action")  # 'selected' or 'all'
+                  pool_id = import_details.get("pool_id")
                   new_name = import_details.get("new_name")
                   force = import_details.get("force", False)
-                  search_dirs = import_details.get("search_dirs") # Might be None
-                  import_all = import_details.get("import_all", False)
 
-                  if import_all:
+                  if action == 'all':
                       self._run_worker_task(
                            self.zfs_client.execute_generic_action,
-                           "import_pool", "All available pools imported.", search_dirs=search_dirs, force=force,
+                           "import_pool", "All available pools imported.", force=force,
                            op_name="Importing All Pools"
                       )
-                  elif pool_id_or_name:
+                  elif action == 'selected' and pool_id:
                        self._run_worker_task(
                            self.zfs_client.execute_generic_action,
-                           "import_pool", f"Pool '{pool_id_or_name}' imported.", pool_id_or_name, new_name=new_name, force=force,
-                           op_name=f"Importing Pool {pool_id_or_name}"
+                           "import_pool", f"Pool '{pool_id}' imported.", pool_id, new_name=new_name, force=force,
+                           op_name=f"Importing Pool {pool_id}"
                        )
-                  # else: No pool selected/specified
+                  # else: No action or pool selected
 
     @Slot()
     def _export_pool(self):
         if not isinstance(self._current_selection, Pool): return
-        pool_name = self._current_selection.name; force_export = False
-        reply = QMessageBox.question(self, "Force Export?", f"Force export pool '{pool_name}'?\n(Use Force only if datasets are busy/mounted, may cause issues).", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel, QMessageBox.StandardButton.No)
-        if reply == QMessageBox.StandardButton.Cancel: return
-        elif reply == QMessageBox.StandardButton.Yes: force_export = True
-        confirm_reply = QMessageBox.question(self, "Confirm Export", f"Export pool '{pool_name}'{' forcefully' if force_export else ''}?\n(Makes pool inactive until imported again)", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-        if confirm_reply == QMessageBox.StandardButton.Yes:
-            self._run_worker_task(
-                self.zfs_client.execute_generic_action,
-                "export_pool", f"Pool '{pool_name}' exported successfully.", pool_name, force=force_export,
-                op_name=f"Exporting Pool {pool_name}"
-            )
+        pool_name = self._current_selection.name
+        
+        # Create custom message box with three buttons
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Export Pool")
+        msg_box.setText(f"Export pool '{pool_name}'?\n\n"
+                       f"Choose export type:\n"
+                       f"• Normal: Safe export (fails if datasets are in use)\n"
+                       f"• Force: Forces export even if in use (may cause issues)")
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        
+        cancel_btn = msg_box.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+        normal_btn = msg_box.addButton("Normal Export", QMessageBox.ButtonRole.AcceptRole)
+        force_btn = msg_box.addButton("Force Export", QMessageBox.ButtonRole.AcceptRole)
+        msg_box.setDefaultButton(normal_btn)
+        
+        msg_box.exec()
+        clicked_button = msg_box.clickedButton()
+        
+        if clicked_button == cancel_btn:
+            return
+        
+        force_export = (clicked_button == force_btn)
+        self._run_worker_task(
+            self.zfs_client.execute_generic_action,
+            "export_pool", f"Pool '{pool_name}' exported successfully.", pool_name, force=force_export,
+            op_name=f"Exporting Pool {pool_name}"
+        )
 
     @Slot(bool)
     def _pool_scrub_action(self, stop: bool):

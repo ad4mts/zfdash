@@ -1,571 +1,741 @@
 <!DOCTYPE html>
 <html lang="en" style="height: 100%;"> <!-- Ensure HTML takes full height -->
+
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZfDash Web UI</title>
-    <!-- Add Bootstrap -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Add Bootstrap Icons -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    <!-- Link Custom CSS -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ZfDash Web UI</title>
+  <!-- Add Bootstrap -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <!-- Add Bootstrap Icons -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <!-- Link Custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
 <!-- body is now the main flex container -->
+
 <body class="auth-loading d-flex flex-column">
 
-    <!-- Navigation Bar (Stays at top) -->
-    <nav class="navbar navbar-expand-lg navbar-dark bg-dark flex-shrink-0"> <!-- flex-shrink-0 -->
-        <div class="container-fluid">
-            <a class="navbar-brand" href="#">
-                <i class="bi bi-hdd-stack-fill"></i> ZfDash
-            </a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <!-- Wrapper for content visible only when logged in -->
-                <div id="navbar-content-loggedin" class="w-100 d-flex align-items-center" style="display: none;">
-                    <!-- Left side actions -->
-                    <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item">
-                            <button id="refresh-button" class="btn-app btn-app-light-outline btn-app-sm me-2" title="Refresh All Data"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
-                        </li>
-                         <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="poolDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                Pool
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="poolDropdown">
-                                <li><button id="create-pool-button" class="dropdown-item" type="button"><i class="bi bi-plus-circle me-2"></i>Create Pool...</button></li>
-
-                                <li><button id="import-pool-button" class="dropdown-item" type="button"><i class="bi bi-box-arrow-in-down me-2"></i>Import Pool(s)...</button></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><button id="destroy-pool-button" class="dropdown-item disabled" type="button"><i class="bi bi-trash me-2"></i>Destroy Pool...</button></li>
-                                <li><button id="export-pool-button" class="dropdown-item disabled" type="button"><i class="bi bi-box-arrow-up me-2"></i>Export Pool...</button></li>
-                                 <li><hr class="dropdown-divider"></li>
-                                <li><button id="scrub-start-button" class="dropdown-item disabled" type="button"><i class="bi bi-play-circle me-2"></i>Start Scrub</button></li>
-                                <li><button id="scrub-stop-button" class="dropdown-item disabled" type="button"><i class="bi bi-stop-circle me-2"></i>Stop Scrub</button></li>
-                                <li><button id="clear-errors-button" class="dropdown-item disabled" type="button"><i class="bi bi-eraser me-2"></i>Clear Errors</button></li>
-                            </ul>
-                        </li>
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="datasetDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                Dataset
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="datasetDropdown">
-                                <li><button id="create-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-folder-plus me-2"></i>Create Dataset/Volume...</button></li>
-                                <li><button id="destroy-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-folder-minus me-2"></i>Destroy Dataset/Volume...</button></li>
-                                <li><button id="rename-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-pencil-square me-2"></i>Rename...</button></li>
-                                 <li><hr class="dropdown-divider"></li>
-                                <li><button id="mount-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-cloud-arrow-up me-2"></i>Mount</button></li>
-                                <li><button id="unmount-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-cloud-arrow-down me-2"></i>Unmount</button></li>
-                                 <li><hr class="dropdown-divider"></li>
-                                 <li><button id="promote-dataset-button" class="dropdown-item disabled" type="button"><i class="bi bi-arrow-up-circle me-2"></i>Promote Clone</button></li>
-                            </ul>
-                        </li>
-                        <!-- Help Menu -->
-                        <li class="nav-item dropdown">
-                            <a class="nav-link dropdown-toggle" href="#" id="helpDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                Help
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="helpDropdown">
-                                <li><button id="check-updates-button" class="dropdown-item" type="button"><i class="bi bi-cloud-download me-2"></i>Check for Updates...</button></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><button id="about-button" class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#aboutModal"><i class="bi bi-info-circle me-2"></i>About...</button></li>
-                            </ul>
-                        </li>
-                    </ul>
-                    <!-- Right side of Navbar -->
-                    <div class="d-flex align-items-center ms-auto">
-                         <span class="navbar-text me-3" id="status-indicator">Idle</span>
-                         <!-- User Info / Logout -->
-                         <div class="nav-item dropdown" id="user-menu">
-                            <a class="nav-link dropdown-toggle text-white" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                                <i class="bi bi-person-circle"></i> <span id="username-display">User</span>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="userDropdown">
-                                <li><button class="dropdown-item" type="button" data-bs-toggle="modal" data-bs-target="#changePasswordModal"><i class="bi bi-key me-2"></i>Change Password...</button></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><a class="dropdown-item" href="https://docs.google.com/forms/d/e/1FAIpQLSc0YJ4xBKrPjQh94DXUM1xrB3zb05VedL_Xxmm0V_bdZMRtDg/viewform?usp=header" target="_blank" rel="noopener noreferrer"><i class="bi bi-chat-left-text me-2"></i> Feedback</a></li>
-                                <li><hr class="dropdown-divider"></li>
-                                <li><button id="logout-button" class="dropdown-item" type="button"><i class="bi bi-box-arrow-right me-2"></i> Logout</button></li>
-                            </ul>
-                        </div>
-                        <!-- Shutdown Daemon -->
-                        <div class="nav-item" id="shutdown-button-item">
-                             <button id="shutdown-daemon-button" class="btn-app btn-app-danger btn-app-sm ms-2" title="Stop the background ZFS daemon process"><i class="bi bi-power"></i> Shutdown Daemon</button>
-                        </div>
-                    </div>
-                </div> <!-- End #navbar-content-loggedin -->
-            </div>
-        </div>
-    </nav>
-
-    <!-- Hidden Logout Form -->
-    <form id="logout-form" action="{{ url_for('logout') }}" method="POST" style="display: none;"></form>
-
-    <!-- Main Application Area (Below Navbar) -->
-    <main id="app-section" class="flex-grow-1 d-flex flex-column overflow-hidden"> <!-- Takes remaining height -->
-
-        <!-- Tabs Panel -->
-        <div id="tabs-panel" class="bg-light border-bottom px-3 py-1 flex-shrink-0">
-             <!-- Tab Navigation -->
-             <ul class="nav nav-tabs border-0" id="details-tab" role="tablist">
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link active" id="dashboard-tab-button" data-bs-toggle="tab" data-bs-target="#dashboard-tab-pane" type="button" role="tab" aria-controls="dashboard-tab-pane" aria-selected="true">
-                        <i class="bi bi-speedometer2 me-1"></i>Dashboard
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="properties-tab-button" data-bs-toggle="tab" data-bs-target="#properties-tab-pane" type="button" role="tab" aria-controls="properties-tab-pane" aria-selected="false">
-                        <i class="bi bi-list-ul me-1"></i>Properties
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="snapshots-tab-button" data-bs-toggle="tab" data-bs-target="#snapshots-tab-pane" type="button" role="tab" aria-controls="snapshots-tab-pane" aria-selected="false" disabled>
-                        <i class="bi bi-camera me-1"></i>Snapshots
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="pool-status-tab-button" data-bs-toggle="tab" data-bs-target="#pool-status-tab-pane" type="button" role="tab" aria-controls="pool-status-tab-pane" aria-selected="false" disabled>
-                        <i class="bi bi-heart-pulse me-1"></i>Pool Health
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="pool-edit-tab-button" data-bs-toggle="tab" data-bs-target="#pool-edit-tab-pane" type="button" role="tab" aria-controls="pool-edit-tab-pane" aria-selected="false" disabled>
-                        <i class="bi bi-pencil-fill me-1"></i>Edit Pool
-                    </button>
-                </li>
-                <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="encryption-tab-button" data-bs-toggle="tab" data-bs-target="#encryption-tab-pane" type="button" role="tab" aria-controls="encryption-tab-pane" aria-selected="false" disabled>
-                        <i class="bi bi-lock-fill me-1"></i>Encryption
-                    </button>
-                </li>
-             </ul>
-        </div>
-
-        <!-- Content Area (Tree | Tab Content) -->
-        <div id="main-content-area" class="flex-grow-1 overflow-hidden">
-            <div class="row g-0 h-100">
-
-                <!-- Left Pane: ZFS Tree -->
-                <div class="col-lg-4 col-md-5 d-flex flex-column h-100 border-end">
-                    <div class="card flex-grow-1 rounded-0 border-0">
-                        <div class="card-header bg-white">
-                            Pools & Datasets
-                        </div>
-                        <div class="card-body flex-grow-1 overflow-auto p-2" id="zfs-tree-container">
-                            <div id="zfs-tree" class="zfs-tree-view">
-                                <div class="text-center p-3 text-muted"><span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>Loading...</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Right Pane: Tab Content -->
-                <div class="col-lg-8 col-md-7 d-flex flex-column h-100">
-
-                    <!-- Tab Content Container -->
-                    <!-- *** REMOVED inline style="visibility: hidden;" *** -->
-                    <div class="tab-content flex-grow-1 overflow-hidden" id="details-tab-content">
-
-                        <!-- Dashboard Tab -->
-                        <div class="tab-pane fade show active d-flex flex-column" id="dashboard-tab-pane" role="tabpanel" aria-labelledby="dashboard-tab-button" tabindex="0">
-                            <div class="dashboard-container flex-grow-1 overflow-auto p-3">
-                                <!-- Header Card -->
-                                <div class="dashboard-header-card mb-3">
-                                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
-                                        <div>
-                                            <h4 class="dashboard-name mb-1" id="dashboard-name">Select a pool or dataset</h4>
-                                            <span class="dashboard-type-badge" id="dashboard-type-badge" style="display: none;">POOL</span>
-                                        </div>
-                                        <div class="dashboard-health-badge" id="dashboard-health-badge" style="display: none;">
-                                            <i class="bi bi-circle-fill me-1"></i>
-                                            <span id="dashboard-health-text">ONLINE</span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Storage Usage Card -->
-                                <div class="dashboard-card mb-3" id="dashboard-storage-card">
-                                    <h6 class="dashboard-card-title"><i class="bi bi-hdd me-2"></i>Storage Usage</h6>
-                                    <div class="storage-bars-container">
-                                        <!-- Primary Storage Bar -->
-                                        <div class="storage-bar-wrapper mb-3" id="primary-storage-wrapper">
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <span class="storage-bar-label" id="primary-storage-label">Pool Capacity</span>
-                                                <span class="storage-bar-percent" id="primary-storage-percent">0%</span>
-                                            </div>
-                                            <div class="progress storage-progress" style="height: 24px;">
-                                                <div class="progress-bar" id="primary-storage-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                                            </div>
-                                            <div class="d-flex justify-content-between mt-1 storage-details">
-                                                <small class="text-muted" id="primary-storage-used">Used: -</small>
-                                                <small class="text-muted" id="primary-storage-free">Free: -</small>
-                                                <small class="text-muted" id="primary-storage-total">Total: -</small>
-                                            </div>
-                                        </div>
-                                        <!-- Secondary Storage Bar (for datasets) -->
-                                        <div class="storage-bar-wrapper" id="secondary-storage-wrapper" style="display: none;">
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <span class="storage-bar-label" id="secondary-storage-label">Referenced Data</span>
-                                                <span class="storage-bar-percent" id="secondary-storage-percent">0%</span>
-                                            </div>
-                                            <div class="progress storage-progress" style="height: 24px;">
-                                                <div class="progress-bar bg-info" id="secondary-storage-bar" role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
-                                            </div>
-                                            <div class="d-flex justify-content-between mt-1 storage-details">
-                                                <small class="text-muted" id="secondary-storage-used">Referenced: -</small>
-                                                <small class="text-muted" id="secondary-storage-total">Total: -</small>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Info Cards Row -->
-                                <div class="row g-3 mb-3">
-                                    <!-- General Info Card -->
-                                    <div class="col-md-6">
-                                        <div class="dashboard-card h-100">
-                                            <h6 class="dashboard-card-title"><i class="bi bi-info-circle me-2"></i>General Information</h6>
-                                            <div class="info-table" id="dashboard-general-info">
-                                                <div class="info-row"><span class="info-label">Name:</span><span class="info-value">-</span></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <!-- Configuration Card -->
-                                    <div class="col-md-6">
-                                        <div class="dashboard-card h-100">
-                                            <h6 class="dashboard-card-title"><i class="bi bi-gear me-2"></i>Configuration</h6>
-                                            <div class="info-table" id="dashboard-config-info">
-                                                <div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- Stats Cards Row -->
-                                <div class="row g-3">
-                                    <!-- Statistics Card -->
-                                    <div class="col-md-6">
-                                        <div class="dashboard-card h-100">
-                                            <h6 class="dashboard-card-title"><i class="bi bi-bar-chart me-2"></i>Statistics</h6>
-                                            <div class="info-table" id="dashboard-stats-info">
-                                                <div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <!-- System Info Card -->
-                                    <div class="col-md-6">
-                                        <div class="dashboard-card h-100">
-                                            <h6 class="dashboard-card-title"><i class="bi bi-cpu me-2"></i>System Information</h6>
-                                            <div class="info-table" id="dashboard-system-info">
-                                                <div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Properties Tab -->
-                        <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
-                        <div class="tab-pane fade d-flex flex-column" id="properties-tab-pane" role="tabpanel" aria-labelledby="properties-tab-button" tabindex="0">
-                            <div class="p-3 pb-0 flex-shrink-0">
-                               <h5 class="mb-0">Properties</h5>
-                            </div>
-                           <div class="table-responsive flex-grow-1 px-3 pb-3">
-                             <table class="table table-sm table-striped table-hover mb-0" id="properties-table">
-                                <thead class="sticky-top bg-white">
-                                    <tr><th>Property</th><th>Value</th><th>Source</th><th class="text-end">Actions</th></tr>
-                                </thead>
-                                <tbody>
-                                    <!-- JS adds content here -->
-                                    <tr><td colspan="4" class="text-center text-muted p-3">Select an item to view properties.</td></tr>
-                                </tbody>
-                             </table>
-                           </div>
-                        </div>
-
-                        <!-- Snapshots Tab -->
-                        <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
-                        <div class="tab-pane fade d-flex flex-column" id="snapshots-tab-pane" role="tabpanel" aria-labelledby="snapshots-tab-button" tabindex="0">
-                           <div class="d-flex justify-content-between align-items-center mb-2 p-3 pb-2 border-bottom flex-shrink-0">
-                               <h5 class="mb-0">Snapshots</h5>
-                               <div>
-                                    <button id="create-snapshot-button" class="btn-app btn-app-success btn-app-sm me-1"><i class="bi bi-camera"></i> Create...</button>
-                                    <button id="delete-snapshot-button" class="btn-app btn-app-danger btn-app-sm me-1" disabled><i class="bi bi-trash"></i> Delete</button>
-                                    <button id="rollback-snapshot-button" class="btn-app btn-app-warning btn-app-sm me-1" disabled><i class="bi bi-arrow-counterclockwise"></i> Rollback</button>
-                                    <button id="clone-snapshot-button" class="btn-app btn-app-info btn-app-sm" disabled><i class="bi bi-copy"></i> Clone...</button>
-                               </div>
-                           </div>
-                            <div class="table-responsive flex-grow-1 overflow-auto p-3">
-                                <table class="table table-sm table-striped table-hover mb-0" id="snapshots-table">
-                                    <thead class="sticky-top bg-white">
-                                        <tr><th>Name</th><th class="text-end">Used</th><th class="text-end">Referenced</th><th>Created</th></tr>
-                                    </thead>
-                                    <tbody>
-                                       <!-- JS adds content here -->
-                                        <tr><td colspan="4" class="text-center text-muted p-3">Snapshots not applicable or none exist.</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-
-                        <!-- Pool Status Tab -->
-                        <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto containing the pre tag -->
-                         <div class="tab-pane fade d-flex flex-column" id="pool-status-tab-pane" role="tabpanel" aria-labelledby="pool-status-tab-button" tabindex="0">
-                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 pb-2 border-bottom flex-shrink-0">
-                                <h5 class="mb-0">Pool Health</h5>
-                                <div class="btn-toggle-group" role="group">
-                                    <button id="pool-status-btn" class="btn-toggle active" title="Show zpool status output">
-                                        <i class="bi bi-heart-pulse"></i> Status
-                                    </button>
-                                    <button id="pool-layout-btn" class="btn-toggle" title="Show zpool list -v output">
-                                        <i class="bi bi-diagram-3"></i> Layout
-                                    </button>
-                                    <button id="pool-iostat-btn" class="btn-toggle" title="Show zpool iostat -v output">
-                                        <i class="bi bi-speedometer2"></i> IO Stats
-                                    </button>
-                                </div>
-                             </div>
-                             <div class="flex-grow-1 overflow-auto p-3"> <!-- This div scrolls -->
-                                 <pre id="pool-status-content" class="h-100 border rounded p-2 bg-light mb-0">Pool status not applicable.</pre> <!-- Removed h-100 and overflow from pre -->
-                            </div>
-                         </div>
-
-                         <!-- Pool Edit Tab -->
-                         <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
-                         <div class="tab-pane fade d-flex flex-column" id="pool-edit-tab-pane" role="tabpanel" aria-labelledby="pool-edit-tab-button" tabindex="0">
-                            <div class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-2 p-3 pb-2 border-bottom flex-shrink-0">
-                                <h5 class="mb-0">Edit Pool Layout</h5>
-                                <div class="d-flex flex-wrap gap-2">
-                                     <div class="d-flex gap-1">
-                                        <button id="attach-device-button" class="btn-app btn-app-primary btn-app-sm" disabled title="Attach device to selected"><i class="bi bi-link-45deg"></i> Attach...</button>
-                                        <button id="detach-device-button" class="btn-app btn-app-secondary btn-app-sm" disabled title="Detach selected device"><i class="bi bi-scissors"></i> Detach</button>
-                                        <button id="replace-device-button" class="btn-app btn-app-info btn-app-sm" disabled title="Replace selected device"><i class="bi bi-arrow-repeat"></i> Replace...</button>
-                                        <button id="offline-device-button" class="btn-app btn-app-warning btn-app-sm" disabled title="Offline selected device"><i class="bi bi-plug"></i> Offline</button>
-                                        <button id="online-device-button" class="btn-app btn-app-success btn-app-sm" disabled title="Online selected device"><i class="bi bi-power"></i> Online</button>
-                                    </div>
-                                     <div class="d-flex gap-1">
-                                        <button id="add-pool-vdev-button" class="btn-app btn-app-success btn-app-sm" title="Add new VDEV(s) to pool"><i class="bi bi-plus-circle"></i> Add VDEV...</button>
-                                        <button id="remove-pool-vdev-button" class="btn-app btn-app-danger btn-app-sm" disabled title="Remove selected VDEV"><i class="bi bi-dash-circle"></i> Remove VDEV</button>
-                                    </div>
-                                    <div class="d-flex gap-1">
-                                         <button id="split-pool-button" class="btn-app btn-app-dark btn-app-sm" disabled title="Split selected pool (mirrors only)"><i class="bi bi-distribute-vertical"></i> Split Pool...</button>
-                                    </div>
-                                </div>
-                            </div>
-                            <div id="pool-edit-tree-container" class="flex-grow-1 overflow-auto p-3">
-                                <div class="text-center p-3 text-muted">Pool layout editing not applicable.</div>
-                            </div>
-                         </div>
-
-                         <!-- Encryption Tab -->
-                         <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
-                         <div class="tab-pane fade d-flex flex-column" id="encryption-tab-pane" role="tabpanel" aria-labelledby="encryption-tab-button" tabindex="0">
-                              <div class="d-flex justify-content-between align-items-center gap-1 mb-2 p-3 pb-2 border-bottom flex-shrink-0">
-                                <h5 class="mb-0">Encryption Details</h5>
-                                <div class="d-flex gap-1">
-                                     <button id="load-key-button" class="btn-app btn-app-success btn-app-sm" disabled><i class="bi bi-key-fill"></i> Load Key...</button>
-                                     <button id="unload-key-button" class="btn-app btn-app-warning btn-app-sm" disabled><i class="bi bi-unlock-fill"></i> Unload Key</button>
-                                     <button id="change-key-button" class="btn-app btn-app-info btn-app-sm" disabled><i class="bi bi-pencil-square"></i> Change Key/Passphrase...</button>
-                                     <button id="change-key-location-button" class="btn-app btn-app-secondary btn-app-sm" disabled><i class="bi bi-geo-alt-fill"></i> Change Key Location...</button>
-                                </div>
-                             </div>
-                             <div class="enc-info-container flex-grow-1 overflow-auto p-3">
-                                <table class="table table-sm enc-info-table mb-0">
-                                    <tbody>
-                                        <!-- JS updates these rows -->
-                                        <tr><th>Encrypted:</th><td id="enc-status">-</td></tr>
-                                        <tr><th>Algorithm:</th><td id="enc-algorithm">-</td></tr>
-                                        <tr><th>Key Status:</th><td id="enc-key-status">-</td></tr>
-                                        <tr><th>Key Location:</th><td id="enc-key-location">-</td></tr>
-                                        <tr><th>Key Format:</th><td id="enc-key-format">-</td></tr>
-                                        <tr><th>PBKDF2 Iters:</th><td id="enc-pbkdf2iters">-</td></tr>
-                                        <!-- Default message removed - JS will fill the above -->
-                                    </tbody>
-                                </table>
-                             </div>
-                         </div>
-
-                    </div> <!-- End #details-tab-content -->
-                </div> <!-- End Right Pane -->
-            </div> <!-- End row -->
-        </div> <!-- End #main-content-area -->
-
-    </main> <!-- End #app-section -->
-
-    <!-- Modals (Keep existing structures) -->
-    <div class="modal fade" id="actionModal" tabindex="-1" aria-labelledby="actionModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-lg"> <!-- Default size -->
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="actionModalLabel">Action</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body" id="actionModalBody"></div>
-          <div class="modal-footer" id="actionModalFooter">
-             <!-- Content set by JS -->
-             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-             <button type="button" class="btn btn-primary" id="actionModalConfirmButton">Confirm</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel" aria-hidden="true">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="changePasswordModalLabel">Change Password</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <div id="change-password-error" class="alert alert-danger alert-sm py-2" role="alert" style="display: none;"></div>
-            <div id="change-password-success" class="alert alert-success alert-sm py-2" role="alert" style="display: none;"></div>
-            <form id="change-password-form">
-              <div class="mb-3">
-                <label for="current_password" class="form-label">Current Password</label>
-                <input type="password" class="form-control" id="current_password" name="current_password" required>
-              </div>
-              <div class="mb-3">
-                <label for="new_password" class="form-label">New Password</label>
-                <input type="password" class="form-control" id="new_password" name="new_password" required minlength="8">
-                 <div class="form-text">Minimum 8 characters.</div>
-              </div>
-              <div class="mb-3">
-                <label for="confirm_password" class="form-label">Confirm New Password</label>
-                <input type="password" class="form-control" id="confirm_password" name="confirm_password" required minlength="8">
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary" id="changePasswordConfirmButton">Change Password</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- About Modal -->
-    <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="aboutModalLabel"><i class="bi bi-hdd-stack-fill me-2"></i>About ZfDash</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body text-center">
-            <div class="mb-3">
-              <i class="bi bi-hdd-stack-fill display-1 text-primary"></i>
-            </div>
-            <h4 id="about-app-name">ZfDash</h4>
-            <p class="text-muted mb-2" id="about-version">Version: Loading...</p>
-            <p id="about-description">A modern graphical interface for ZFS pool and dataset management</p>
-            <hr>
-            <table class="table table-sm table-borderless mb-0 mx-auto" style="width: auto;">
-              <tbody>
-                <tr><th class="text-end pe-3">Author:</th><td class="text-start" id="about-author">-</td></tr>
-                <tr><th class="text-end pe-3">Python:</th><td class="text-start" id="about-python-version">-</td></tr>
-                <tr><th class="text-end pe-3">License:</th><td class="text-start" id="about-license">-</td></tr>
-                <tr><th class="text-end pe-3">Repository:</th><td class="text-start"><a id="about-repository" href="#" target="_blank" rel="noopener noreferrer">-</a></td></tr>
-              </tbody>
-            </table>
-            <hr>
-            <p class="small text-muted mb-0" id="about-copyright">© 2024-2025 ZfDash Contributors</p>
-          </div>
-          <div class="modal-footer justify-content-center">
-            <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-
-    <!-- Check for Updates Modal -->
-    <div class="modal fade" id="checkUpdatesModal" tabindex="-1" aria-labelledby="checkUpdatesModalLabel" aria-hidden="true">
-      <div class="modal-dialog modal-dialog-centered modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title" id="checkUpdatesModalLabel"><i class="bi bi-cloud-download me-2"></i>Check for Updates</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-          </div>
-          <div class="modal-body">
-            <!-- Loading State -->
-            <div id="updates-loading" class="text-center py-4">
-              <div class="spinner-border text-primary" role="status">
-                <span class="visually-hidden">Checking for updates...</span>
-              </div>
-              <p class="mt-2 text-muted">Checking for updates...</p>
-            </div>
-            
-            <!-- Error State -->
-            <div id="updates-error" class="text-center py-4" style="display: none;">
-              <i class="bi bi-exclamation-triangle display-1 text-warning"></i>
-              <h5 class="mt-3">Could not check for updates</h5>
-              <p class="text-muted" id="updates-error-message">Unknown error</p>
-              <a id="updates-error-releases-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-outline-primary">
-                <i class="bi bi-github me-2"></i>Check Releases Manually
+  <!-- Navigation Bar (Stays at top) -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark flex-shrink-0"> <!-- flex-shrink-0 -->
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">
+        <i class="bi bi-hdd-stack-fill"></i> ZfDash
+      </a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+        aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <!-- Wrapper for content visible only when logged in -->
+        <div id="navbar-content-loggedin" class="w-100 d-flex align-items-center" style="display: none;">
+          <!-- Left side actions -->
+          <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+            <li class="nav-item">
+              <button id="refresh-button" class="btn-app btn-app-light-outline btn-app-sm me-2"
+                title="Refresh All Data"><i class="bi bi-arrow-clockwise"></i> Refresh</button>
+            </li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="poolDropdown" role="button" data-bs-toggle="dropdown"
+                aria-expanded="false">
+                Pool
               </a>
+              <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="poolDropdown">
+                <li><button id="create-pool-button" class="dropdown-item" type="button"><i
+                      class="bi bi-plus-circle me-2"></i>Create Pool...</button></li>
+
+                <li><button id="import-pool-button" class="dropdown-item" type="button"><i
+                      class="bi bi-box-arrow-in-down me-2"></i>Import Pool(s)...</button></li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><button id="destroy-pool-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-trash me-2"></i>Destroy Pool...</button></li>
+                <li><button id="export-pool-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-box-arrow-up me-2"></i>Export Pool...</button></li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><button id="scrub-start-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-play-circle me-2"></i>Start Scrub</button></li>
+                <li><button id="scrub-stop-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-stop-circle me-2"></i>Stop Scrub</button></li>
+                <li><button id="clear-errors-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-eraser me-2"></i>Clear Errors</button></li>
+              </ul>
+            </li>
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="datasetDropdown" role="button" data-bs-toggle="dropdown"
+                aria-expanded="false">
+                Dataset
+              </a>
+              <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="datasetDropdown">
+                <li><button id="create-dataset-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-folder-plus me-2"></i>Create Dataset/Volume...</button></li>
+                <li><button id="destroy-dataset-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-folder-minus me-2"></i>Destroy Dataset/Volume...</button></li>
+                <li><button id="rename-dataset-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-pencil-square me-2"></i>Rename...</button></li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><button id="mount-dataset-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-cloud-arrow-up me-2"></i>Mount</button></li>
+                <li><button id="unmount-dataset-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-cloud-arrow-down me-2"></i>Unmount</button></li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><button id="promote-dataset-button" class="dropdown-item disabled" type="button"><i
+                      class="bi bi-arrow-up-circle me-2"></i>Promote Clone</button></li>
+              </ul>
+            </li>
+            <!-- Help Menu -->
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="helpDropdown" role="button" data-bs-toggle="dropdown"
+                aria-expanded="false">
+                Help
+              </a>
+              <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="helpDropdown">
+                <li><button id="check-updates-button" class="dropdown-item" type="button"><i
+                      class="bi bi-cloud-download me-2"></i>Check for Updates...</button></li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><button id="about-button" class="dropdown-item" type="button" data-bs-toggle="modal"
+                    data-bs-target="#aboutModal"><i class="bi bi-info-circle me-2"></i>About...</button></li>
+              </ul>
+            </li>
+          </ul>
+          <!-- Right side of Navbar -->
+          <div class="d-flex align-items-center ms-auto">
+            <span class="navbar-text me-3" id="status-indicator">Idle</span>
+            <!-- User Info / Logout -->
+            <div class="nav-item dropdown" id="user-menu">
+              <a class="nav-link dropdown-toggle text-white" href="#" id="userDropdown" role="button"
+                data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="bi bi-person-circle"></i> <span id="username-display">User</span>
+              </a>
+              <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="userDropdown">
+                <li><button class="dropdown-item" type="button" data-bs-toggle="modal"
+                    data-bs-target="#changePasswordModal"><i class="bi bi-key me-2"></i>Change Password...</button></li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><a class="dropdown-item"
+                    href="https://docs.google.com/forms/d/e/1FAIpQLSc0YJ4xBKrPjQh94DXUM1xrB3zb05VedL_Xxmm0V_bdZMRtDg/viewform?usp=header"
+                    target="_blank" rel="noopener noreferrer"><i class="bi bi-chat-left-text me-2"></i> Feedback</a>
+                </li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li><button id="logout-button" class="dropdown-item" type="button"><i
+                      class="bi bi-box-arrow-right me-2"></i> Logout</button></li>
+              </ul>
             </div>
-            
-            <!-- Up to Date State -->
-            <div id="updates-uptodate" class="text-center py-4" style="display: none;">
-              <i class="bi bi-check-circle display-1 text-success"></i>
-              <h5 class="mt-3">You're up to date!</h5>
-              <p class="text-muted">Current version: <strong id="updates-current-version-ok">-</strong></p>
-              <p class="text-muted">Latest version: <strong id="updates-latest-version-ok">-</strong></p>
+            <!-- Shutdown Daemon -->
+            <div class="nav-item" id="shutdown-button-item">
+              <button id="shutdown-daemon-button" class="btn-app btn-app-danger btn-app-sm ms-2"
+                title="Stop the background ZFS daemon process"><i class="bi bi-power"></i> Shutdown Daemon</button>
             </div>
-            
-            <!-- Update Available State -->
-            <div id="updates-available" style="display: none;">
-              <div class="text-center mb-4">
-                <i class="bi bi-gift display-1 text-primary"></i>
-                <h4 class="mt-3">A new version is available!</h4>
-                <p>
-                  <span class="badge bg-secondary me-2" id="updates-current-badge">Current: -</span>
-                  <i class="bi bi-arrow-right"></i>
-                  <span class="badge bg-success ms-2" id="updates-latest-badge">Latest: -</span>
-                </p>
+          </div>
+        </div> <!-- End #navbar-content-loggedin -->
+      </div>
+    </div>
+  </nav>
+
+  <!-- Hidden Logout Form -->
+  <form id="logout-form" action="{{ url_for('logout') }}" method="POST" style="display: none;"></form>
+
+  <!-- Main Application Area (Below Navbar) -->
+  <main id="app-section" class="flex-grow-1 d-flex flex-column overflow-hidden"> <!-- Takes remaining height -->
+
+    <!-- Tabs Panel -->
+    <div id="tabs-panel" class="bg-light border-bottom px-3 py-1 flex-shrink-0">
+      <!-- Tab Navigation -->
+      <ul class="nav nav-tabs border-0" id="details-tab" role="tablist">
+        <li class="nav-item" role="presentation">
+          <button class="nav-link active" id="dashboard-tab-button" data-bs-toggle="tab"
+            data-bs-target="#dashboard-tab-pane" type="button" role="tab" aria-controls="dashboard-tab-pane"
+            aria-selected="true">
+            <i class="bi bi-speedometer2 me-1"></i>Dashboard
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="properties-tab-button" data-bs-toggle="tab" data-bs-target="#properties-tab-pane"
+            type="button" role="tab" aria-controls="properties-tab-pane" aria-selected="false">
+            <i class="bi bi-list-ul me-1"></i>Properties
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="snapshots-tab-button" data-bs-toggle="tab" data-bs-target="#snapshots-tab-pane"
+            type="button" role="tab" aria-controls="snapshots-tab-pane" aria-selected="false" disabled>
+            <i class="bi bi-camera me-1"></i>Snapshots
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="pool-status-tab-button" data-bs-toggle="tab"
+            data-bs-target="#pool-status-tab-pane" type="button" role="tab" aria-controls="pool-status-tab-pane"
+            aria-selected="false" disabled>
+            <i class="bi bi-heart-pulse me-1"></i>Pool Health
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="pool-edit-tab-button" data-bs-toggle="tab" data-bs-target="#pool-edit-tab-pane"
+            type="button" role="tab" aria-controls="pool-edit-tab-pane" aria-selected="false" disabled>
+            <i class="bi bi-pencil-fill me-1"></i>Edit Pool
+          </button>
+        </li>
+        <li class="nav-item" role="presentation">
+          <button class="nav-link" id="encryption-tab-button" data-bs-toggle="tab" data-bs-target="#encryption-tab-pane"
+            type="button" role="tab" aria-controls="encryption-tab-pane" aria-selected="false" disabled>
+            <i class="bi bi-lock-fill me-1"></i>Encryption
+          </button>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Content Area (Tree | Tab Content) -->
+    <div id="main-content-area" class="flex-grow-1 overflow-hidden">
+      <div class="row g-0 h-100">
+
+        <!-- Left Pane: ZFS Tree -->
+        <div class="col-lg-4 col-md-5 d-flex flex-column h-100 border-end">
+          <div class="card flex-grow-1 rounded-0 border-0">
+            <div class="card-header bg-white">
+              Pools & Datasets
+            </div>
+            <div class="card-body flex-grow-1 overflow-auto p-2" id="zfs-tree-container">
+              <div id="zfs-tree" class="zfs-tree-view">
+                <div class="text-center p-3 text-muted"><span class="spinner-border spinner-border-sm me-2"
+                    role="status" aria-hidden="true"></span>Loading...</div>
               </div>
-              
-              <!-- Dynamic Update Instructions (populated by JS), use <ul> instead of <ol> -->
-              <div id="updates-instructions-container">
-                <div class="alert alert-info" id="updates-deployment-type-alert">
-                  <i class="bi bi-info-circle me-2"></i><span id="updates-deployment-title">Installation</span>
-                  <small class="ms-2 text-muted" id="updates-instructions-source"></small>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Pane: Tab Content -->
+        <div class="col-lg-8 col-md-7 d-flex flex-column h-100">
+
+          <!-- Tab Content Container -->
+          <!-- *** REMOVED inline style="visibility: hidden;" *** -->
+          <div class="tab-content flex-grow-1 overflow-hidden" id="details-tab-content">
+
+            <!-- Dashboard Tab -->
+            <div class="tab-pane fade show active d-flex flex-column" id="dashboard-tab-pane" role="tabpanel"
+              aria-labelledby="dashboard-tab-button" tabindex="0">
+              <div class="dashboard-container flex-grow-1 overflow-auto p-3">
+                <!-- Header Card -->
+                <div class="dashboard-header-card mb-3">
+                  <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                    <div>
+                      <h4 class="dashboard-name mb-1" id="dashboard-name">Select a pool or dataset</h4>
+                      <span class="dashboard-type-badge" id="dashboard-type-badge" style="display: none;">POOL</span>
+                    </div>
+                    <div class="dashboard-health-badge" id="dashboard-health-badge" style="display: none;">
+                      <i class="bi bi-circle-fill me-1"></i>
+                      <span id="dashboard-health-text">ONLINE</span>
+                    </div>
+                  </div>
                 </div>
-                <h6>How to update:</h6>
-                <ul class="mb-3" id="updates-steps-list">
-                  <!-- Steps will be populated dynamically -->
-                </ul>
-                <div id="updates-notes-container" style="display: none;">
-                  <div class="alert alert-warning">
-                    <i class="bi bi-exclamation-triangle me-2"></i>
-                    <strong>Important:</strong>
-                    <ul class="mb-0 mt-1" id="updates-notes-list"></ul>
+
+                <!-- Storage Usage Card -->
+                <div class="dashboard-card mb-3" id="dashboard-storage-card">
+                  <h6 class="dashboard-card-title"><i class="bi bi-hdd me-2"></i>Storage Usage</h6>
+                  <div class="storage-bars-container">
+                    <!-- Primary Storage Bar -->
+                    <div class="storage-bar-wrapper mb-3" id="primary-storage-wrapper">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="storage-bar-label" id="primary-storage-label">Pool Capacity</span>
+                        <span class="storage-bar-percent" id="primary-storage-percent">0%</span>
+                      </div>
+                      <div class="progress storage-progress" style="height: 24px;">
+                        <div class="progress-bar" id="primary-storage-bar" role="progressbar" style="width: 0%;"
+                          aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                      </div>
+                      <div class="d-flex justify-content-between mt-1 storage-details">
+                        <small class="text-muted" id="primary-storage-used">Used: -</small>
+                        <small class="text-muted" id="primary-storage-free">Free: -</small>
+                        <small class="text-muted" id="primary-storage-total">Total: -</small>
+                      </div>
+                    </div>
+                    <!-- Secondary Storage Bar (for datasets) -->
+                    <div class="storage-bar-wrapper" id="secondary-storage-wrapper" style="display: none;">
+                      <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="storage-bar-label" id="secondary-storage-label">Referenced Data</span>
+                        <span class="storage-bar-percent" id="secondary-storage-percent">0%</span>
+                      </div>
+                      <div class="progress storage-progress" style="height: 24px;">
+                        <div class="progress-bar bg-info" id="secondary-storage-bar" role="progressbar"
+                          style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100"></div>
+                      </div>
+                      <div class="d-flex justify-content-between mt-1 storage-details">
+                        <small class="text-muted" id="secondary-storage-used">Referenced: -</small>
+                        <small class="text-muted" id="secondary-storage-total">Total: -</small>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Info Cards Row -->
+                <div class="row g-3 mb-3">
+                  <!-- General Info Card -->
+                  <div class="col-md-6">
+                    <div class="dashboard-card h-100">
+                      <h6 class="dashboard-card-title"><i class="bi bi-info-circle me-2"></i>General Information</h6>
+                      <div class="info-table" id="dashboard-general-info">
+                        <div class="info-row"><span class="info-label">Name:</span><span class="info-value">-</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- Configuration Card -->
+                  <div class="col-md-6">
+                    <div class="dashboard-card h-100">
+                      <h6 class="dashboard-card-title"><i class="bi bi-gear me-2"></i>Configuration</h6>
+                      <div class="info-table" id="dashboard-config-info">
+                        <div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Stats Cards Row -->
+                <div class="row g-3">
+                  <!-- Statistics Card -->
+                  <div class="col-md-6">
+                    <div class="dashboard-card h-100">
+                      <h6 class="dashboard-card-title"><i class="bi bi-bar-chart me-2"></i>Statistics</h6>
+                      <div class="info-table" id="dashboard-stats-info">
+                        <div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>
+                      </div>
+                    </div>
+                  </div>
+                  <!-- System Info Card -->
+                  <div class="col-md-6">
+                    <div class="dashboard-card h-100">
+                      <h6 class="dashboard-card-title"><i class="bi bi-cpu me-2"></i>System Information</h6>
+                      <div class="info-table" id="dashboard-system-info">
+                        <div class="info-row"><span class="info-label">-</span><span class="info-value">-</span></div>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
-              
-              <div class="text-center mt-3">
-                <a id="updates-releases-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
-                  <i class="bi bi-github me-2"></i>View Release on GitHub
-                </a>
+            </div>
+
+            <!-- Properties Tab -->
+            <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
+            <div class="tab-pane fade d-flex flex-column" id="properties-tab-pane" role="tabpanel"
+              aria-labelledby="properties-tab-button" tabindex="0">
+              <div class="p-3 pb-0 flex-shrink-0">
+                <h5 class="mb-0">Properties</h5>
+              </div>
+              <div class="table-responsive flex-grow-1 px-3 pb-3">
+                <table class="table table-sm table-striped table-hover mb-0" id="properties-table">
+                  <thead class="sticky-top bg-white">
+                    <tr>
+                      <th>Property</th>
+                      <th>Value</th>
+                      <th>Source</th>
+                      <th class="text-end">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- JS adds content here -->
+                    <tr>
+                      <td colspan="4" class="text-center text-muted p-3">Select an item to view properties.</td>
+                    </tr>
+                  </tbody>
+                </table>
               </div>
             </div>
-          </div>
-          <div class="modal-footer justify-content-center">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-          </div>
+
+            <!-- Snapshots Tab -->
+            <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
+            <div class="tab-pane fade d-flex flex-column" id="snapshots-tab-pane" role="tabpanel"
+              aria-labelledby="snapshots-tab-button" tabindex="0">
+              <div class="d-flex justify-content-between align-items-center mb-2 p-3 pb-2 border-bottom flex-shrink-0">
+                <h5 class="mb-0">Snapshots</h5>
+                <div>
+                  <button id="create-snapshot-button" class="btn-app btn-app-success btn-app-sm me-1"><i
+                      class="bi bi-camera"></i> Create...</button>
+                  <button id="delete-snapshot-button" class="btn-app btn-app-danger btn-app-sm me-1" disabled><i
+                      class="bi bi-trash"></i> Delete</button>
+                  <button id="rollback-snapshot-button" class="btn-app btn-app-warning btn-app-sm me-1" disabled><i
+                      class="bi bi-arrow-counterclockwise"></i> Rollback</button>
+                  <button id="clone-snapshot-button" class="btn-app btn-app-info btn-app-sm" disabled><i
+                      class="bi bi-copy"></i> Clone...</button>
+                </div>
+              </div>
+              <div class="table-responsive flex-grow-1 overflow-auto p-3">
+                <table class="table table-sm table-striped table-hover mb-0" id="snapshots-table">
+                  <thead class="sticky-top bg-white">
+                    <tr>
+                      <th>Name</th>
+                      <th class="text-end">Used</th>
+                      <th class="text-end">Referenced</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <!-- JS adds content here -->
+                    <tr>
+                      <td colspan="4" class="text-center text-muted p-3">Snapshots not applicable or none exist.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <!-- Pool Status Tab -->
+            <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto containing the pre tag -->
+            <div class="tab-pane fade d-flex flex-column" id="pool-status-tab-pane" role="tabpanel"
+              aria-labelledby="pool-status-tab-button" tabindex="0">
+              <div
+                class="d-flex justify-content-between align-items-center flex-wrap gap-2 p-3 pb-2 border-bottom flex-shrink-0">
+                <h5 class="mb-0">Pool Health</h5>
+                <div class="btn-toggle-group" role="group">
+                  <button id="pool-status-btn" class="btn-toggle active" title="Show zpool status output">
+                    <i class="bi bi-heart-pulse"></i> Status
+                  </button>
+                  <button id="pool-layout-btn" class="btn-toggle" title="Show zpool list -v output">
+                    <i class="bi bi-diagram-3"></i> Layout
+                  </button>
+                  <button id="pool-iostat-btn" class="btn-toggle" title="Show zpool iostat -v output">
+                    <i class="bi bi-speedometer2"></i> IO Stats
+                  </button>
+                </div>
+              </div>
+              <div class="flex-grow-1 overflow-auto p-3"> <!-- This div scrolls -->
+                <pre id="pool-status-content"
+                  class="h-100 border rounded p-2 bg-light mb-0">Pool status not applicable.</pre>
+                <!-- Removed h-100 and overflow from pre -->
+              </div>
+            </div>
+
+            <!-- Pool Edit Tab -->
+            <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
+            <div class="tab-pane fade d-flex flex-column" id="pool-edit-tab-pane" role="tabpanel"
+              aria-labelledby="pool-edit-tab-button" tabindex="0">
+              <div
+                class="d-flex justify-content-between align-items-center flex-wrap gap-1 mb-2 p-3 pb-2 border-bottom flex-shrink-0">
+                <h5 class="mb-0">Edit Pool Layout</h5>
+                <div class="d-flex flex-wrap gap-2">
+                  <div class="d-flex gap-1">
+                    <button id="attach-device-button" class="btn-app btn-app-primary btn-app-sm" disabled
+                      title="Attach device to selected"><i class="bi bi-link-45deg"></i> Attach...</button>
+                    <button id="detach-device-button" class="btn-app btn-app-secondary btn-app-sm" disabled
+                      title="Detach selected device"><i class="bi bi-scissors"></i> Detach</button>
+                    <button id="replace-device-button" class="btn-app btn-app-info btn-app-sm" disabled
+                      title="Replace selected device"><i class="bi bi-arrow-repeat"></i> Replace...</button>
+                    <button id="offline-device-button" class="btn-app btn-app-warning btn-app-sm" disabled
+                      title="Offline selected device"><i class="bi bi-plug"></i> Offline</button>
+                    <button id="online-device-button" class="btn-app btn-app-success btn-app-sm" disabled
+                      title="Online selected device"><i class="bi bi-power"></i> Online</button>
+                  </div>
+                  <div class="d-flex gap-1">
+                    <button id="add-pool-vdev-button" class="btn-app btn-app-success btn-app-sm"
+                      title="Add new VDEV(s) to pool"><i class="bi bi-plus-circle"></i> Add VDEV...</button>
+                    <button id="remove-pool-vdev-button" class="btn-app btn-app-danger btn-app-sm" disabled
+                      title="Remove selected VDEV"><i class="bi bi-dash-circle"></i> Remove VDEV</button>
+                  </div>
+                  <div class="d-flex gap-1">
+                    <button id="split-pool-button" class="btn-app btn-app-dark btn-app-sm" disabled
+                      title="Split selected pool (mirrors only)"><i class="bi bi-distribute-vertical"></i> Split
+                      Pool...</button>
+                  </div>
+                </div>
+              </div>
+              <div id="pool-edit-tree-container" class="flex-grow-1 overflow-auto p-3">
+                <div class="text-center p-3 text-muted">Pool layout editing not applicable.</div>
+              </div>
+            </div>
+
+            <!-- Encryption Tab -->
+            <!-- Structure: d-flex flex-column, header is flex-shrink-0, content wrapper is flex-grow-1 overflow-auto -->
+            <div class="tab-pane fade d-flex flex-column" id="encryption-tab-pane" role="tabpanel"
+              aria-labelledby="encryption-tab-button" tabindex="0">
+              <div
+                class="d-flex justify-content-between align-items-center gap-1 mb-2 p-3 pb-2 border-bottom flex-shrink-0">
+                <h5 class="mb-0">Encryption Details</h5>
+                <div class="d-flex gap-1">
+                  <button id="load-key-button" class="btn-app btn-app-success btn-app-sm" disabled><i
+                      class="bi bi-key-fill"></i> Load Key...</button>
+                  <button id="unload-key-button" class="btn-app btn-app-warning btn-app-sm" disabled><i
+                      class="bi bi-unlock-fill"></i> Unload Key</button>
+                  <button id="change-key-button" class="btn-app btn-app-info btn-app-sm" disabled><i
+                      class="bi bi-pencil-square"></i> Change Key/Passphrase...</button>
+                  <button id="change-key-location-button" class="btn-app btn-app-secondary btn-app-sm" disabled><i
+                      class="bi bi-geo-alt-fill"></i> Change Key Location...</button>
+                </div>
+              </div>
+              <div class="enc-info-container flex-grow-1 overflow-auto p-3">
+                <table class="table table-sm enc-info-table mb-0">
+                  <tbody>
+                    <!-- JS updates these rows -->
+                    <tr>
+                      <th>Encrypted:</th>
+                      <td id="enc-status">-</td>
+                    </tr>
+                    <tr>
+                      <th>Algorithm:</th>
+                      <td id="enc-algorithm">-</td>
+                    </tr>
+                    <tr>
+                      <th>Key Status:</th>
+                      <td id="enc-key-status">-</td>
+                    </tr>
+                    <tr>
+                      <th>Key Location:</th>
+                      <td id="enc-key-location">-</td>
+                    </tr>
+                    <tr>
+                      <th>Key Format:</th>
+                      <td id="enc-key-format">-</td>
+                    </tr>
+                    <tr>
+                      <th>PBKDF2 Iters:</th>
+                      <td id="enc-pbkdf2iters">-</td>
+                    </tr>
+                    <!-- Default message removed - JS will fill the above -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div> <!-- End #details-tab-content -->
+        </div> <!-- End Right Pane -->
+      </div> <!-- End row -->
+    </div> <!-- End #main-content-area -->
+
+  </main> <!-- End #app-section -->
+
+  <!-- Modals (Keep existing structures) -->
+  <div class="modal fade" id="actionModal" tabindex="-1" aria-labelledby="actionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered"> <!-- Centered for consistency -->
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="actionModalLabel">Action</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="actionModalBody"></div>
+        <div class="modal-footer" id="actionModalFooter">
+          <!-- Content set by JS -->
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="actionModalConfirmButton">Confirm</button>
         </div>
       </div>
     </div>
+  </div>
+
+  <!-- Error Modal (separate from action modal to avoid conflicts) -->
+  <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content border-danger">
+        <div class="modal-header bg-danger text-white">
+          <h5 class="modal-title" id="errorModalLabel"><i class="bi bi-exclamation-triangle-fill me-2"></i>Error</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="errorModalBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm Modal (dedicated for yes/no confirmations - DO NOT use #actionModal for confirmations!) -->
+  <div class="modal fade" id="confirmModal" tabindex="-1" aria-labelledby="confirmModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="confirmModalLabel">Confirmation</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="confirmModalBody"></div>
+        <div class="modal-footer" id="confirmModalFooter">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="confirmModalConfirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-labelledby="changePasswordModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="changePasswordModalLabel">Change Password</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div id="change-password-error" class="alert alert-danger alert-sm py-2" role="alert" style="display: none;">
+          </div>
+          <div id="change-password-success" class="alert alert-success alert-sm py-2" role="alert"
+            style="display: none;"></div>
+          <form id="change-password-form">
+            <div class="mb-3">
+              <label for="current_password" class="form-label">Current Password</label>
+              <input type="password" class="form-control" id="current_password" name="current_password" required>
+            </div>
+            <div class="mb-3">
+              <label for="new_password" class="form-label">New Password</label>
+              <input type="password" class="form-control" id="new_password" name="new_password" required minlength="8">
+              <div class="form-text">Minimum 8 characters.</div>
+            </div>
+            <div class="mb-3">
+              <label for="confirm_password" class="form-label">Confirm New Password</label>
+              <input type="password" class="form-control" id="confirm_password" name="confirm_password" required
+                minlength="8">
+            </div>
+          </form>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="changePasswordConfirmButton">Change Password</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- About Modal -->
+  <div class="modal fade" id="aboutModal" tabindex="-1" aria-labelledby="aboutModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="aboutModalLabel"><i class="bi bi-hdd-stack-fill me-2"></i>About ZfDash</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body text-center">
+          <div class="mb-3">
+            <i class="bi bi-hdd-stack-fill display-1 text-primary"></i>
+          </div>
+          <h4 id="about-app-name">ZfDash</h4>
+          <p class="text-muted mb-2" id="about-version">Version: Loading...</p>
+          <p id="about-description">A modern graphical interface for ZFS pool and dataset management</p>
+          <hr>
+          <table class="table table-sm table-borderless mb-0 mx-auto" style="width: auto;">
+            <tbody>
+              <tr>
+                <th class="text-end pe-3">Author:</th>
+                <td class="text-start" id="about-author">-</td>
+              </tr>
+              <tr>
+                <th class="text-end pe-3">Python:</th>
+                <td class="text-start" id="about-python-version">-</td>
+              </tr>
+              <tr>
+                <th class="text-end pe-3">License:</th>
+                <td class="text-start" id="about-license">-</td>
+              </tr>
+              <tr>
+                <th class="text-end pe-3">Repository:</th>
+                <td class="text-start"><a id="about-repository" href="#" target="_blank" rel="noopener noreferrer">-</a>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <hr>
+          <p class="small text-muted mb-0" id="about-copyright">© 2024-2025 ZfDash Contributors</p>
+        </div>
+        <div class="modal-footer justify-content-center">
+          <button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
 
-    <!-- Bootstrap Bundle with Popper -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Our App Logic (ES6 Module) -->
-    <script type="module" src="{{ url_for('static', filename='js/modules/app.js') }}"></script>
+  <!-- Check for Updates Modal -->
+  <div class="modal fade" id="checkUpdatesModal" tabindex="-1" aria-labelledby="checkUpdatesModalLabel"
+    aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="checkUpdatesModalLabel"><i class="bi bi-cloud-download me-2"></i>Check for Updates
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Loading State -->
+          <div id="updates-loading" class="text-center py-4">
+            <div class="spinner-border text-primary" role="status">
+              <span class="visually-hidden">Checking for updates...</span>
+            </div>
+            <p class="mt-2 text-muted">Checking for updates...</p>
+          </div>
+
+          <!-- Error State -->
+          <div id="updates-error" class="text-center py-4" style="display: none;">
+            <i class="bi bi-exclamation-triangle display-1 text-warning"></i>
+            <h5 class="mt-3">Could not check for updates</h5>
+            <p class="text-muted" id="updates-error-message">Unknown error</p>
+            <a id="updates-error-releases-link" href="#" target="_blank" rel="noopener noreferrer"
+              class="btn btn-outline-primary">
+              <i class="bi bi-github me-2"></i>Check Releases Manually
+            </a>
+          </div>
+
+          <!-- Up to Date State -->
+          <div id="updates-uptodate" class="text-center py-4" style="display: none;">
+            <i class="bi bi-check-circle display-1 text-success"></i>
+            <h5 class="mt-3">You're up to date!</h5>
+            <p class="text-muted">Current version: <strong id="updates-current-version-ok">-</strong></p>
+            <p class="text-muted">Latest version: <strong id="updates-latest-version-ok">-</strong></p>
+          </div>
+
+          <!-- Update Available State -->
+          <div id="updates-available" style="display: none;">
+            <div class="text-center mb-4">
+              <i class="bi bi-gift display-1 text-primary"></i>
+              <h4 class="mt-3">A new version is available!</h4>
+              <p>
+                <span class="badge bg-secondary me-2" id="updates-current-badge">Current: -</span>
+                <i class="bi bi-arrow-right"></i>
+                <span class="badge bg-success ms-2" id="updates-latest-badge">Latest: -</span>
+              </p>
+            </div>
+
+            <!-- Dynamic Update Instructions (populated by JS), use <ul> instead of <ol> -->
+            <div id="updates-instructions-container">
+              <div class="alert alert-info" id="updates-deployment-type-alert">
+                <i class="bi bi-info-circle me-2"></i><span id="updates-deployment-title">Installation</span>
+                <small class="ms-2 text-muted" id="updates-instructions-source"></small>
+              </div>
+              <h6>How to update:</h6>
+              <ul class="mb-3" id="updates-steps-list">
+                <!-- Steps will be populated dynamically -->
+              </ul>
+              <div id="updates-notes-container" style="display: none;">
+                <div class="alert alert-warning">
+                  <i class="bi bi-exclamation-triangle me-2"></i>
+                  <strong>Important:</strong>
+                  <ul class="mb-0 mt-1" id="updates-notes-list"></ul>
+                </div>
+              </div>
+            </div>
+
+            <div class="text-center mt-3">
+              <a id="updates-releases-link" href="#" target="_blank" rel="noopener noreferrer" class="btn btn-primary">
+                <i class="bi bi-github me-2"></i>View Release on GitHub
+              </a>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer justify-content-center">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- Bootstrap Bundle with Popper -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Our App Logic (ES6 Module) -->
+  <script type="module" src="{{ url_for('static', filename='js/modules/app.js') }}"></script>
 </body>
+
 </html>

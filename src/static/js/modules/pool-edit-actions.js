@@ -6,8 +6,10 @@
 
 import * as state from './state.js';
 import { apiCall, executeActionWithRefresh } from './api.js';
-import { showModal, hideModal, showErrorAlert } from './ui.js';
+import { showModal, hideModal, showErrorAlert, showConfirmModal, showTripleChoiceModal, showInputModal } from './ui.js';
 import { VDEV_TYPES } from './constants.js';
+import { showError, showSuccess, showWarning } from './notifications.js';
+import { renderVdevTypeInfo, hideVdevTypeInfo, loadHelpStrings, renderEmptyState } from './help.js';
 
 // Import helper functions from pool-actions
 import {
@@ -22,13 +24,13 @@ import {
 /**
  * Handle pool edit action (switch-based routing)
  */
-export function handlePoolEditAction(action, selectedLi) {
+export async function handlePoolEditAction(action, selectedLi) {
     if (!state.currentSelection || state.currentSelection.obj_type !== 'pool') {
-        alert("Pool Edit Action Error: No pool selected.");
+        showError("Pool Edit Action Error: No pool selected.");
         return;
     }
     if (!selectedLi && action !== 'add_vdev') {
-        alert("Pool Edit Action Error: No item selected in the pool layout for this action.");
+        showWarning("Pool Edit Action Error: No item selected in the pool layout for this action.");
         return;
     }
 
@@ -40,7 +42,7 @@ export function handlePoolEditAction(action, selectedLi) {
     switch (action) {
         case 'attach':
             if (!devicePath) {
-                alert("Select the specific device or disk VDEV to attach to.");
+                showWarning("Select the specific device or disk VDEV to attach to.");
                 return;
             }
             promptAndExecuteDeviceSelect(
@@ -56,12 +58,12 @@ export function handlePoolEditAction(action, selectedLi) {
 
         case 'detach':
             if (!devicePath) {
-                alert("Select the device within a mirror to detach.");
+                showWarning("Select the device within a mirror to detach.");
                 return;
             }
             const parentLi = selectedLi?.parentElement?.closest('li.pool-edit-item');
             if (parentLi?.dataset.vdevType !== 'mirror') {
-                alert("Detach is only possible for devices within a mirror.");
+                showWarning("Detach is only possible for devices within a mirror.");
                 return;
             }
             executeActionWithRefresh('detach_device', [poolName, devicePath], {},
@@ -71,7 +73,7 @@ export function handlePoolEditAction(action, selectedLi) {
 
         case 'replace':
             if (!devicePath) {
-                alert("Select the specific device or disk VDEV to replace.");
+                showWarning("Select the specific device or disk VDEV to replace.");
                 return;
             }
             promptAndExecuteDeviceSelect(
@@ -87,31 +89,55 @@ export function handlePoolEditAction(action, selectedLi) {
             );
             break;
 
-        case 'offline':
+        case 'offline': {
             if (!devicePath) {
-                alert("Select the specific device or disk VDEV to take offline.");
+                showWarning("Select the specific device or disk VDEV to take offline.");
                 return;
             }
-            const temporary = confirm(`Take device '${devicePath}' offline temporarily?\n(May come back online after reboot)`);
+            // Three-choice modal: Temporarily / Permanently / Cancel
+            const choice = await showTripleChoiceModal(
+                "Offline Device",
+                `Take device '<strong>${devicePath}</strong>' offline in pool '<strong>${poolName}</strong>'?<br><br>
+                <strong>Temporarily</strong> = May come back online after reboot<br>
+                <strong>Permanently</strong> = Stays offline until manually brought online`,
+                "Temporarily", "btn-warning",
+                "Permanently", "btn-danger"
+            );
+            if (choice === null) {
+                return; // User cancelled
+            }
+            const temporary = (choice === 'optionA'); // optionA = Temporarily
             executeActionWithRefresh('offline_device', [poolName, devicePath, temporary], {},
-                `Offline initiated for ${devicePath}.`, true,
-                `Take device '${devicePath}' offline ${temporary ? '(temporarily)' : ''} in pool '${poolName}'?`);
+                `Offline initiated for ${devicePath} (${temporary ? 'temporary' : 'permanent'}).`, false);
             break;
+        }
 
-        case 'online':
+        case 'online': {
             if (!devicePath) {
-                alert("Select the specific device or disk VDEV to bring online.");
+                showWarning("Select the specific device or disk VDEV to bring online.");
                 return;
             }
-            const expand = confirm(`Attempt to expand capacity if '${devicePath}' is larger than original?`);
+            // Three-choice modal: Expand / Don't Expand / Cancel
+            const choice = await showTripleChoiceModal(
+                "Online Device",
+                `Bring device '<strong>${devicePath}</strong>' online in pool '<strong>${poolName}</strong>'?<br><br>
+                <strong>Expand</strong> = Attempt to expand pool capacity if device is larger<br>
+                <strong>Don't Expand</strong> = Just bring online without expansion`,
+                "Yes, Expand", "btn-success",
+                "Don't Expand", "btn-primary"
+            );
+            if (choice === null) {
+                return; // User cancelled
+            }
+            const expand = (choice === 'optionA'); // optionA = Expand
             executeActionWithRefresh('online_device', [poolName, devicePath, expand], {},
-                `Online initiated for ${devicePath}.`, true,
-                `Bring device '${devicePath}' online ${expand ? 'and expand ' : ''}in pool '${poolName}'?`);
+                `Online initiated for ${devicePath}${expand ? ' (with expansion)' : ''}.`, false);
             break;
+        }
 
         case 'remove_vdev':
             if (!vdevId) {
-                alert("Could not identify VDEV to remove.");
+                showError("Could not identify VDEV to remove.");
                 return;
             }
             let idToRemove = vdevId;
@@ -131,24 +157,30 @@ export function handlePoolEditAction(action, selectedLi) {
                 `WARNING: Removing VDEVs can be dangerous!\nAre you sure you want to attempt remove '${idToRemove}' from pool '${poolName}'?`);
             break;
 
-        case 'split':
+        case 'split': {
             if (selectedLi?.dataset.itemType !== 'pool') {
-                alert("Select the top-level pool item in the 'Edit Pool' tab to initiate split.");
+                showWarning("Select the top-level pool item in the 'Edit Pool' tab to initiate split.");
                 return;
             }
-            const newPoolName = prompt(`Enter name for the new pool created by splitting '${poolName}':`);
+            const newPoolName = await showInputModal(
+                "Split Pool",
+                `Enter name for the new pool created by splitting '<strong>${poolName}</strong>':`,
+                "",
+                "new-pool-name",
+                "Split", "btn-warning"
+            );
             if (newPoolName === null) return;
             const newName = newPoolName.trim();
             if (!newName || newName === poolName || !/^[a-zA-Z][a-zA-Z0-9_\-:.%]*$/.test(newName) ||
                 ['log', 'spare', 'cache', 'mirror', 'raidz', 'raidz1', 'raidz2', 'raidz3', 'replacing', 'initializing'].includes(newName.toLowerCase())) {
-                alert("Invalid or reserved new pool name.");
+                showError("Invalid or reserved new pool name.");
                 return;
             }
             executeActionWithRefresh('split_pool', [poolName, newName, {}], {},
                 `Split initiated for ${poolName} into ${newName}.`, true,
-                `Split pool '${poolName}' into new pool '${newName}'?\n(Detaches second device of each top-level mirror)`);
+                `Split pool '${poolName}' into new pool '${newName}'?<br>(Detaches second device of each top-level mirror)`);
             break;
-
+        }
         case 'add_vdev':
             handleAddVdevDialog();
             break;
@@ -163,7 +195,7 @@ export function handlePoolEditAction(action, selectedLi) {
  */
 export function handleAddVdevDialog() {
     if (!state.currentSelection || state.currentSelection.obj_type !== 'pool') {
-        alert("No pool selected for adding VDEV.");
+        showError("No pool selected for adding VDEV.");
         return;
     }
 
@@ -195,8 +227,14 @@ export function handleAddVdevDialog() {
             <div class="col-md-6">
                 <label class="form-label">VDEVs to Add:</label>
                 <div id="pool-vdev-config" class="border rounded p-1 bg-light" style="min-height: 150px;">
+                    <div id="pool-vdev-empty-state" class="text-center text-muted py-3">
+                        <i class="bi bi-diagram-3 fs-3"></i>
+                        <p class="small mb-1">No VDEVs configured yet</p>
+                        <p class="small text-muted mb-0">Select a type below and click "Add VDEV"</p>
+                    </div>
                     <ul class="list-unstyled mb-0" id="pool-vdev-list"></ul>
                 </div>
+                <div id="pool-vdev-type-info" class="alert alert-info small py-2 px-3 mt-2" style="display:none;"></div>
                 <div class="input-group input-group-sm justify-content-end mt-1">
                     <select class="form-select form-select-sm" id="pool-vdev-type-select" style="max-width: 150px;">
                         ${VDEV_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
@@ -227,11 +265,48 @@ function setupAddVdevModal() {
     modalBody.modalAvailableDevicesMap = {};
     const availableDevicesMap = modalBody.modalAvailableDevicesMap;
 
+    // Load help strings
+    loadHelpStrings().catch(e => console.warn('Could not load help strings:', e));
+
+    // VDEV type select change handler - show info
+    const vdevTypeSelect = document.getElementById('pool-vdev-type-select');
+    const vdevTypeInfoContainer = document.getElementById('pool-vdev-type-info');
+    if (vdevTypeSelect && vdevTypeInfoContainer) {
+        vdevTypeSelect.addEventListener('change', () => {
+            const type = vdevTypeSelect.value;
+            if (type && type !== 'custom') {
+                renderVdevTypeInfo(type, vdevTypeInfoContainer);
+            } else {
+                hideVdevTypeInfo(vdevTypeInfoContainer);
+            }
+        });
+        // Show info for initial selection
+        if (vdevTypeSelect.value && vdevTypeSelect.value !== 'custom') {
+            renderVdevTypeInfo(vdevTypeSelect.value, vdevTypeInfoContainer);
+        }
+    }
+
+    // Function to update empty state visibility
+    function updateEmptyState() {
+        const emptyState = document.getElementById('pool-vdev-empty-state');
+        if (emptyState) {
+            const isEmpty = vdevList.children.length === 0;
+            emptyState.style.display = isEmpty ? 'block' : 'none';
+            if (isEmpty) {
+                renderEmptyState('add_vdev_modal', emptyState);
+            }
+        }
+    }
+
+    // Initial render of empty state to overwrite hardcoded fallback
+    updateEmptyState();
+
     // Add event listeners for buttons inside the modal
     document.getElementById('pool-add-vdev-btn')?.addEventListener('click', () => {
         const selectEl = document.getElementById('pool-vdev-type-select');
         const type = selectEl ? selectEl.value : null;
         addVdevTypeToPoolConfig(vdevList, type);
+        updateEmptyState();
     });
     document.getElementById('pool-add-device-btn')?.addEventListener('click', () => addDeviceToPoolVdev(availableList, vdevList, availableDevicesMap));
     document.getElementById('pool-remove-device-btn')?.addEventListener('click', () => {
@@ -243,7 +318,7 @@ function setupAddVdevModal() {
         } else if (selectedVdev) {
             removeVdevFromPoolConfig(selectedVdev, availableList, availableDevicesMap);
         } else {
-            alert("Please select a VDEV or a device within a VDEV to remove.");
+            showWarning("Please select a VDEV or a device within a VDEV to remove.");
         }
     });
 
@@ -340,7 +415,7 @@ function handleAddVdevConfirm() {
     const vdevItems = document.querySelectorAll('#pool-vdev-list > .pool-vdev-item');
 
     if (vdevItems.length === 0) {
-        alert("No VDEVs defined to add.");
+        showWarning("No VDEVs defined to add.");
         return;
     }
 
@@ -356,7 +431,7 @@ function handleAddVdevConfirm() {
 
         const minDevices = minDevicesMap[vdevType] || 1;
         if (devices.length < minDevices) {
-            alert(`VDEV type '${vdevType}' requires at least ${minDevices} device(s), found ${devices.length}.`);
+            showError(`VDEV type '${vdevType}' requires at least ${minDevices} device(s), found ${devices.length}.`);
             layoutValid = false;
             return;
         }
@@ -398,7 +473,7 @@ function promptAndExecuteDeviceSelect(title, message, onConfirm, allowMarkOnly =
         () => {
             const selectedValue = document.getElementById('device-select-input').value;
             if (selectedValue === "" && !allowMarkOnly) {
-                alert("Please select a device.");
+                showWarning("Please select a device.");
                 return;
             }
             if (selectedValue === null) return;

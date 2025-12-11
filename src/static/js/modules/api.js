@@ -5,7 +5,7 @@
  * Includes error handling, authentication redirects, and action execution.
  */
 
-import { updateStatus, showErrorAlert } from './ui.js';
+import { updateStatus, showErrorAlert, showConfirmModal } from './ui.js';
 
 /**
  * Make an API call to the backend
@@ -55,7 +55,7 @@ export async function apiCall(endpoint, method = 'GET', body = null) {
                     const jsonErrorData = await response.json();
                     errorData.error = jsonErrorData.error || errorData.error;
                     errorData.details = jsonErrorData.details || errorData.details;
-                    errorData.status = jsonErrorData.status || 'error'; 
+                    errorData.status = jsonErrorData.status || 'error';
                 } catch (parseError) {
                     console.error(`API call to ${endpoint} failed with status ${statusCode}, but couldn't parse JSON error response:`, parseError);
                     errorData.details = "Failed to parse error response from server.";
@@ -63,14 +63,14 @@ export async function apiCall(endpoint, method = 'GET', body = null) {
             } else {
                 try {
                     const textError = await response.text();
-                    console.warn(`API call to ${endpoint} failed with status ${statusCode} and non-JSON response:`, textError.substring(0, 500)); 
+                    console.warn(`API call to ${endpoint} failed with status ${statusCode} and non-JSON response:`, textError.substring(0, 500));
                     errorData.details = `Server returned a non-JSON error page (status: ${statusCode}). Check console for details.`;
                 } catch (textErrorErr) {
                     errorData.details = `Server returned a non-JSON error (status: ${statusCode}), and failed to read response body.`;
                 }
             }
-            
-            error = new Error(errorData.error); 
+
+            error = new Error(errorData.error);
             error.details = errorData.details;
             error.statusCode = statusCode;
             error.data = errorData;
@@ -114,7 +114,14 @@ export async function apiCall(endpoint, method = 'GET', body = null) {
 export async function executeAction(actionName, args = [], kwargs = {}, successMessage = null, requireConfirm = false, confirmMessage = null, onSuccess = null) {
     if (requireConfirm) {
         const defaultConfirm = `Are you sure you want to perform action '${actionName}'?`;
-        if (!confirm(confirmMessage || defaultConfirm)) {
+        const confirmed = await showConfirmModal(
+            "Confirmation Required",
+            confirmMessage || defaultConfirm,
+            "Confirm",
+            "btn-danger"
+        );
+
+        if (!confirmed) {
             updateStatus('Action cancelled.', 'info');
             return;
         }
@@ -125,7 +132,7 @@ export async function executeAction(actionName, args = [], kwargs = {}, successM
         const payload = { args, kwargs };
         const result = await apiCall(`/api/action/${actionName}`, 'POST', payload);
         updateStatus(successMessage || result.data || `${actionName} successful.`, 'success');
-        
+
         // Trigger refresh callback if provided
         if (onSuccess && typeof onSuccess === 'function') {
             onSuccess();

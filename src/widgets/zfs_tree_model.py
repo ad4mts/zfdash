@@ -49,8 +49,8 @@ class ZfsTreeModel(QAbstractItemModel):
                 # Children of Pool are Datasets
                 return len(parent_item.children)
             elif isinstance(parent_item, Dataset):
-                 # Children of Dataset are sub-Datasets and Snapshots
-                 return len(parent_item.children) + len(parent_item.snapshots) # Show both
+                 # Children of Dataset are sub-Datasets only (snapshots in dedicated tab)
+                 return len(parent_item.children)
             # Snapshots have no children in the tree model
             return 0
 
@@ -170,15 +170,9 @@ class ZfsTreeModel(QAbstractItemModel):
                     child_item = parent_item.children[row]
                     return self.createIndex(row, column, child_item)
             elif isinstance(parent_item, Dataset):
-                 num_children = len(parent_item.children)
-                 if row < num_children:
-                     # It's a child dataset
+                 if row < len(parent_item.children):
+                     # It's a child dataset (snapshots not shown in tree)
                      child_item = parent_item.children[row]
-                     return self.createIndex(row, column, child_item)
-                 elif row < num_children + len(parent_item.snapshots):
-                     # It's a snapshot (index adjusted)
-                     snapshot_index = row - num_children
-                     child_item = parent_item.snapshots[snapshot_index]
                      return self.createIndex(row, column, child_item)
 
         return QModelIndex()

@@ -44,6 +44,20 @@ except ImportError:
         ColorRole = None
         def color(self, role, group): return None
 
+# --- NEW: Import Help Strings ---
+try:
+    # Try importing from src.help_strings if running as module
+    from help_strings import HELP
+except ImportError:
+    try:
+        # Try relative import if running from package
+        from ..help_strings import HELP
+    except ImportError:
+        # Fallback if path issues
+        print("Warning: Could not import help_strings. Using fallback strings.")
+        HELP = {}
+
+
 
 # --- Module-level Constants ---
 ITEM_TYPE_ROLE = Qt.UserRole + 1
@@ -612,28 +626,32 @@ class PoolEditorWidget(QWidget):
             QMessageBox.warning(self, "Invalid Selection", "Select the specific disk device to take offline.")
             return
 
-        device = sel_data['device_path'] # Use the actual path
+        device = sel_data['device_path']
 
-        # Ask if temporary
-        reply = QMessageBox.question(self, "Temporary Offline?",
-                                     f"Take device '{device}' offline temporarily?\n\n"
-                                     "(Temporary means it may automatically come online after reboot.)",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No | QMessageBox.StandardButton.Cancel,
-                                     QMessageBox.StandardButton.No) # Default to permanent
-
-        if reply == QMessageBox.StandardButton.Cancel:
-            return # User cancelled the temporary question
-
-        temporary = (reply == QMessageBox.StandardButton.Yes)
-
-        # Confirm the action
-        confirm_reply = QMessageBox.question(self, "Confirm Offline",
-                                             f"Take device '{device}' offline in pool '{self._current_pool.name}'{' (temporarily)' if temporary else ''}?",
-                                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
-
-        if confirm_reply == QMessageBox.StandardButton.Yes:
-            self.status_message.emit(f"Requesting offline for {device}...")
-            self.offline_device_requested.emit(self._current_pool.name, device, temporary)
+        # Single three-button dialog: Temporarily / Permanently / Cancel
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Offline Device")
+        msg_box.setText(f"Take device '{device}' offline in pool '{self._current_pool.name}'?")
+        msg_box.setInformativeText(
+            "<b>Temporarily</b> = May come back online after reboot<br>"
+            "<b>Permanently</b> = Stays offline until manually brought online"
+        )
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        
+        temporarily_btn = msg_box.addButton("Temporarily", QMessageBox.ButtonRole.AcceptRole)
+        permanently_btn = msg_box.addButton("Permanently", QMessageBox.ButtonRole.DestructiveRole)
+        cancel_btn = msg_box.addButton(QMessageBox.StandardButton.Cancel)
+        msg_box.setDefaultButton(temporarily_btn)
+        
+        msg_box.exec()
+        clicked = msg_box.clickedButton()
+        
+        if clicked == cancel_btn:
+            return  # User cancelled
+        
+        temporary = (clicked == temporarily_btn)
+        self.status_message.emit(f"Requesting offline for {device} ({'temporary' if temporary else 'permanent'})...")
+        self.offline_device_requested.emit(self._current_pool.name, device, temporary)
 
     @Slot()
     def _online_device(self):
@@ -643,24 +661,32 @@ class PoolEditorWidget(QWidget):
             QMessageBox.warning(self, "Invalid Selection", "Select the specific disk device to bring online.")
             return
 
-        device = sel_data['device_path'] # Use the actual path
+        device = sel_data['device_path']
 
-        # Check if device is actually offline before asking to expand
-        expand = False
-        if sel_data.get('state','').upper() == 'OFFLINE':
-             expand_reply = QMessageBox.question(self, "Expand Capacity?",
-                                              f"Attempt to expand capacity if '{device}' is larger than its original size?",
-                                              QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-             expand = (expand_reply == QMessageBox.StandardButton.Yes)
-
-        # Confirm the action
-        reply = QMessageBox.question(self, "Confirm Online",
-                                     f"Bring device '{device}' online in pool '{self._current_pool.name}'{' and expand?' if expand else ''}?",
-                                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.Yes)
-
-        if reply == QMessageBox.StandardButton.Yes:
-            self.status_message.emit(f"Requesting online for {device}...")
-            self.online_device_requested.emit(self._current_pool.name, device, expand)
+        # Single three-button dialog: Expand / Don't Expand / Cancel
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("Online Device")
+        msg_box.setText(f"Bring device '{device}' online in pool '{self._current_pool.name}'?")
+        msg_box.setInformativeText(
+            "<b>Expand</b> = Attempt to expand pool capacity if device is larger<br>"
+            "<b>Don't Expand</b> = Just bring online without expansion"
+        )
+        msg_box.setIcon(QMessageBox.Icon.Question)
+        
+        expand_btn = msg_box.addButton("Yes, Expand", QMessageBox.ButtonRole.AcceptRole)
+        no_expand_btn = msg_box.addButton("Don't Expand", QMessageBox.ButtonRole.ActionRole)
+        cancel_btn = msg_box.addButton(QMessageBox.StandardButton.Cancel)
+        msg_box.setDefaultButton(no_expand_btn)
+        
+        msg_box.exec()
+        clicked = msg_box.clickedButton()
+        
+        if clicked == cancel_btn:
+            return  # User cancelled
+        
+        expand = (clicked == expand_btn)
+        self.status_message.emit(f"Requesting online for {device}{' (with expansion)' if expand else ''}...")
+        self.online_device_requested.emit(self._current_pool.name, device, expand)
 
     @Slot()
     def _add_vdev(self):
@@ -674,7 +700,8 @@ class PoolEditorWidget(QWidget):
 
         # --- Force Checkbox ---
         add_force_checkbox = QCheckBox("Force (-f)")
-        add_force_checkbox.setToolTip("Allow using devices of different sizes (dangerous) or potentially override other checks.")
+        add_force_checkbox = QCheckBox("Force (-f)")
+        add_force_checkbox.setToolTip(HELP.get("tooltips", {}).get("force_checkbox", "Override safety checks."))
         main_layout.addWidget(add_force_checkbox, 0, Qt.AlignmentFlag.AlignRight) # Align right
 
         # --- Splitter ---
@@ -702,7 +729,57 @@ class PoolEditorWidget(QWidget):
         header = add_vdev_tree.header()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         right_layout.addWidget(add_vdev_tree)
+
+        # --- NEW: VDEV Info Label (Add Dialog) ---
+        add_vdev_info_label = QLabel("")
+        add_vdev_info_label.setWordWrap(True)
+        add_vdev_info_label.setStyleSheet("color: gray; font-style: italic;")
+        right_layout.addWidget(add_vdev_info_label)
+
+        # --- NEW: Empty State Label (Add Dialog) ---
+        empty_state_help = HELP.get("empty_states", {}).get("add_vdev_modal", {})
+        steps_html = ""
+        if "steps" in empty_state_help:
+            steps_items = "".join([f"<li style='text-align:left;'>{step}</li>" for step in empty_state_help["steps"]])
+            steps_html = f"<ol style='display:inline-block; text-align:left;'>{steps_items}</ol>"
+
+        empty_state_html = f"""
+            <html><body style='text-align:center; color:gray;'>
+            <h3>{empty_state_help.get("title", "Add VDEVs")}</h3>
+            <p>{empty_state_help.get("message", "Select a VDEV type to add.")}</p>
+            {steps_html}
+            </body></html>
+        """
+        add_empty_state_label = QLabel(empty_state_html)
+        add_empty_state_label.setAlignment(Qt.AlignCenter)
+        right_layout.addWidget(add_empty_state_label)
+
+        def _update_add_empty_state():
+            has_items = add_vdev_tree.topLevelItemCount() > 0
+            add_vdev_tree.setVisible(has_items)
+            add_empty_state_label.setVisible(not has_items)
+            if not has_items:
+                add_vdev_info_label.setVisible(False)
+        
+        # Initial state
+        _update_add_empty_state()
+
+        def _update_vdev_info(vdev_type):
+            if not HELP: return
+            info = HELP.get("vdev_types", {}).get(vdev_type.lower(), {})
+            
+            text = f"<b>{info.get('name', vdev_type)}</b>: {info.get('short', '')}"
+            
+            if info.get("warning"):
+                text += f"<br><span style='color:red;'>⚠️ {info['warning']}</span>"
+            elif info.get("tip"):
+                text += f"<br><span style='color:green;'>💡 {info['tip']}</span>"
+                
+            add_vdev_info_label.setText(text)
+            add_vdev_info_label.setVisible(True)
+
 
         # --- Buttons for Right Pane ---
         button_layout = QHBoxLayout()
@@ -728,7 +805,7 @@ class PoolEditorWidget(QWidget):
         
         # Add Show All Checkbox to Left Pane
         add_show_all_check = QCheckBox("Show All Devices")
-        add_show_all_check.setToolTip("Show all detected block devices.")
+        add_show_all_check.setToolTip(HELP.get("tooltips", {}).get("show_all_devices", "Show all block devices."))
         left_layout.insertWidget(1, add_show_all_check) # Insert after label
 
         add_safe_devices = []
@@ -819,9 +896,13 @@ class PoolEditorWidget(QWidget):
                 icon = QIcon.fromTheme("drive-harddisk") # Default
                 if vdev_type in ['mirror', 'raidz1', 'raidz2', 'raidz3', 'special mirror', 'dedup mirror']:
                     icon = QIcon.fromTheme("drive-multidisk")
-                elif vdev_type in ['log', 'cache', 'spare', 'special', 'dedup']:
+                if vdev_type in ['log', 'cache', 'spare', 'special', 'dedup']:
                     icon = QIcon.fromTheme("drive-removable-media")
                 vdev_item.setIcon(0, icon)
+                
+                # Update Help and Empty State
+                _update_vdev_info(vdev_type)
+                _update_add_empty_state()
 
         add_add_vdev_button.clicked.connect(_add_vdev_type_action)
 
@@ -893,7 +974,10 @@ class PoolEditorWidget(QWidget):
                 if dev_path in current_devices: current_devices.remove(dev_path)
                 parent.setData(0, local_VDEV_DEVICES_ROLE, current_devices)
                 parent.removeChild(item)
+                parent.removeChild(item)
                 if dev_path: _return_dev_to_avail(dev_path)
+
+            _update_add_empty_state()
 
         add_remove_vdev_button.clicked.connect(_remove_item_action)
 
