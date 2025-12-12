@@ -1,6 +1,6 @@
 # ZfDash - Modern ZFS Management GUI & Web UI Interface
 
-[![Version](https://img.shields.io/badge/version-1.9.2--beta-blue)](https://github.com/ad4mts/zfdash/releases)
+[![Version](https://img.shields.io/badge/version-1.9.3--beta-blue)](https://github.com/ad4mts/zfdash/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20FreeBSD-lightgrey)](https://github.com/ad4mts/zfdash)
 

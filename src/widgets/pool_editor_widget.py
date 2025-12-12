@@ -220,7 +220,7 @@ class PoolEditorWidget(QWidget):
             # Set icon based on type
             if is_leaf_device:
                 item.setIcon(0, QIcon.fromTheme("media-floppy"))
-            elif vdev_type in ['log', 'cache', 'spare', 'special']:
+            elif vdev_type in ['log', 'cache', 'spare', 'special', 'dedup']:
                 item.setIcon(0, QIcon.fromTheme("drive-removable-media"))
             elif vdev_type in ['mirror', 'raidz', 'raidz1', 'raidz2', 'raidz3', 'draid']:
                 item.setIcon(0, QIcon.fromTheme("drive-multidisk"))
@@ -359,27 +359,35 @@ class PoolEditorWidget(QWidget):
                     can_online = True
 
                 # --- Remove Button Logic (Using Parent Check) ---
-                # Check if the selected item is a VDEV (or single disk top-level device) and its parent is the pool item
+                # Container types are just organizational nodes - can't remove them directly
+                # Only their children (actual devices/vdevs) can be removed
+                special_container_types = ['log', 'cache', 'spare', 'special', 'dedup']
+                
+                # Check if the selected item's PARENT is a special container (e.g., device inside logs)
+                parent_vdev_type = parent_item.data(0, VDEV_TYPE_ROLE) if parent_item else None
+                is_child_of_special_container = parent_vdev_type in special_container_types
+                
+                # Check if selected item is a top-level data VDEV (not a container)
                 is_top_level_vdev = ((item_type == 'vdev' or item_type == 'device') and parent_item == pool_item)
-
-                if is_top_level_vdev:
-                    # Allow removing log/cache/spare VDEVs anytime
-                    if vdev_type in ['log', 'cache', 'spare']:
+                is_data_vdev = vdev_type not in special_container_types
+                
+                if is_child_of_special_container:
+                    # Items inside special containers can always be removed
+                    can_remove = True
+                elif is_top_level_vdev and is_data_vdev:
+                    # Data VDEVs (mirror, raidz, disk) - count how many exist
+                    data_vdev_count = 0
+                    for i in range(pool_item.childCount()):
+                        child = pool_item.child(i)
+                        child_type = child.data(0, ITEM_TYPE_ROLE)
+                        child_vdev_type = child.data(0, VDEV_TYPE_ROLE)
+                        # Check if child is a VDEV/Device and not a special container
+                        if (child_type == 'vdev' or child_type == 'device') and \
+                           child_vdev_type not in special_container_types:
+                            data_vdev_count += 1
+                    # Allow removal only if there's more than one data vdev
+                    if data_vdev_count > 1:
                         can_remove = True
-                    else: # Data VDEV (mirror, raidz, disk)
-                        # Count how many *data* vdevs exist directly under the pool
-                        data_vdev_count = 0
-                        for i in range(pool_item.childCount()):
-                            child = pool_item.child(i)
-                            child_type = child.data(0, ITEM_TYPE_ROLE)
-                            child_vdev_type = child.data(0, VDEV_TYPE_ROLE)
-                            # Check if child is a VDEV/Device and not log/cache/spare
-                            if (child_type == 'vdev' or child_type == 'device') and \
-                               child_vdev_type not in ['log', 'cache', 'spare']:
-                                data_vdev_count += 1
-                        # Allow removal only if there's more than one data vdev
-                        if data_vdev_count > 1:
-                            can_remove = True
                 # --- End Remove Button Logic ---
 
                 # Split: Pool must be selected, healthy/degraded, and fully mirrored
@@ -394,7 +402,7 @@ class PoolEditorWidget(QWidget):
                             if top_vdev.data(0, ITEM_TYPE_ROLE) == 'vdev':
                                 top_vdev_type = top_vdev.data(0, VDEV_TYPE_ROLE)
                                 # Ignore non-data vdevs for split requirement
-                                if top_vdev_type not in ['log', 'cache', 'spare']:
+                                if top_vdev_type not in ['log', 'cache', 'spare', 'special', 'dedup']:
                                     has_data_vdev = True
                                     # Count devices within this top-level VDEV
                                     device_count = 0

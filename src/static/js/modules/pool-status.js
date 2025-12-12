@@ -291,7 +291,7 @@ function createPoolEditItem(name, itemType, vdevType, itemState, devicePath, r =
     if (itemType === 'pool') iconClass = 'bi-hdd-rack-fill';
     else if (itemType === 'vdev') {
         if (vdevType === 'disk') iconClass = 'bi-hdd';
-        else if (['log', 'cache', 'spare', 'special'].includes(vdevType)) iconClass = 'bi-drive-fill';
+        else if (['log', 'cache', 'spare', 'special', 'dedup'].includes(vdevType)) iconClass = 'bi-drive-fill';
         else iconClass = 'bi-hdd-stack';
     } else if (itemType === 'device') iconClass = 'bi-disc';
 
@@ -392,27 +392,36 @@ export function updatePoolEditActionStates(selectedLi) {
     }
 
     // Remove VDEV Button
-    // Allow removing top-level VDEVs AND top-level Devices (stripe disks)
-    if ((isVdev || isDevice) && parentItemType === 'pool') {
-        if (['log', 'cache', 'spare'].includes(vdevType)) {
+    // Container types are just organizational nodes - can't remove them directly
+    // Only their children (actual devices/vdevs) or data vdevs can be removed
+    const specialContainerTypes = ['log', 'cache', 'spare', 'special', 'dedup'];
+
+    // Check if selected item's parent is a special container (e.g., mirror inside logs)
+    const isChildOfSpecialContainer = specialContainerTypes.includes(parentVdevType);
+
+    // Check if selected item is a top-level data VDEV (not a container itself)
+    const isTopLevelVdev = (isVdev || isDevice) && parentItemType === 'pool';
+    const isSpecialContainer = specialContainerTypes.includes(vdevType);
+
+    if (isChildOfSpecialContainer) {
+        // Items inside special containers can always be removed
+        document.getElementById('remove-pool-vdev-button').disabled = false;
+    } else if (isTopLevelVdev && !isSpecialContainer) {
+        // Data VDEVs (mirror, raidz, disk) - count how many exist
+        let dataVdevCount = 0;
+        const poolRootItem = dom.poolEditTreeContainer.querySelector('li[data-item-type="pool"]');
+        const topLevelChildrenUl = poolRootItem?.querySelector(':scope > ul.pool-edit-children');
+        if (topLevelChildrenUl) {
+            topLevelChildrenUl.querySelectorAll(':scope > li').forEach(siblingLi => {
+                const sType = siblingLi.dataset.itemType;
+                const sVdevType = siblingLi.dataset.vdevType;
+                if ((sType === 'vdev' || sType === 'device') && !specialContainerTypes.includes(sVdevType)) {
+                    dataVdevCount++;
+                }
+            });
+        }
+        if (dataVdevCount > 1) {
             document.getElementById('remove-pool-vdev-button').disabled = false;
-        } else {
-            let dataVdevCount = 0;
-            const poolRootItem = dom.poolEditTreeContainer.querySelector('li[data-item-type="pool"]');
-            const topLevelChildrenUl = poolRootItem?.querySelector(':scope > ul.pool-edit-children');
-            if (topLevelChildrenUl) {
-                // Count both 'vdev' and 'device' items at top level that are not special
-                topLevelChildrenUl.querySelectorAll(':scope > li').forEach(siblingLi => {
-                    const sType = siblingLi.dataset.itemType;
-                    const sVdevType = siblingLi.dataset.vdevType;
-                    if ((sType === 'vdev' || sType === 'device') && !['log', 'cache', 'spare'].includes(sVdevType)) {
-                        dataVdevCount++;
-                    }
-                });
-            }
-            if (dataVdevCount > 1) {
-                document.getElementById('remove-pool-vdev-button').disabled = false;
-            }
         }
     }
 
@@ -429,7 +438,7 @@ export function updatePoolEditActionStates(selectedLi) {
             }
             topLevelVdevs.forEach(topVdevLi => {
                 const topVdevType = topVdevLi.dataset.vdevType;
-                if (!['log', 'cache', 'spare'].includes(topVdevType)) {
+                if (!['log', 'cache', 'spare', 'special', 'dedup'].includes(topVdevType)) {
                     hasDataVdev = true;
                     const devicesInVdev = topVdevLi.querySelectorAll(':scope > ul.pool-edit-children > li[data-item-type="device"]').length;
                     if (topVdevType !== 'mirror' || devicesInVdev < 2) {

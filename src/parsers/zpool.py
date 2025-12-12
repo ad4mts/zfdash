@@ -28,7 +28,7 @@ class ZPoolParser:
     """Parses output from various `zpool` commands."""
     
     # --- Auto-detect: Use JSON if ZFS >= 2.3.1 ---
-    USE_LEGACY_PARSER = _detect_legacy_mode()
+    USE_LEGACY_PARSER = _detect_legacy_mode() #True
     # ---------------------------------------------
 
     @classmethod
@@ -109,12 +109,28 @@ class ZPoolParser:
                 continue
 
             pool_info = pools_data[pname]
+            # Parse the main vdev tree
+            vdev_tree = ZPoolParser._parse_vdev_tree(pool_info.get("vdevs", {}))
+            
+            # Merge special vdev categories (logs, cache, spares, special, dedup) into vdev_tree children
+            # These are sibling keys to 'vdevs' in the JSON output, not nested within it
+            # Note: ZFS JSON uses 'l2cache' for cache vdevs, not 'cache'
+            special_categories = ['logs', 'l2cache', 'spares', 'special', 'dedup']
+            for category in special_categories:
+                category_data = pool_info.get(category, {})
+                if category_data:
+                    # Create a container node for the category
+                    category_node = ZPoolParser._build_special_category_node(category, category_data)
+                    if "children" not in vdev_tree:
+                        vdev_tree["children"] = []
+                    vdev_tree["children"].append(category_node)
+            
             parsed_pool: Dict[str, Any] = {
                 "name": pool_info.get("name", pname),
                 "state": pool_info.get("state", "UNKNOWN"),
                 "scan": pool_info.get("scan_stats"),
                 "errors": pool_info.get("error_count", "0"),
-                "vdev_tree": ZPoolParser._parse_vdev_tree(pool_info.get("vdevs", {}))
+                "vdev_tree": vdev_tree
             }
             result["pools"][pname] = parsed_pool
 
@@ -189,6 +205,54 @@ class ZPoolParser:
 
         return parsed
 
+    @staticmethod
+    def _build_special_category_node(category: str, category_data: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Builds a container node for special vdev categories (logs, cache, spares, special).
+        
+        Args:
+            category: The category name ('logs', 'cache', 'spares', 'special')
+            category_data: Dictionary of devices in this category
+            
+        Returns:
+            A standardized dictionary representing the category container with devices as children.
+        """
+        # Map category names to expected vdev_type values for UI consistency
+        # Note: ZFS JSON uses 'l2cache' for cache vdevs
+        type_map = {
+            'logs': 'log',
+            'l2cache': 'cache',
+            'spares': 'spare',
+            'special': 'special',
+            'dedup': 'dedup'
+        }
+        
+        # Map for display names (what users see in the UI)
+        name_map = {
+            'logs': 'logs',
+            'l2cache': 'cache',
+            'spares': 'spares',
+            'special': 'special',
+            'dedup': 'dedup'
+        }
+        
+        category_node: Dict[str, Any] = {
+            "name": name_map.get(category, category),  # Display name for UI
+            "type": type_map.get(category, category),  # Normalized type
+            "state": "ONLINE",  # Container nodes don't have state, default to ONLINE
+            "read_errors": "0",
+            "write_errors": "0",
+            "checksum_errors": "0",
+            "children": []
+        }
+        
+        # Add each device in this category as a child
+        for device_key in category_data:
+            device_data = category_data[device_key]
+            child_node = ZPoolParser._parse_single_vdev(device_data)
+            category_node["children"].append(child_node)
+        
+        return category_node
 
     @staticmethod
     def parse_status_text(raw_text: str, pool_name: Optional[str] = None) -> Dict[str, Any]:
@@ -225,7 +289,8 @@ class ZPoolParser:
         
         # Stack for hierarchical parsing: [(indent_level, node_dict, list_of_children)]
         # We'll build the tree during the config section
-        stack = [] 
+        stack = []
+        root_indent = 0  # Track pool root indentation for special vdev handling
         
         # If raw_text contains multiple pools, we need to handle that. 
         # But complex logic for multiple pools in one text blob is tricky with indentation.
@@ -306,10 +371,19 @@ class ZPoolParser:
                 continue
                 
             # Determine type based on name
+            # Type normalization map to match JSON parser output
+            special_type_map = {
+                'logs': 'log',
+                'cache': 'cache',
+                'special': 'special',
+                'spares': 'spare',
+                'dedup': 'dedup'
+            }
+            
             if name.startswith("mirror"): vdev_type = "mirror"
             elif name.startswith("raidz"): vdev_type = "raidz"
             elif name.startswith("draid"): vdev_type = "draid"
-            elif name in ["logs", "cache", "special", "spares"]: vdev_type = name
+            elif name in special_type_map: vdev_type = special_type_map[name]
             else: vdev_type = "disk"
             
             # Create node
@@ -334,13 +408,33 @@ class ZPoolParser:
             # Root node (pool name itself in config)
             if name == current_pool_info["name"]:
                 # This is the root vdev
+                node["type"] = "root"  # Override to match JSON parser
                 current_pool_info["vdev_tree"] = node
-                # Base indentation for root
+                # Store root node reference and its indent
                 stack = [(indent, node)]
+                root_indent = indent
                 continue
-                
-            # Adjust stack based on indentation
-            while stack and indent <= stack[-1][0]:
+            
+            # Special case: Special vdev containers (dedup, logs, cache, special, spares)
+            # In ZFS text output, these appear at the SAME indent as the pool root,
+            # but they should be children of the pool, not siblings
+            is_special_container = vdev_type in ['log', 'cache', 'special', 'spare', 'dedup']
+            
+            if is_special_container and stack and indent == root_indent:
+                # Force this to be a child of the pool root (first item in stack)
+                root_node = stack[0][1]
+                root_node["children"].append(node)
+                # Push container with its actual indent - children have higher indent so they'll attach correctly
+                stack.append((indent, node))
+                continue
+            
+            # Normal case: Adjust stack based on indentation
+            # Pop until we find a parent at a lower indent level
+            while stack and indent < stack[-1][0]:
+                stack.pop()
+            
+            # Pop sibling (same level) to find parent
+            if stack and indent == stack[-1][0]:
                 stack.pop()
                 
             if stack:
@@ -348,10 +442,147 @@ class ZPoolParser:
                 parent_node["children"].append(node)
                 stack.append((indent, node))
             else:
-                # Fallback if hierarchy is unclear or multiple roots
-                # (Shouldn't happen in standard `zpool status`, but safe fallback)
-                pass 
+                # Fallback: If stack is empty (shouldn't happen), attach to root if we have one
+                if current_pool_info.get("vdev_tree"):
+                    current_pool_info["vdev_tree"]["children"].append(node)
+                    stack = [(root_indent, current_pool_info["vdev_tree"]), (indent, node)]
                 
         return result
+
+
+def _print_vdev_tree(node: Dict[str, Any], indent: int = 0, is_last: bool = True, prefix: str = "") -> None:
+    """Pretty-print a vdev tree node recursively."""
+    # Determine connector characters
+    connector = "└── " if is_last else "├── "
+    
+    # Format node info
+    name = node.get('name', 'unknown')
+    vtype = node.get('type', 'unknown')
+    state = node.get('state', 'UNKNOWN')
+    path = node.get('path', '')
+    
+    # Truncate long paths for display
+    if len(name) > 60:
+        name = '...' + name[-57:]
+    
+    # Color codes for terminal
+    COLORS = {
+        'ONLINE': '\033[92m',  # Green
+        'DEGRADED': '\033[93m',  # Yellow
+        'FAULTED': '\033[91m',  # Red
+        'OFFLINE': '\033[90m',  # Gray
+        'AVAIL': '\033[94m',  # Blue
+        'RESET': '\033[0m'
+    }
+    color = COLORS.get(state, '')
+    reset = COLORS['RESET'] if color else ''
+    
+    # Type indicators
+    TYPE_ICONS = {
+        'root': '🗄️ ',
+        'mirror': '🔀',
+        'raidz': '📊',
+        'disk': '💾',
+        'file': '📄',
+        'log': '📝',
+        'cache': '⚡',
+        'spare': '🔧',
+        'special': '⭐',
+        'dedup': '🗜️ '
+    }
+    icon = TYPE_ICONS.get(vtype, '❓')
+    
+    # Print current node
+    if indent == 0:
+        print(f"{icon} {name} [{vtype}] {color}{state}{reset}")
+    else:
+        print(f"{prefix}{connector}{icon} {name} [{vtype}] {color}{state}{reset}")
+    
+    # Process children
+    children = node.get('children', [])
+    child_prefix = prefix + ("    " if is_last else "│   ")
+    for i, child in enumerate(children):
+        is_last_child = (i == len(children) - 1)
+        _print_vdev_tree(child, indent + 1, is_last_child, child_prefix)
+
+
+if __name__ == "__main__":
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Test ZPool status parser")
+    parser.add_argument('pool', nargs='?', help='Pool name to parse (optional, uses first pool if not specified)')
+    parser.add_argument('--legacy', action='store_true', help='Force legacy text parsing mode')
+    parser.add_argument('--json', action='store_true', help='Force JSON parsing mode')
+    parser.add_argument('--compare', action='store_true', help='Compare both parsers side by side')
+    args = parser.parse_args()
+    
+    # Get pool list if no pool specified
+    pool_name = args.pool
+    if not pool_name:
+        list_result = subprocess.run(['zpool', 'list', '-H', '-o', 'name'], capture_output=True, text=True)
+        pools = list_result.stdout.strip().split('\n')
+        if pools and pools[0]:
+            pool_name = pools[0]
+            print(f"Using first available pool: {pool_name}\n")
+        else:
+            print("No pools found!")
+            sys.exit(1)
+    
+    def run_parser(use_legacy: bool, label: str):
+        """Run parser and print results."""
+        # Temporarily set parser mode
+        original_mode = ZPoolParser.USE_LEGACY_PARSER
+        ZPoolParser.USE_LEGACY_PARSER = use_legacy
+        
+        try:
+            # Get command and run it
+            cmd = ZPoolParser.get_status_command(pool_name)
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0:
+                print(f"Error running: {' '.join(cmd)}")
+                print(result.stderr)
+                return None
+            
+            # Parse
+            parsed = ZPoolParser.parse_status(result.stdout, pool_name)
+            
+            print(f"\n{'='*60}")
+            print(f" {label}")
+            print(f"{'='*60}\n")
+            
+            pool_data = parsed.get('pools', {}).get(pool_name, {})
+            if not pool_data:
+                print(f"Pool '{pool_name}' not found in parsed data!")
+                return None
+            
+            vdev_tree = pool_data.get('vdev_tree', {})
+            if vdev_tree:
+                _print_vdev_tree(vdev_tree)
+            else:
+                print("No vdev_tree found!")
+            
+            # Summary
+            children = vdev_tree.get('children', [])
+            types = [c.get('type') for c in children]
+            print(f"\n📋 Top-level vdevs: {len(children)}")
+            print(f"   Types: {', '.join(types)}")
+            
+            return parsed
+        finally:
+            ZPoolParser.USE_LEGACY_PARSER = original_mode
+    
+    if args.compare:
+        # Run both parsers
+        run_parser(False, "JSON Parser Mode")
+        run_parser(True, "Legacy Text Parser Mode")
+    elif args.legacy:
+        run_parser(True, "Legacy Text Parser Mode (forced)")
+    elif args.json:
+        run_parser(False, "JSON Parser Mode (forced)")
+    else:
+        # Use auto-detect
+        label = "Legacy Text" if ZPoolParser.USE_LEGACY_PARSER else "JSON"
+        run_parser(ZPoolParser.USE_LEGACY_PARSER, f"{label} Parser Mode (auto-detected)")
 
 # --- END OF FILE parsers/zpool.py ---

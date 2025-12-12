@@ -1,4 +1,12 @@
 # ZfDash Changelog #always use same format
+## v1.9.3-beta
+*   **Critical Fix:** GUI/WebUI: Special VDEVs (logs, cache, spare, special, dedup) now correctly appear in pool tree view. Previously these were missing due to JSON/text parsing issues.
+*   **Fix:** GUI/WebUI: Remove VDEV button no longer activates on container nodes (logs, spares, etc.) - only on actual removable devices within them.
+*   **Fix:** JSON parser now correctly handles `l2cache` key (ZFS uses this instead of `cache` internally).
+*   **Fix:** Legacy text parser now correctly parses special vdev containers that appear at pool root indentation level.
+*   **Improvement:** Parser includes `dedup` vdev support for both JSON and legacy modes.
+*   **Improvement:** Docker: Added `/run/udev` mount for better device detection.
+
 ## v1.9.2-beta
 *   **Feature:** GUI/WebUI: Support for special VDEVs (TrueNAS Fusion Pools) - create metadata vdevs for improved performance.
 *   **Feature:** GUI/WebUI: Contextual help system - get helpful tips and explanations for VDEV types right in the Create Pool and Add VDEV dialogs.
