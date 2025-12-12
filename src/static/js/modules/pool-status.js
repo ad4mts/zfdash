@@ -392,7 +392,8 @@ export function updatePoolEditActionStates(selectedLi) {
     }
 
     // Remove VDEV Button
-    if (isVdev && parentItemType === 'pool') {
+    // Allow removing top-level VDEVs AND top-level Devices (stripe disks)
+    if ((isVdev || isDevice) && parentItemType === 'pool') {
         if (['log', 'cache', 'spare'].includes(vdevType)) {
             document.getElementById('remove-pool-vdev-button').disabled = false;
         } else {
@@ -400,8 +401,11 @@ export function updatePoolEditActionStates(selectedLi) {
             const poolRootItem = dom.poolEditTreeContainer.querySelector('li[data-item-type="pool"]');
             const topLevelChildrenUl = poolRootItem?.querySelector(':scope > ul.pool-edit-children');
             if (topLevelChildrenUl) {
-                topLevelChildrenUl.querySelectorAll(':scope > li[data-item-type="vdev"]').forEach(siblingLi => {
-                    if (!['log', 'cache', 'spare'].includes(siblingLi.dataset.vdevType)) {
+                // Count both 'vdev' and 'device' items at top level that are not special
+                topLevelChildrenUl.querySelectorAll(':scope > li').forEach(siblingLi => {
+                    const sType = siblingLi.dataset.itemType;
+                    const sVdevType = siblingLi.dataset.vdevType;
+                    if ((sType === 'vdev' || sType === 'device') && !['log', 'cache', 'spare'].includes(sVdevType)) {
                         dataVdevCount++;
                     }
                 });

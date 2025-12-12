@@ -359,8 +359,8 @@ class PoolEditorWidget(QWidget):
                     can_online = True
 
                 # --- Remove Button Logic (Using Parent Check) ---
-                # Check if the selected item is a VDEV and its parent is the pool item
-                is_top_level_vdev = (item_type == 'vdev' and parent_item == pool_item)
+                # Check if the selected item is a VDEV (or single disk top-level device) and its parent is the pool item
+                is_top_level_vdev = ((item_type == 'vdev' or item_type == 'device') and parent_item == pool_item)
 
                 if is_top_level_vdev:
                     # Allow removing log/cache/spare VDEVs anytime
@@ -371,9 +371,11 @@ class PoolEditorWidget(QWidget):
                         data_vdev_count = 0
                         for i in range(pool_item.childCount()):
                             child = pool_item.child(i)
-                            # Check if child is a VDEV and not log/cache/spare
-                            if child.data(0, ITEM_TYPE_ROLE) == 'vdev' and \
-                               child.data(0, VDEV_TYPE_ROLE) not in ['log', 'cache', 'spare']:
+                            child_type = child.data(0, ITEM_TYPE_ROLE)
+                            child_vdev_type = child.data(0, VDEV_TYPE_ROLE)
+                            # Check if child is a VDEV/Device and not log/cache/spare
+                            if (child_type == 'vdev' or child_type == 'device') and \
+                               child_vdev_type not in ['log', 'cache', 'spare']:
                                 data_vdev_count += 1
                         # Allow removal only if there's more than one data vdev
                         if data_vdev_count > 1:
@@ -719,13 +721,13 @@ class PoolEditorWidget(QWidget):
              QMessageBox.warning(self, "Invalid Selection", "Please select an item to remove.")
              return
 
-        # --- Use the same identification logic as _update_button_states (Reverted Parent Check) ---
+        # --- Use the same identification logic as _update_button_states (Updated for Stripe Disks) ---
         item = sel_data['item']
         item_type = sel_data['item_type']
         parent_item = sel_data['parent_item']
         pool_item = self.pool_tree.topLevelItem(0) if self.pool_tree.topLevelItemCount() > 0 else None
 
-        is_top_level_vdev = (item_type == 'vdev' and parent_item == pool_item)
+        is_top_level_vdev = ((item_type == 'vdev' or item_type == 'device') and parent_item == pool_item)
         # --- End Check ---
 
         if not is_top_level_vdev:
