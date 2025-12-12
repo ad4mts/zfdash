@@ -10,6 +10,7 @@ import { showModal, hideModal, showErrorAlert, showConfirmModal, showTripleChoic
 import { VDEV_TYPES } from './constants.js';
 import { showError, showSuccess, showWarning } from './notifications.js';
 import { renderVdevTypeInfo, hideVdevTypeInfo, loadHelpStrings, renderEmptyState } from './help.js';
+import { initializeVdevManager, generateVdevModalHtml } from './components/vdev-manager.js';
 
 // Import helper functions from pool-actions
 import {
@@ -202,54 +203,14 @@ export function handleAddVdevDialog() {
 
     const poolName = state.currentSelection.name;
 
-    let availableDevicesHtml = '<p class="text-muted">Loading available devices...</p>';
-    let modalHtml = `
-        <h6>Add VDEVs to Pool '${poolName}'</h6>
-        <div class="form-check mb-3">
-            <input class="form-check-input" type="checkbox" value="" id="pool-force-add-check">
-            <label class="form-check-label" for="pool-force-add-check">Force Addition (-f)</label>
-        </div>
-        <hr>
-        <div class="row align-items-center gx-2">
-            <div class="col-md-5">
-                <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="form-label mb-0 fw-bold">Available Devices:</label>
-                    <div class="form-check form-check-sm mb-0">
-                        <input class="form-check-input" type="checkbox" id="pool-show-all-devices-check">
-                        <label class="form-check-label small" for="pool-show-all-devices-check">Show All</label>
-                    </div>
-                </div>
-                <ul id="pool-available-devices" class="list-group list-group-flush border rounded shadow-sm custom-scrollbar" style="height: 400px; overflow-y: auto; overflow-x: hidden;">${availableDevicesHtml}</ul>
-            </div>
-            <div class="col-md-1 d-flex flex-column align-items-center justify-content-center" style="height: 400px;">
-                <button type="button" id="pool-add-device-btn" class="btn btn-sm btn-outline-primary mb-3 shadow-sm" title="Add Selected Device(s) to VDEV">
-                    <i class="bi bi-chevron-right"></i>
-                </button>
-                <button type="button" id="pool-remove-device-btn" class="btn btn-sm btn-outline-danger shadow-sm" title="Remove Selected Device/VDEV">
-                    <i class="bi bi-chevron-left"></i>
-                </button>
-            </div>
-            <div class="col-md-6">
-                <label class="form-label fw-bold">VDEVs to Add:</label>
-                <div id="pool-vdev-config" class="border rounded p-2 bg-light shadow-sm custom-scrollbar" style="height: 400px; overflow-y: auto; overflow-x: hidden;">
-                    <div id="pool-vdev-empty-state" class="text-center text-muted py-3">
-                        <i class="bi bi-diagram-3 fs-1 opacity-50"></i>
-                        <p class="mt-3 mb-1 fw-bold">No VDEVs configured yet</p>
-                        <p class="small text-muted mb-0">Select a type below and click "Add VDEV"</p>
-                    </div>
-                    <ul class="list-unstyled mb-0" id="pool-vdev-list"></ul>
-                </div>
-                <div id="pool-vdev-type-info" class="alert alert-info small py-2 px-3 mt-2" style="display:none;"></div>
-                <div class="input-group input-group-sm justify-content-end mt-2">
-                    <select class="form-select form-select-sm shadow-sm" id="pool-vdev-type-select" style="max-width: 150px;">
-                        ${VDEV_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
-                        <option value="custom">Custom...</option>
-                    </select>
-                    <button type="button" id="pool-add-vdev-btn" class="btn btn-sm btn-success shadow-sm"><i class="bi bi-plus-circle"></i> Add VDEV</button>
-                </div>
-            </div>
-        </div>
-    `;
+    const poolHeader = `<h6>Add VDEVs to Pool '${poolName}'</h6>`;
+
+    const modalHtml = poolHeader + generateVdevModalHtml({
+        poolNameInput: '', // No pool name input for Add VDEV
+        forceCheckboxId: 'pool-force-add-check',
+        forceCheckboxLabel: 'Force Addition (-f)',
+        vdevListLabel: 'VDEVs to Add:'
+    });
 
     showModal(`Add VDEVs to Pool '${poolName}'`, modalHtml, handleAddVdevConfirm, { size: 'xl', setupFunc: setupAddVdevModal });
 }
@@ -258,152 +219,10 @@ export function handleAddVdevDialog() {
  * Setup add VDEV modal - reuses the pool creation UI setup logic
  */
 function setupAddVdevModal() {
-    const availableList = document.getElementById('pool-available-devices');
-    const vdevList = document.getElementById('pool-vdev-list');
-
-    // Store map on modal body
-    const modalBody = document.getElementById('actionModalBody');
-    if (!modalBody) {
-        console.error("Modal body not found for map storage!");
-        return;
-    }
-    modalBody.modalAvailableDevicesMap = {};
-    const availableDevicesMap = modalBody.modalAvailableDevicesMap;
-
-    // Load help strings
-    loadHelpStrings().catch(e => console.warn('Could not load help strings:', e));
-
-    // VDEV type select change handler - show info
-    const vdevTypeSelect = document.getElementById('pool-vdev-type-select');
-    const vdevTypeInfoContainer = document.getElementById('pool-vdev-type-info');
-    if (vdevTypeSelect && vdevTypeInfoContainer) {
-        vdevTypeSelect.addEventListener('change', () => {
-            const type = vdevTypeSelect.value;
-            if (type && type !== 'custom') {
-                renderVdevTypeInfo(type, vdevTypeInfoContainer);
-            } else {
-                hideVdevTypeInfo(vdevTypeInfoContainer);
-            }
-        });
-        // Show info for initial selection
-        if (vdevTypeSelect.value && vdevTypeSelect.value !== 'custom') {
-            renderVdevTypeInfo(vdevTypeSelect.value, vdevTypeInfoContainer);
-        }
-    }
-
-    // Function to update empty state visibility
-    function updateEmptyState() {
-        const emptyState = document.getElementById('pool-vdev-empty-state');
-        if (emptyState) {
-            const isEmpty = vdevList.children.length === 0;
-            emptyState.style.display = isEmpty ? 'block' : 'none';
-            if (isEmpty) {
-                renderEmptyState('add_vdev_modal', emptyState);
-            }
-        }
-    }
-
-    // Initial render of empty state to overwrite hardcoded fallback
-    updateEmptyState();
-
-    // Add event listeners for buttons inside the modal
-    document.getElementById('pool-add-vdev-btn')?.addEventListener('click', () => {
-        const selectEl = document.getElementById('pool-vdev-type-select');
-        const type = selectEl ? selectEl.value : null;
-        addVdevTypeToPoolConfig(vdevList, type);
-        updateEmptyState();
+    // Initialize VDEV manager with add vdev context
+    initializeVdevManager({
+        emptyStateContext: 'add_vdev_modal'
     });
-    document.getElementById('pool-add-device-btn')?.addEventListener('click', () => addDeviceToPoolVdev(availableList, vdevList, availableDevicesMap));
-    document.getElementById('pool-remove-device-btn')?.addEventListener('click', () => {
-        const selectedVdev = getSelectedPoolVdev(vdevList);
-        const selectedDevice = getSelectedPoolDeviceInVdev(vdevList);
-
-        if (selectedDevice) {
-            removeDeviceFromPoolVdev(availableList, vdevList, availableDevicesMap);
-        } else if (selectedVdev) {
-            removeVdevFromPoolConfig(selectedVdev, availableList, availableDevicesMap);
-            updateEmptyState(); // Ensure empty state is checked after VDEV removal
-        } else {
-            showWarning("Please select a VDEV or a device within a VDEV to remove.");
-        }
-    });
-
-    // Fetch and populate available devices
-    // Checkbox listener
-    const showAllCheck = document.getElementById('pool-show-all-devices-check');
-    if (showAllCheck) {
-        showAllCheck.addEventListener('change', () => renderAvailableDevices());
-    }
-
-    // Helper to render devices
-    function renderAvailableDevices() {
-        const showAll = showAllCheck ? showAllCheck.checked : false;
-        const sourceDevices = showAll ? (modalBody.allDevices || []) : (modalBody.safeDevices || []);
-
-        // Filter out devices already in the vdev config
-        const usedPaths = new Set();
-        vdevList.querySelectorAll('.pool-vdev-device-item').forEach(li => {
-            usedPaths.add(li.dataset.path);
-        });
-
-        availableList.innerHTML = '';
-
-        if (sourceDevices.length === 0) {
-            availableList.innerHTML = '<li class="list-group-item text-muted">No devices found.</li>';
-            return;
-        }
-
-        const filteredDevices = sourceDevices.filter(d => !usedPaths.has(d.name));
-
-        if (filteredDevices.length === 0) {
-            availableList.innerHTML = '<li class="list-group-item text-muted">No suitable devices available.</li>';
-            return;
-        }
-
-        filteredDevices.forEach(dev => {
-            // Update map just in case
-            availableDevicesMap[dev.name] = dev;
-
-            const li = document.createElement('li');
-            li.className = 'list-group-item list-group-item-action pool-device-item';
-            const displayName = dev.display_name || dev.name;
-            li.innerHTML = `<i class="bi bi-hdd me-2 opacity-50"></i><span>${escapeHtml(displayName)}</span>`;
-            li.dataset.path = dev.name;
-            li.onclick = (e) => e.currentTarget.classList.toggle('active');
-            availableList.appendChild(li);
-        });
-
-        // Sort
-        const items = Array.from(availableList.children);
-        items.sort((a, b) => a.textContent.localeCompare(b.textContent));
-        availableList.innerHTML = '';
-        items.forEach(item => availableList.appendChild(item));
-    }
-
-    // Fetch available devices
-    apiCall('/api/block_devices')
-        .then(result => {
-            availableList.innerHTML = '';
-            if (result.data?.error) {
-                availableList.innerHTML = `<li class="list-group-item text-danger">Error: ${result.data.error}</li>`;
-                return;
-            }
-
-            // Store both lists
-            modalBody.safeDevices = result.data?.devices || [];
-            modalBody.allDevices = result.data?.all_devices || [];
-
-            // Initial population of the map
-            (modalBody.allDevices).forEach(dev => {
-                availableDevicesMap[dev.name] = dev;
-            });
-
-            // Initial Render
-            renderAvailableDevices();
-        })
-        .catch(error => {
-            availableList.innerHTML = `<li class="list-group-item text-danger">Error loading devices: ${error.message}</li>`;
-        });
 }
 
 /**
