@@ -11,6 +11,7 @@ services:
       - config:/root/.config/ZfDash
       - data:/opt/zfdash/data
       - /etc:/host-etc:ro  # Read-only access to check host's /etc/hostid
+      - /run/udev:/run/udev:ro  # Read-only access to udev for filesystem type detection
     ports:
       - 5001:5001
     restart: unless-stopped

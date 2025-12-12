@@ -173,6 +173,7 @@ sudo docker run -d --name zfdash \
   -v zfdash_config:/root/.config/ZfDash \
   -v zfdash_data:/opt/zfdash/data \
   -v /etc:/host-etc:ro \
+  -v /run/udev:/run/udev:ro \
   -p 5001:5001 \
   --restart unless-stopped \
   ad4mts/zfdash:latest
@@ -196,19 +197,16 @@ Or if deployed with Docker Compose (add `-v` to remove the volumes as well):
 sudo docker compose down
 ```
 
-### Docker Security Note (Advanced)
-
-ZfDash requires direct access to the host's ZFS subsystem, which presents a security challenge for containerization.
-
-*   **`--privileged` Flag**: The command above uses `--privileged`, which grants the container full, unrestricted access to the host. This is the simplest way to ensure functionality but is also the least secure.
-*   **A More Secure Alternative**: For better security, you can replace `--privileged` with the more granular `--cap-add SYS_ADMIN` flag and mount `/dev` as a volume using `-v /dev:/dev` (so the container has access to disks). If you still encounter permission errors (often due to AppArmor or SELinux policies on the host), you may also need to add `--security-opt seccomp=unconfined` as a last resort.
-    * If using Docker Compose, use the included [compose.moresecure.yml](compose.moresecure.yml) as an override and redeploy:
-      ```bash
-      mv compose.moresecure.yml compose.override.yml
-      docker compose up -d
-      ```
-
 **HostID Compatibility Note**: ZFS pools store the system hostid they were created on. To prevent hostid mismatch errors, the container syncs with the host's `/etc/hostid` via the `-v /etc:/host-etc:ro` mount (already included in compose files). This works across all distributions, handling missing hostid files gracefully.
+### Security Note
+
+The Docker container runs with `--privileged` mode, which grants the application (both the Web UI and the backend daemon) root-level access to the host system. This is currently required for ZFS management operations.
+
+This configuration is suitable for **trusted local networks** and **home lab settings**. Do not expose this container directly to the public internet.
+
+**Future Roadmap:**
+*   Splitting the application into two containers: a privileged daemon container and an unprivileged Web UI container communicating via secure socket IPC.
+*   Alternatively, implementing `s6-overlay` with `s6-setuidgid` to drop privileges for the Web UI process within the single container.
 
 **Method 5: Web UI Systemd Service (Headless/Server)**
 

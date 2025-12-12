@@ -289,7 +289,7 @@ def _apply_parent_blocking(devices: List[Dict[str, Any]]) -> None:
     """
     blocked_parents: Set[str] = set()
     
-    # First pass: collect blocked parents
+    # First pass: collect blocked parents (store as full paths)
     for dev in devices:
         if dev['disable_reason'] != DisableReason.NONE:
             pkname = dev.get('pkname')
@@ -299,9 +299,8 @@ def _apply_parent_blocking(devices: List[Dict[str, Any]]) -> None:
     # Second pass: mark parent disks
     for dev in devices:
         if dev['type'] == 'disk' and dev['disable_reason'] == DisableReason.NONE:
-            # Check if this disk's base name is in blocked_parents
-            base_name = dev['name'].split('/')[-1]
-            if base_name in blocked_parents:
+            # Check if this disk's full path is in blocked_parents
+            if dev['name'] in blocked_parents:
                 dev['disable_reason'] = DisableReason.PARENT_BLOCKED
                 dev['is_eligible'] = False
 
@@ -326,6 +325,57 @@ def _apply_filter(
 # LINUX: lsblk --json
 # =============================================================================
 
+def _get_blkid_info() -> Dict[str, Dict[str, str]]:
+    """
+    Get filesystem type and label information from blkid for all devices.
+    
+    This is used as a fallback when lsblk doesn't provide fstype information,
+    which is common with ZFS members and some other filesystem types.
+    
+    Returns: Dict mapping device paths to {TYPE, LABEL, UUID, etc.}
+    """
+    blkid_path = find_executable("blkid", ['/usr/bin', '/bin', '/sbin', '/usr/sbin'])
+    if not blkid_path:
+        return {}
+    
+    blkid_info = {}
+    try:
+        # Run blkid without arguments to get info for all devices
+        cmd = [blkid_path, '-o', 'export']
+        retcode, stdout, stderr = _run_command(cmd)
+        if retcode != 0:
+            return {}
+        
+        # Parse blkid export format (key=value pairs, devices separated by blank lines)
+        current_device = {}
+        current_devname = None
+        
+        for line in stdout.strip().split('\n'):
+            line = line.strip()
+            if not line:
+                # Blank line = end of device entry
+                if current_devname and current_device:
+                    blkid_info[current_devname] = current_device
+                current_device = {}
+                current_devname = None
+                continue
+            
+            if '=' in line:
+                key, value = line.split('=', 1)
+                current_device[key] = value
+                if key == 'DEVNAME':
+                    current_devname = value
+        
+        # Don't forget the last device
+        if current_devname and current_device:
+            blkid_info[current_devname] = current_device
+            
+    except Exception:
+        pass
+    
+    return blkid_info
+
+
 def _list_block_devices_linux() -> tuple:
     """
     List block devices on Linux using lsblk JSON output.
@@ -336,6 +386,9 @@ def _list_block_devices_linux() -> tuple:
     if not lsblk_path:
         return [], "'lsblk' command not found. Please install util-linux package."
 
+    # Get blkid info as fallback for filesystem detection
+    blkid_info = _get_blkid_info()
+    
     all_devices = []
     try:
         cmd = [lsblk_path, '-Jpbn', '-o', 
@@ -359,6 +412,13 @@ def _list_block_devices_linux() -> tuple:
             # Skip certain device types entirely
             if dev_type in SKIP_TYPES:
                 return
+
+            # Fallback to blkid if lsblk didn't provide fstype
+            if not fstype and dev_path in blkid_info:
+                fstype = blkid_info[dev_path].get('TYPE')
+                # Also get label from blkid if not already set
+                if not node.get('label'):
+                    node['label'] = blkid_info[dev_path].get('LABEL')
 
             # Determine disable reason
             disable_reason = DisableReason.NONE
