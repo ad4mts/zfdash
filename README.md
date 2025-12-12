@@ -31,6 +31,7 @@ curl -sSL https://raw.githubusercontent.com/ad4mts/zfdash/main/get-zfdash.sh | b
 * [🚀 Installation & Running](#-installation--running)
 * [🐳 Docker Usage](#-docker-usage)
 * [💡 Usage Tutorial](#-usage-tutorial)
+* [🤝 Contributing](#-contributing)
 * [💖 Motivation](#-motivation)
 * [⚠️ IMPORTANT WARNINGS](#️-important-warnings)
 * [📄 License](#-license)
@@ -199,11 +200,23 @@ ZfDash requires direct access to the host's ZFS subsystem, which presents a secu
 *   **Common Tasks:** Select an object in the tree, then use the right pane tabs or top bar/menu buttons. Examples: Check Pool Status/Properties tabs for health/usage. Use the Snapshots tab to create/delete/rollback/clone. Use the top bar/menu to create datasets. Use the Encryption tab to manage keys.
 *   **Remember:** Destructive actions are irreversible. Double-check selections & keep backups!
 
+## 🤝 Contributing
+
+Contributions are welcome! If you'd like to improve ZfDash, please feel free to:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/your-feature`)
+3. Make your changes and commit them
+4. Push to your branch (`git push origin feature/your-feature`)
+5. Open a Pull Request against the `main` branch
+
+Please ensure your code follows the existing style and includes appropriate comments. For major changes, consider opening an issue first to discuss your ideas.
+
 ## 💖 Motivation
 
 As a resident doctor, my main focus isn't software, but I enjoy exploring Python, Linux, and security as a hobby. ZfDash grew out of this hobby and my own need for a simpler way to manage my ZFS storage.
 
-With some help from AI tools, I built this GUI/WebUI and decided to share it with the open-source community, hoping it might help others too. I'll do my best to maintain it, but my time is limited, so please feel free to fork the project if you'd like to expand on it!
+With some help from AI tools, I built this GUI/WebUI and decided to share it with the open-source community, hoping it might help others too. While my time is limited, I'm committed to maintaining this project and welcome community contributions. Whether you're reporting bugs, suggesting features, improving documentation, or submitting code—your help is greatly appreciated! See the [Contributing](#-contributing) section below for details on how to get involved.
 
 ## ⚠️ IMPORTANT WARNINGS
 

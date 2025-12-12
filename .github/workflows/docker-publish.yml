@@ -1,11 +1,10 @@
 name: Docker Publish
 
 on:
-  # Run on pushes to the main branch and when new version tags are created.
+  # Run only when new version tags are created (e.g., v1.9.0)
   push:
-    branches: [ "main" ]
     tags: [ 'v*.*.*' ]
-  # Run builds on pull requests targeting the main branch to validate changes.
+  # Run builds on pull requests targeting main to validate changes (no publishing)
   pull_request:
     branches: [ "main" ]
 
