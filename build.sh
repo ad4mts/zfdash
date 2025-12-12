@@ -76,13 +76,18 @@ uv sync --extra dev
 log_info "Building with PyInstaller..."
 rm -rf build dist
 
+#uv run python -m PyInstaller \
+#    --noconfirm \
+#    --distpath dist \
+#    --workpath build \
+#    --name zfdash \
+#    src/main.py
+# Build using the spec file (contains cross-distro fix for libxkbcommon)
 uv run python -m PyInstaller \
     --noconfirm \
     --distpath dist \
     --workpath build \
-    --name zfdash \
-    src/main.py
-
+    zfdash.spec
 #######################################
 # Verify
 #######################################

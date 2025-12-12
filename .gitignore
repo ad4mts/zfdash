@@ -1,7 +1,7 @@
 # Build artifacts
 build/
 dist/
-*.spec
+
 
 # Python
 __pycache__/
@@ -28,6 +28,9 @@ miniconda_base/
 developer documentation/
 compose.override.yml
 **/docker-local-debug.sh
+*.img
+*.iso
+*.bin
 
 # Release artifacts
 releases/
