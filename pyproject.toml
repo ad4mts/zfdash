@@ -1,6 +1,6 @@
 [project]
 name = "zfdash"
-version = "1.9.0-beta"
+version = "1.9.2-beta"
 description = "A modern graphical interface for managing ZFS storage pools, datasets, snapshots, and encryption."
 readme = "README.md"
 license = { text = "GPL-3.0" }

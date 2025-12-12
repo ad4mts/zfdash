@@ -1,4 +1,19 @@
 # ZfDash Changelog #always use same format
+## v1.9.2-beta
+*   **Feature:** GUI/WebUI: Support for special VDEVs (TrueNAS Fusion Pools) - create metadata vdevs for improved performance.
+*   **Feature:** GUI/WebUI: Contextual help system - get helpful tips and explanations for VDEV types right in the Create Pool and Add VDEV dialogs.
+*   **Feature:** WebUI: Rich modal dialogs - replaced basic browser alerts with professional Bootstrap modals for better user experience.
+*   **Feature:** GUI/WebUI: Three-button confirmations for critical operations (Offline/Online) - Cancel/No/Yes options prevent accidental actions.
+*   **Improvement:** Robust pool status parsing - uses modern JSON format (zpool status -j) with automatic fallback for older ZFS versions.
+*   **Improvement:** GUI: Unified pool creation and VDEV management interface - same intuitive layout for creating pools and adding VDEVs.
+*   **Improvement:** GUI: Click the trash icon next to any VDEV to quickly remove it.
+*   **Improvement:** GUI/WebUI: Clearer instructions with visual cues (→ arrows and 🗑 trash icons) to guide you through VDEV configuration.
+*   **Improvement:** GUI: More consistent and polished appearance throughout VDEV dialogs.
+*   **Improvement:** WebUI: Streamlined pool creation and VDEV management with less clutter and better visual flow.
+*   **Fix:** GUI: Error messages now appear centered on the window instead of randomly in the corner.
+*   **Fix:** GUI: Keyboard input now works correctly when app is built on Ubuntu and run on Fedora (or other distributions).
+*   **Fix:** GUI: Import pool dialog now works properly.
+
 ## v1.9.0-beta
 *   **Feature:** GUI/WebUI: Added checkboxes to show all block devices (disable safety filters for advanced users).
 *   **Feature:** WebUI: Improved adding VDEV types with better UI controls.

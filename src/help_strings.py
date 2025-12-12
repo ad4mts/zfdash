@@ -96,10 +96,11 @@ HELP = {
             "title": "No VDEVs configured yet",
             "message": "Click 'Add VDEV' to start building your pool layout.",
             "steps": [
-                "Click 'Add VDEV' and choose a type (e.g., Mirror)",
-                "Select the VDEV type you want to add devices to",
+                "Choose a VDEV type from the dropdown (e.g., Mirror, RAID-Z1)",
+                "Click 'Add VDEV' to create it",
                 "Select devices from the left panel",
-                "Click 'Add Device →' to add them to the selected VDEV",
+                "Click the right arrow (→) to add them to the selected VDEV",
+                "Click the trash icon (🗑) on a VDEV to remove it",
                 "Repeat for additional VDEVs if needed"
             ]
         },
@@ -107,11 +108,12 @@ HELP = {
             "title": "Add VDEVs to expand your pool",
             "message": "Select a VDEV type and add devices to it.",
             "steps": [
-                "Click 'Add VDEV Type' and choose (e.g., Mirror, Cache)",
-                "Select the VDEV type you want to add devices to",
+                "Choose a VDEV type from the dropdown (e.g., Mirror, Cache)",
+                "Click 'Add VDEV' to create it",
                 "Select devices from the available list",
-                "Click 'Add Device →' to add them to the selected VDEV",
-                "Click 'Apply' to add VDEVs to the pool"
+                "Click the right arrow (→) to add them to the selected VDEV",
+                "Click the trash icon (🗑) on a VDEV to remove it",
+                "Click 'OK' when ready to add VDEVs to the pool"
             ]
         },
         "no_pools": {

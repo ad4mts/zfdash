@@ -22,7 +22,7 @@ try:
     from widgets.zfs_tree_model import ZfsTreeModel
     from widgets.properties_editor import PropertiesEditor
     from widgets.snapshots_widget import SnapshotsWidget
-    from widgets.create_pool_dialog import CreatePoolDialog
+    from widgets.vdev_config_widget import show_vdev_config_dialog
     from widgets.create_dataset_dialog import CreateDatasetDialog
     from widgets.log_viewer_dialog import LogViewerDialog
     from widgets.pool_editor_widget import PoolEditorWidget
@@ -98,6 +98,49 @@ class MainWindow(QMainWindow):
         QMetaObject.invokeMethod(
             self, "refresh_all_data", Qt.ConnectionType.QueuedConnection
         )
+
+    # --- Dialog Positioning Helpers ---
+    def _center_dialog_on_window(self, dialog):
+        """Center a dialog on this main window. Call after dialog.show()."""
+        dialog.show()  # Need to show first to get correct size
+        main_geo = self.geometry()
+        dlg_geo = dialog.geometry()
+        x = main_geo.x() + (main_geo.width() - dlg_geo.width()) // 2
+        y = main_geo.y() + (main_geo.height() - dlg_geo.height()) // 2
+        dialog.move(x, y)
+
+    def _show_error_message(self, title: str, message: str, details: str = ""):
+        """Show an error message box centered on the main window."""
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Critical)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        if details:
+            msg_box.setInformativeText("Click 'Show Details...' for more information.")
+            msg_box.setDetailedText(details)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        self._center_dialog_on_window(msg_box)
+        msg_box.exec()
+
+    def _show_warning_message(self, title: str, message: str):
+        """Show a warning message box centered on the main window."""
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Warning)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        self._center_dialog_on_window(msg_box)
+        msg_box.exec()
+
+    def _show_info_message(self, title: str, message: str):
+        """Show an info message box centered on the main window."""
+        msg_box = QMessageBox(self)
+        msg_box.setIcon(QMessageBox.Icon.Information)
+        msg_box.setWindowTitle(title)
+        msg_box.setText(message)
+        msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        self._center_dialog_on_window(msg_box)
+        msg_box.exec()
 
     # --- UI Creation Methods ---
 
@@ -789,7 +832,7 @@ class MainWindow(QMainWindow):
             success = result[0]
             msg = str(result[1]) if result[1] is not None else "Operation completed successfully."
             if not success:
-                 QMessageBox.critical(self, "Action Failed", msg)
+                 self._show_error_message("Action Failed", msg)
                  self._on_action_worker_finished()
                  return
         else:
@@ -839,6 +882,7 @@ class MainWindow(QMainWindow):
              msg_box.setDetailedText(details_short)
 
         msg_box.setStandardButtons(QMessageBox.StandardButton.Ok)
+        self._center_dialog_on_window(msg_box)
         msg_box.exec()
 
         self._on_action_worker_finished() # Ensure UI re-enabled
@@ -867,9 +911,13 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _create_pool(self):
-        dialog = CreatePoolDialog(zfs_client=self.zfs_client, parent=self)
-        if dialog.exec():
-            pool_name, vdev_specs, force = dialog.get_pool_details()
+        result = show_vdev_config_dialog(
+            parent=self,
+            zfs_client=self.zfs_client,
+            mode='create_pool'
+        )
+        if result:
+            pool_name, vdev_specs, force = result
             if pool_name and vdev_specs:
                 self._run_worker_task(
                     self.zfs_client.execute_generic_action,

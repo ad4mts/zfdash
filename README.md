@@ -1,6 +1,6 @@
 # ZfDash - Modern ZFS Management GUI & Web UI Interface
 
-[![Version](https://img.shields.io/badge/version-1.9.0--beta-blue)](https://github.com/ad4mts/zfdash/releases)
+[![Version](https://img.shields.io/badge/version-1.9.2--beta-blue)](https://github.com/ad4mts/zfdash/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20FreeBSD-lightgrey)](https://github.com/ad4mts/zfdash)
 
@@ -82,17 +82,46 @@ Or download the latest release tar for your system and run `install.sh`.
 
 **Method 2: Run From Source with uv (Linux, macOS, FreeBSD)**
 
-1.  Install [uv](https://docs.astral.sh/uv/): `curl -LsSf https://astral.sh/uv/install.sh | sh`
-2.  `git clone https://github.com/ad4mts/zfdash && cd zfdash`
-3.  Run GUI: `uv run src/main.py`
-4.  Run Web UI: `uv run src/main.py --web` or `sudo uv run src/main.py --web --socket` (recommended for macOS/FreeBSD)
+**Linux:**
 
-    **macOS/FreeBSD (Experimental):**
-     * Requires `sudo` to run
-     * Use `--socket` mode: `sudo uv run src/main.py --web --socket`
-     * FreeBSD: Web UI only (no GUI support)
-     * macOS: Both GUI and Web UI supported
-     * Please report issues if you test on these platforms. See: `uv run src/main.py --help`.
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repository
+git clone https://github.com/ad4mts/zfdash && cd zfdash
+
+# Run Web UI
+uv run src/main.py --web
+```
+```bash
+# Or run GUI
+uv run src/main.py
+```
+
+**macOS/FreeBSD (Experimental):**
+
+*Requirements: `sudo` installed and configured (macOS has this by default)*
+
+```bash
+# Install uv
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# Clone the repository
+git clone https://github.com/ad4mts/zfdash && cd zfdash
+
+# Run Web UI (recommended: use --socket mode for better compatibility)
+uv run src/main.py --web --socket
+# It will prompt you for sudo to launch the daemon
+```
+```bash
+# Or run GUI (macOS only, not supported on FreeBSD)
+uv run src/main.py --socket
+```
+
+**Notes:**
+- The `--socket` mode uses Unix sockets instead of pipes for daemon communication (more reliable on BSD-based systems)
+- Please report issues if you test on these platforms. See: `uv run src/main.py --help` for all options.
 
 * **Troubleshooting:** If the daemon won't start due to Polkit/policy issues, copy the packaged policy into the system actions directory:
 ```bash
