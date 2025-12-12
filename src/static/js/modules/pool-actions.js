@@ -34,34 +34,38 @@ export function handleCreatePool() {
         </div>
         <hr>
         <h6>Pool Layout</h6>
-        <div class="row">
+        <div class="row align-items-center gx-2">
             <div class="col-md-5">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="form-label mb-0">Available Devices:</label>
+                    <label class="form-label mb-0 fw-bold">Available Devices:</label>
                     <div class="form-check form-check-sm mb-0">
                         <input class="form-check-input" type="checkbox" id="pool-show-all-devices-check">
                         <label class="form-check-label small" for="pool-show-all-devices-check">Show All</label>
                     </div>
                 </div>
-                <ul id="pool-available-devices" class="list-group list-group-flush border rounded" style="max-height: 200px; overflow-y: auto;">${availableDevicesHtml}</ul>
+                <ul id="pool-available-devices" class="list-group list-group-flush border rounded shadow-sm custom-scrollbar" style="height: 400px; overflow-y: auto; overflow-x: hidden;">${availableDevicesHtml}</ul>
             </div>
-            <div class="col-md-1 d-flex flex-column align-items-center justify-content-center">
-                <button type="button" id="pool-add-device-btn" class="btn btn-sm btn-outline-primary mb-2" title="Add Selected Device(s) to VDEV">>></button>
-                <button type="button" id="pool-remove-device-btn" class="btn btn-sm btn-outline-danger mt-2" title="Remove Selected Device/VDEV"><<</button>
+            <div class="col-md-1 d-flex flex-column align-items-center justify-content-center" style="height: 400px;">
+                <button type="button" id="pool-add-device-btn" class="btn btn-sm btn-outline-primary mb-3 shadow-sm" title="Add Selected Device(s) to VDEV">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+                <button type="button" id="pool-remove-device-btn" class="btn btn-sm btn-outline-danger shadow-sm" title="Remove Selected Device/VDEV">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
             </div>
             <div class="col-md-6">
-                <label class="form-label">VDEVs in Pool:</label>
-                <div id="pool-vdev-config" class="border rounded p-1 bg-light" style="min-height: 150px;">
+                <label class="form-label fw-bold">VDEVs in Pool:</label>
+                <div id="pool-vdev-config" class="border rounded p-2 bg-light shadow-sm custom-scrollbar" style="height: 400px; overflow-y: auto; overflow-x: hidden;">
                     <div id="pool-vdev-empty-state"></div>
                     <ul class="list-unstyled mb-0" id="pool-vdev-list"></ul>
                 </div>
                 <div id="pool-vdev-type-info" class="alert alert-info small py-2 px-3 mt-2" style="display:none;"></div>
-                <div class="input-group input-group-sm justify-content-end mt-1">
-                    <select class="form-select form-select-sm" id="pool-vdev-type-select" style="max-width: 150px;">
+                <div class="input-group input-group-sm justify-content-end mt-2">
+                    <select class="form-select form-select-sm shadow-sm" id="pool-vdev-type-select" style="max-width: 150px;">
                         ${VDEV_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
                         <option value="custom">Custom...</option>
                     </select>
-                    <button type="button" id="pool-add-vdev-btn" class="btn btn-sm btn-success"><i class="bi bi-plus-circle"></i> Add VDEV</button>
+                    <button type="button" id="pool-add-vdev-btn" class="btn btn-sm btn-success shadow-sm"><i class="bi bi-plus-circle"></i> Add VDEV</button>
                 </div>
             </div>
         </div>
@@ -180,9 +184,10 @@ export function setupCreatePoolModal() {
             availableDevicesMap[dev.name] = dev;
 
             const li = document.createElement('li');
-            li.className = 'list-group-item list-group-item-action py-1 pool-device-item';
-            // Use display_name if available
-            li.textContent = dev.display_name || dev.name;
+            li.className = 'list-group-item list-group-item-action pool-device-item';
+            // Use display_name if available, with icon
+            const displayName = dev.display_name || dev.name;
+            li.innerHTML = `<i class="bi bi-hdd me-2 opacity-50"></i><span>${escapeHtml(displayName)}</span>`;
             li.dataset.path = dev.name;
             li.onclick = (e) => e.currentTarget.classList.toggle('active');
             availableList.appendChild(li);
@@ -245,17 +250,28 @@ export async function addVdevTypeToPoolConfig(vdevList, vdevType = null) {
 
         const vdevId = `vdev-${type}-${Date.now()}`;
         const li = document.createElement('li');
-        li.className = 'list-group-item py-1 pool-vdev-item mb-1';
+        // Use premium card classes from pool-manager.css
+        li.className = 'list-group-item pool-vdev-item mb-2 p-0 overflow-hidden';
         li.dataset.vdevType = type;
         li.dataset.vdevId = vdevId;
         li.innerHTML = `
-            <div class="d-flex justify-content-between align-items-center">
-                <span><strong>${type.toUpperCase()}</strong> VDEV</span>
-                <button type="button" class="btn btn-sm btn-outline-danger py-0 px-1 remove-vdev-btn" title="Remove this VDEV">
-                    <i class="bi bi-trash3-fill"></i>
+            <div class="pool-vdev-header d-flex justify-content-between align-items-center bg-light px-3 py-2">
+                <span class="fw-bold text-dark d-flex align-items-center">
+                    <i class="bi bi-hdd-stack col-primary me-2"></i>
+                    ${type.toUpperCase()}
+                    <span class="badge bg-secondary ms-2 rounded-pill" style="font-size: 0.65em; opacity: 0.7;">VDEV</span>
+                </span>
+                <button type="button" class="btn btn-sm btn-link text-danger p-0 border-0 remove-vdev-btn" title="Remove this VDEV">
+                    <i class="bi bi-trash3"></i>
                 </button>
             </div>
-            <ul class="list-unstyled ps-3 mb-0 device-list-in-vdev"></ul>`;
+            <div class="p-2">
+                <div class="empty-vdev-hint">
+                    <i class="bi bi-plus-circle-dotted fs-5 d-block mb-1 text-secondary"></i>
+                    Add devices to this VDEV
+                </div>
+                <ul class="list-group list-group-flush device-list-in-vdev"></ul>
+            </div>`;
 
         li.onclick = (e) => {
             if (e.target.classList.contains('pool-vdev-item') || e.target.closest('.d-flex')) {
@@ -322,8 +338,10 @@ export function addDeviceToPoolVdev(availableList, vdevList, devicesMap) {
         }
 
         const deviceLi = document.createElement('li');
-        deviceLi.className = 'list-group-item list-group-item-action py-1 pool-vdev-device-item';
-        deviceLi.textContent = display;
+        // Classes mostly handled by pool-manager.css now, but ensure base classes
+        deviceLi.className = 'list-group-item list-group-item-action pool-vdev-device-item';
+        // Add Icon for chip look
+        deviceLi.innerHTML = `<i class="bi bi-hdd-fill me-2 opacity-50"></i><span>${escapeHtml(display)}</span>`;
         deviceLi.dataset.path = path;
         deviceLi.onclick = (e) => {
             e.stopPropagation();
@@ -331,6 +349,11 @@ export function addDeviceToPoolVdev(availableList, vdevList, devicesMap) {
             deviceLi.classList.add('active');
         };
         deviceListInVdev.appendChild(deviceLi);
+
+        // Hide hint
+        const hint = selectedVdevLi.querySelector('.empty-vdev-hint');
+        if (hint) hint.style.display = 'none';
+
         availItem.remove();
     });
 }
@@ -352,13 +375,24 @@ export function removeDeviceFromPoolVdev(availableList, vdevList, devicesMap) {
     }
 
     const path = selectedDeviceLi.dataset.path;
+    // Get parent info before removal to check empty state later
+    const vdevLi = selectedDeviceLi.closest('.pool-vdev-item');
     selectedDeviceLi.remove();
+
+    // Check if empty and show hint
+    if (vdevLi) {
+        const remaining = vdevLi.querySelectorAll('.pool-vdev-device-item');
+        if (remaining.length === 0) {
+            const hint = vdevLi.querySelector('.empty-vdev-hint');
+            if (hint) hint.style.display = 'block';
+        }
+    }
 
     const devInfo = devicesMap ? devicesMap[path] : { name: path };
     const display = devInfo?.display_name || path;
     const availLi = document.createElement('li');
-    availLi.className = 'list-group-item list-group-item-action py-1 pool-device-item';
-    availLi.textContent = display;
+    availLi.className = 'list-group-item list-group-item-action pool-device-item';
+    availLi.innerHTML = `<i class="bi bi-hdd me-2 opacity-50"></i><span>${escapeHtml(display)}</span>`;
     availLi.dataset.path = path;
     availLi.onclick = (e) => e.currentTarget.classList.toggle('active');
     availableList.appendChild(availLi);
@@ -381,8 +415,8 @@ export function removeVdevFromPoolConfig(vdevLiToRemove, availableList, devicesM
         const devInfo = devicesMap ? devicesMap[path] : { name: path };
         const display = devInfo?.display_name || path;
         const availLi = document.createElement('li');
-        availLi.className = 'list-group-item list-group-item-action py-1 pool-device-item';
-        availLi.textContent = display;
+        availLi.className = 'list-group-item list-group-item-action pool-device-item';
+        availLi.innerHTML = `<i class="bi bi-hdd me-2 opacity-50"></i><span>${escapeHtml(display)}</span>`;
         availLi.dataset.path = path;
         availLi.onclick = (e) => e.currentTarget.classList.toggle('active');
         availableList.appendChild(availLi);
@@ -394,7 +428,25 @@ export function removeVdevFromPoolConfig(vdevLiToRemove, availableList, devicesM
     availableList.innerHTML = '';
     items.forEach(item => availableList.appendChild(item));
 
+    // Check if list is empty and show empty state
+    // Get parent info before removal to check empty state later
+    const vdevListParent = vdevLiToRemove.parentElement;
     vdevLiToRemove.remove();
+
+    if (vdevListParent && vdevListParent.children.length === 0) {
+        // We need to find the empty state container. 
+        // Based on DOM structure in create pool modal: #pool-vdev-config -> #pool-vdev-empty-state + #pool-vdev-list
+        // But vdevList is the UL. The empty state is a sibling of the UL.
+        // Let's assume the standard ID for the create modal first
+        const emptyState = document.getElementById('pool-vdev-empty-state');
+        if (emptyState) {
+            emptyState.style.display = 'block';
+            // Ensure content is rendered if it was cleared or never set (though it should be static or set on init)
+            import('./help.js').then(module => {
+                module.renderEmptyState('create_pool_vdev_tree', emptyState);
+            });
+        }
+    }
 }
 
 /**
@@ -603,4 +655,14 @@ export function handlePoolAction(actionName, requireConfirm = false, confirmMsg 
         requireConfirm,
         confirmMsg || `Are you sure you want to perform '${actionName}' on pool '${poolName}'?`
     );
+}
+
+/**
+ * Escape HTML to prevent XSS
+ */
+export function escapeHtml(text) {
+    if (!text) return text;
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
 }

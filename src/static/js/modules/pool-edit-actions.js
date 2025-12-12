@@ -18,7 +18,8 @@ import {
     removeDeviceFromPoolVdev,
     removeVdevFromPoolConfig,
     getSelectedPoolVdev,
-    getSelectedPoolDeviceInVdev
+    getSelectedPoolDeviceInVdev,
+    escapeHtml
 } from './pool-actions.js';
 
 /**
@@ -209,38 +210,42 @@ export function handleAddVdevDialog() {
             <label class="form-check-label" for="pool-force-add-check">Force Addition (-f)</label>
         </div>
         <hr>
-        <div class="row">
+        <div class="row align-items-center gx-2">
             <div class="col-md-5">
                 <div class="d-flex justify-content-between align-items-center mb-1">
-                    <label class="form-label mb-0">Available Devices:</label>
+                    <label class="form-label mb-0 fw-bold">Available Devices:</label>
                     <div class="form-check form-check-sm mb-0">
                         <input class="form-check-input" type="checkbox" id="pool-show-all-devices-check">
                         <label class="form-check-label small" for="pool-show-all-devices-check">Show All</label>
                     </div>
                 </div>
-                <ul id="pool-available-devices" class="list-group list-group-flush border rounded" style="max-height: 200px; overflow-y: auto;">${availableDevicesHtml}</ul>
+                <ul id="pool-available-devices" class="list-group list-group-flush border rounded shadow-sm custom-scrollbar" style="height: 400px; overflow-y: auto; overflow-x: hidden;">${availableDevicesHtml}</ul>
             </div>
-            <div class="col-md-1 d-flex flex-column align-items-center justify-content-center">
-                <button type="button" id="pool-add-device-btn" class="btn btn-sm btn-outline-primary mb-2" title="Add Selected Device(s) to VDEV">>></button>
-                <button type="button" id="pool-remove-device-btn" class="btn btn-sm btn-outline-danger mt-2" title="Remove Selected Device/VDEV"><<</button>
+            <div class="col-md-1 d-flex flex-column align-items-center justify-content-center" style="height: 400px;">
+                <button type="button" id="pool-add-device-btn" class="btn btn-sm btn-outline-primary mb-3 shadow-sm" title="Add Selected Device(s) to VDEV">
+                    <i class="bi bi-chevron-right"></i>
+                </button>
+                <button type="button" id="pool-remove-device-btn" class="btn btn-sm btn-outline-danger shadow-sm" title="Remove Selected Device/VDEV">
+                    <i class="bi bi-chevron-left"></i>
+                </button>
             </div>
             <div class="col-md-6">
-                <label class="form-label">VDEVs to Add:</label>
-                <div id="pool-vdev-config" class="border rounded p-1 bg-light" style="min-height: 150px;">
+                <label class="form-label fw-bold">VDEVs to Add:</label>
+                <div id="pool-vdev-config" class="border rounded p-2 bg-light shadow-sm custom-scrollbar" style="height: 400px; overflow-y: auto; overflow-x: hidden;">
                     <div id="pool-vdev-empty-state" class="text-center text-muted py-3">
-                        <i class="bi bi-diagram-3 fs-3"></i>
-                        <p class="small mb-1">No VDEVs configured yet</p>
+                        <i class="bi bi-diagram-3 fs-1 opacity-50"></i>
+                        <p class="mt-3 mb-1 fw-bold">No VDEVs configured yet</p>
                         <p class="small text-muted mb-0">Select a type below and click "Add VDEV"</p>
                     </div>
                     <ul class="list-unstyled mb-0" id="pool-vdev-list"></ul>
                 </div>
                 <div id="pool-vdev-type-info" class="alert alert-info small py-2 px-3 mt-2" style="display:none;"></div>
-                <div class="input-group input-group-sm justify-content-end mt-1">
-                    <select class="form-select form-select-sm" id="pool-vdev-type-select" style="max-width: 150px;">
+                <div class="input-group input-group-sm justify-content-end mt-2">
+                    <select class="form-select form-select-sm shadow-sm" id="pool-vdev-type-select" style="max-width: 150px;">
                         ${VDEV_TYPES.map(t => `<option value="${t}">${t}</option>`).join('')}
                         <option value="custom">Custom...</option>
                     </select>
-                    <button type="button" id="pool-add-vdev-btn" class="btn btn-sm btn-success"><i class="bi bi-plus-circle"></i> Add VDEV</button>
+                    <button type="button" id="pool-add-vdev-btn" class="btn btn-sm btn-success shadow-sm"><i class="bi bi-plus-circle"></i> Add VDEV</button>
                 </div>
             </div>
         </div>
@@ -317,6 +322,7 @@ function setupAddVdevModal() {
             removeDeviceFromPoolVdev(availableList, vdevList, availableDevicesMap);
         } else if (selectedVdev) {
             removeVdevFromPoolConfig(selectedVdev, availableList, availableDevicesMap);
+            updateEmptyState(); // Ensure empty state is checked after VDEV removal
         } else {
             showWarning("Please select a VDEV or a device within a VDEV to remove.");
         }
@@ -359,8 +365,9 @@ function setupAddVdevModal() {
             availableDevicesMap[dev.name] = dev;
 
             const li = document.createElement('li');
-            li.className = 'list-group-item list-group-item-action py-1 pool-device-item';
-            li.textContent = dev.display_name || dev.name;
+            li.className = 'list-group-item list-group-item-action pool-device-item';
+            const displayName = dev.display_name || dev.name;
+            li.innerHTML = `<i class="bi bi-hdd me-2 opacity-50"></i><span>${escapeHtml(displayName)}</span>`;
             li.dataset.path = dev.name;
             li.onclick = (e) => e.currentTarget.classList.toggle('active');
             availableList.appendChild(li);

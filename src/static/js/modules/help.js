@@ -167,14 +167,17 @@ export function renderEmptyState(context, container) {
     if (!info || !container) return;
 
     container.innerHTML = `
-        <div class="text-center text-muted py-4">
-            <i class="bi bi-diagram-3 fs-1"></i>
-            <h5 class="mt-3">${escapeHtml(info.title || 'No items')}</h5>
-            <p class="small">${escapeHtml(info.message || '')}</p>
+        <div class="text-center text-muted py-3 h-100 d-flex flex-column justify-content-center align-items-center">
+            <i class="bi bi-diagram-3 display-4 opacity-50 mb-3"></i>
+            <h5 class="mt-2 fw-bold text-dark">${escapeHtml(info.title || 'No items')}</h5>
+            <p class="small text-secondary mb-3">${escapeHtml(info.message || '')}</p>
             ${info.steps ? `
-                <ol class="text-start small mx-auto" style="max-width: 300px;">
-                    ${info.steps.map(step => `<li>${escapeHtml(step)}</li>`).join('')}
-                </ol>
+                <div class="text-start bg-white p-3 rounded border shadow-sm small mx-auto" style="max-width: 350px;">
+                    <h6 class="fw-bold mb-2 text-uppercase text-muted" style="font-size: 0.75rem;">How to proceed:</h6>
+                    <ol class="ps-3 mb-0">
+                        ${info.steps.map(step => `<li class="mb-1">${escapeHtml(step)}</li>`).join('')}
+                    </ol>
+                </div>
             ` : ''}
         </div>
     `;

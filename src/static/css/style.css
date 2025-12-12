@@ -14,5 +14,6 @@
 @import "modules/components/sidebar.css";
 @import "modules/components/tables.css";
 @import "modules/components/modals.css";
+@import "modules/components/pool-manager.css";
 @import "modules/components/login.css";
 @import "modules/components/dashboard.css";

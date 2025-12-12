@@ -1,0 +1,86 @@
+/* --- Pool Manager Component Styles --- */
+
+/* VDEV Card Styling */
+.pool-vdev-item {
+    transition: all 0.2s ease-in-out;
+    border: 1px solid rgba(0, 0, 0, 0.1) !important;
+}
+
+.pool-vdev-item:hover {
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.1) !important;
+    transform: translateY(-1px);
+    border-color: rgba(0, 0, 0, 0.15) !important;
+}
+
+.pool-vdev-item.active {
+    border-color: rgba(var(--bs-primary-rgb), 0.5) !important;
+    background-color: rgba(var(--bs-primary-rgb), 0.02) !important;
+    box-shadow: 0 0 0 3px rgba(var(--bs-primary-rgb), 0.25), 0 0.5rem 1rem rgba(0, 0, 0, 0.1) !important;
+    transform: translateY(-2px);
+}
+
+/* Header within VDEV Card */
+.pool-vdev-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05) !important;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.5rem;
+}
+
+/* Device List within VDEV (Chip Style) & Available Devices */
+.device-list-in-vdev .list-group-item,
+.pool-device-item {
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    background-color: #fff;
+    padding: 0.4rem 0.75rem;
+    font-size: 0.9rem;
+    color: #495057;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    display: flex;
+    align-items: center;
+    transition: all 0.15s ease;
+}
+
+.device-list-in-vdev .list-group-item:hover,
+.pool-device-item:hover {
+    background-color: #f8f9fa;
+    border-color: rgba(0, 0, 0, 0.2);
+    transform: translateX(2px);
+}
+
+.device-list-in-vdev .list-group-item.active,
+.pool-device-item.active {
+    background-color: #e7f1ff;
+    color: var(--bs-primary);
+    border-color: var(--bs-primary);
+    font-weight: 500;
+}
+
+/* Empty VDEV Hint */
+.empty-vdev-hint {
+    color: #adb5bd;
+    font-size: 0.85rem;
+    padding: 1rem;
+    text-align: center;
+    border: 1px dashed rgba(0, 0, 0, 0.1);
+    border-radius: 4px;
+    background-color: #f8f9fa;
+    margin-top: 0.5rem;
+}
+
+/* Animations */
+.pool-vdev-item {
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(5px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
