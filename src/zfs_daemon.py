@@ -47,97 +47,138 @@ daemon_log_file_path = None # Store the determined log path
 
 should_shutdown = False
 
-def run_command_loop(transport):
-    global should_shutdown, target_uid
-    
-    while not should_shutdown:
-        try:
-            line = transport.receive_line()
-            if not line:  # EOF
-                print("DAEMON: Client disconnected (EOF)", file=sys.stderr)
-                break
-            
-            if not line.strip():
-                continue
-            
-            print(f"DAEMON: Received line: {line.strip()}", file=sys.stderr)
-            response = {}
-            request_id = None
-            
-            try:
-                request = json.loads(line)
-                command = request.get("command")
-                args = request.get("args", [])
-                kwargs = request.get("kwargs", {})
-                meta = request.get("meta", {})
-                request_id = meta.get("request_id")
-                log_enabled = meta.get("log_enabled", False)
-                current_command_uid = target_uid
+def _execute_command_task(transport, request_data, uid):
+    """
+    Worker function that runs in the thread pool.
+    Executes a single command and sends the response via the transport.
+    """
+    request_id = None
+    command = "unknown"
+    try:
+        command = request_data.get("command", "unknown")
+        args = request_data.get("args", [])
+        kwargs = request_data.get("kwargs", {})
+        meta = request_data.get("meta", {})
+        request_id = meta.get("request_id")
+        log_enabled = meta.get("log_enabled", False)
 
-                if command == "shutdown_daemon":
-                    print("DAEMON: Received shutdown command.", file=sys.stderr)
-                    response = {"status": "success", "data": "Daemon shutting down gracefully."}
-                    response["meta"] = {"request_id": request_id}
+        print(f"DAEMON [Thread]: Executing command '{command}' (ReqID={request_id})", file=sys.stderr)
+        response = {}
+
+        if command == "change_password":
+            username = kwargs.get("username")
+            new_password = kwargs.get("new_password")
+            if not username or not new_password:
+                response = {"status": "error", "error": "Missing username or new_password parameter"}
+            else:
+                try:
+                    success = update_user_password(username, new_password)
+                    if success:
+                        response = {"status": "success", "data": "Password updated successfully."}
+                    else:
+                        response = {"status": "error", "error": "Password update failed. Check daemon logs."}
+                except Exception as e:
+                    response = {"status": "error", "error": f"Password change error: {e}", "details": traceback.format_exc()}
+
+        elif command in zfs_manager_core.COMMAND_MAP:
+            func = zfs_manager_core.COMMAND_MAP[command]
+            try:
+                result_data = func(*args, **kwargs, _log_enabled=log_enabled, _user_uid=uid)
+                response = {"status": "success", "data": result_data}
+            except ZfsCommandError as zfs_err:
+                print(f"DAEMON [Thread]: ZfsCommandError for '{command}': {zfs_err}", file=sys.stderr)
+                response = {"status": "error", "error": str(zfs_err), "details": zfs_err.stderr}
+            except Exception as e:
+                print(f"DAEMON [Thread]: Error executing '{command}': {e}\n{traceback.format_exc()}", file=sys.stderr)
+                response = {"status": "error", "error": f"Execution error: {e}", "details": traceback.format_exc()}
+        else:
+            print(f"DAEMON [Thread]: Unknown command: {command}", file=sys.stderr)
+            response = {"status": "error", "error": f"Unknown command: {command}"}
+
+        response["meta"] = {"request_id": request_id}
+        transport.send_line(json.dumps(response))
+        print(f"DAEMON [Thread]: Sent response for ReqID={request_id}, Cmd='{command}'", file=sys.stderr)
+
+    except (BrokenPipeError, OSError) as e:
+        print(f"DAEMON [Thread]: Client gone during response (ReqID={request_id}): {e}", file=sys.stderr)
+    except Exception as e:
+        print(f"DAEMON [Thread]: Unexpected error in task (ReqID={request_id}, Cmd='{command}'): {e}\n{traceback.format_exc()}", file=sys.stderr)
+        # Try to send error response
+        try:
+            error_response = {"status": "error", "error": f"Worker thread error: {e}", "meta": {"request_id": request_id}}
+            transport.send_line(json.dumps(error_response))
+        except:
+            pass
+
+
+def run_command_loop(transport):
+    """
+    Main command loop with async execution via ThreadPoolExecutor.
+    The main loop only reads requests and dispatches them to worker threads.
+    This ensures long-running commands don't block other operations.
+    """
+    global should_shutdown, target_uid
+    from concurrent.futures import ThreadPoolExecutor
+    
+    # Use 4 workers - enough for typical usage without overwhelming the system
+    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="daemon_worker") as executor:
+        futures = []
+        
+        while not should_shutdown:
+            try:
+                line = transport.receive_line()
+                if not line:  # EOF
+                    print("DAEMON: Client disconnected (EOF)", file=sys.stderr)
+                    break
+                
+                if not line.strip():
+                    continue
+                
+                print(f"DAEMON: Received request: {line.strip()[:100]}...", file=sys.stderr)
+                
+                try:
+                    request = json.loads(line)
+                    command = request.get("command")
+                    request_id = request.get("meta", {}).get("request_id")
+
+                    # Handle shutdown synchronously (must be immediate)
+                    if command == "shutdown_daemon":
+                        print("DAEMON: Received shutdown command.", file=sys.stderr)
+                        response = {"status": "success", "data": "Daemon shutting down gracefully.", "meta": {"request_id": request_id}}
+                        try:
+                            transport.send_line(json.dumps(response))
+                        except (BrokenPipeError, OSError):
+                            pass
+                        should_shutdown = True
+                        break
+
+                    # Submit all other commands to thread pool (non-blocking)
+                    future = executor.submit(_execute_command_task, transport, request, target_uid)
+                    futures.append(future)
+                    
+                    # Periodic cleanup: only when list gets large (preserves most recent futures)
+                    if len(futures) > 100:
+                        futures = [f for f in futures if not f.done()]
+
+                except json.JSONDecodeError as json_err:
+                    print(f"DAEMON: JSON Decode Error: {json_err}", file=sys.stderr)
+                    response = {"status": "error", "error": f"Invalid JSON: {json_err}", "meta": {"request_id": None}}
                     try:
                         transport.send_line(json.dumps(response))
-                    except (BrokenPipeError, OSError):
+                    except:
                         pass
-                    should_shutdown = True
-                    return
 
-                elif command == "change_password":
-                    print(f"DAEMON: Handling command '{command}'...", file=sys.stderr)
-                    username = kwargs.get("username")
-                    new_password = kwargs.get("new_password")
-                    if not username or not new_password:
-                        print(f"DAEMON: Error - change_password requires 'username' and 'new_password' in kwargs.", file=sys.stderr)
-                        response = {"status": "error", "error": "Missing username or new_password parameter for change_password"}
-                    else:
-                        try:
-                            success = update_user_password(username, new_password)
-                            if success:
-                                response = {"status": "success", "data": "Password updated successfully."}
-                            else:
-                                response = {"status": "error", "error": "Password update failed. Check daemon logs."}
-                        except Exception as e:
-                            print(f"DAEMON: Error executing command '{command}': {e}\n{traceback.format_exc()}", file=sys.stderr)
-                            response = {"status": "error", "error": f"Daemon execution error during password change: {e}", "details": traceback.format_exc()}
-
-                elif command in zfs_manager_core.COMMAND_MAP:
-                    func = zfs_manager_core.COMMAND_MAP[command]
-                    try:
-                        result_data = func(*args, **kwargs, _log_enabled=log_enabled, _user_uid=current_command_uid)
-                        response = {"status": "success", "data": result_data}
-                    except ZfsCommandError as zfs_err:
-                        print(f"DAEMON: ZfsCommandError for command '{command}': {zfs_err}", file=sys.stderr)
-                        response = {"status": "error", "error": str(zfs_err), "details": zfs_err.stderr}
-                    except Exception as e:
-                        print(f"DAEMON: Error executing command '{command}': {e}\n{traceback.format_exc()}", file=sys.stderr)
-                        response = {"status": "error", "error": f"Daemon execution error: {e}", "details": traceback.format_exc()}
-                else:
-                    print(f"DAEMON: Unknown command received: {command}", file=sys.stderr)
-                    response = {"status": "error", "error": f"Unknown command: {command}"}
-
-            except json.JSONDecodeError as json_err:
-                print(f"DAEMON: JSON Decode Error: {json_err}. Invalid line received: {line.strip()}", file=sys.stderr)
-                response = {"status": "error", "error": f"Invalid JSON request: {json_err}", "details": line.strip()}
             except Exception as e:
-                print(f"DAEMON: Error processing request: {e}\n{traceback.format_exc()}", file=sys.stderr)
-                response = {"status": "error", "error": f"Daemon request processing error: {e}", "details": traceback.format_exc()}
-
-            response["meta"] = {"request_id": request_id}
-
-            if response:
-                try:
-                    transport.send_line(json.dumps(response))
-                    print(f"DAEMON: Sent response for ReqID={request_id}, Cmd='{command if 'command' in locals() else 'unknown'}'", file=sys.stderr)
-                except (BrokenPipeError, OSError) as e:
-                    print(f"DAEMON: Client gone during response: {e}", file=sys.stderr)
-                    break
-
-        except Exception as e:
-            print(f"DAEMON: Unexpected error in command loop: {e}", file=sys.stderr)
-            break
+                print(f"DAEMON: Unexpected error in command loop: {e}", file=sys.stderr)
+                break
+        
+        # Wait for pending tasks on shutdown (with timeout)
+        print(f"DAEMON: Waiting for {len(futures)} pending tasks to complete...", file=sys.stderr)
+        for f in futures:
+            try:
+                f.result(timeout=10)
+            except Exception as e:
+                print(f"DAEMON: Task failed during shutdown: {e}", file=sys.stderr)
 
 def main():
     """Main daemon execution function, communicating via stdin/stdout pipes."""

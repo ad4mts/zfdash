@@ -474,7 +474,7 @@ wheels = [
 
 [[package]]
 name = "zfdash"
-version = "1.9.2b0"
+version = "1.9.3b0"
 source = { editable = "." }
 dependencies = [
     { name = "certifi" },

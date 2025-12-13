@@ -17,6 +17,7 @@ escalation code. Safe for import by root-privileged daemon.
 import os
 import sys
 import socket
+import threading
 from abc import ABC, abstractmethod
 from typing import Optional
 
@@ -147,7 +148,7 @@ class PipeServerTransport(ServerTransport):
         """Initialize pipe transport using sys.stdin/stdout."""
         self.input_stream = sys.stdin
         self.output_stream = sys.stdout
-        # Don't use custom line buffer for stdin - it has built-in line buffering
+        self._write_lock = threading.Lock()  # Thread-safe writes for async daemon
     
     def accept_connection(self) -> None:
         """No-op for pipes - already connected via stdin/stdout."""
@@ -165,11 +166,12 @@ class PipeServerTransport(ServerTransport):
             return ""
     
     def send_line(self, data: str) -> None:
-        """Write one line to stdout."""
-        if not data.endswith('\n'):
-            data = data + '\n'
-        self.output_stream.write(data)
-        self.output_stream.flush()
+        """Write one line to stdout (thread-safe)."""
+        with self._write_lock:
+            if not data.endswith('\n'):
+                data = data + '\n'
+            self.output_stream.write(data)
+            self.output_stream.flush()
     
     def close(self) -> None:
         """Close stdin/stdout (usually not needed, but safe to call)."""
@@ -208,6 +210,7 @@ class SocketServerTransport(ServerTransport):
         self.server_socket: Optional[socket.socket] = None
         self.client_socket: Optional[socket.socket] = None
         self.client_file = None  # File-like object from socket.makefile()
+        self._write_lock = threading.Lock()  # Thread-safe writes for async daemon
         
         # Create and bind socket
         self._setup_socket()
@@ -324,7 +327,7 @@ class SocketServerTransport(ServerTransport):
     
     def send_line(self, data: str) -> None:
         """
-        Send one line to connected client.
+        Send one line to connected client (thread-safe).
         
         Raises:
             RuntimeError: If called before accept_connection()
@@ -333,11 +336,12 @@ class SocketServerTransport(ServerTransport):
         if self.client_file is None:
             raise RuntimeError("No client connected - call accept_connection() first")
         
-        if not data.endswith('\n'):
-            data = data + '\n'
-        
-        self.client_file.write(data)
-        self.client_file.flush()
+        with self._write_lock:
+            if not data.endswith('\n'):
+                data = data + '\n'
+            
+            self.client_file.write(data)
+            self.client_file.flush()
     
     def close(self) -> None:
         """
