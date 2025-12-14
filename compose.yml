@@ -12,6 +12,7 @@ services:
       - data:/opt/zfdash/data
       - /etc:/host-etc:ro  # Read-only access to check host's /etc/hostid
       - /run/udev:/run/udev:ro  # Read-only access to udev for filesystem type detection
+      - /dev/disk:/dev/disk:ro # Read-only access to /dev/disk for import pool (symlinks)
     ports:
       - 5001:5001
     restart: unless-stopped

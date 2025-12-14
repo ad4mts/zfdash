@@ -173,6 +173,7 @@ sudo docker run -d --name zfdash \
   -v zfdash_config:/root/.config/ZfDash \
   -v zfdash_data:/opt/zfdash/data \
   -v /etc:/host-etc:ro \
+  -v /dev/disk:/dev/disk:ro \
   -v /run/udev:/run/udev:ro \
   -p 5001:5001 \
   --restart unless-stopped \

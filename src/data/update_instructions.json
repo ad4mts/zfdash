@@ -1,7 +1,6 @@
 {
   "_comment": "This file provides update instructions for all deployment types (Docker, Native, Source). It is used as a local fallback if the latest instructions cannot be fetched from GitHub. To update instructions for all users, edit this file and push to the main branch on GitHub.",
   "_last_updated": "2025-11-29",
-  
   "docker": {
     "title": "Docker Installation",
     "steps": [
@@ -15,7 +14,7 @@
       },
       {
         "title": "Run the new container",
-        "command": "sudo docker run -d --name zfdash \\\n  --privileged \\\n  --device=/dev/zfs:/dev/zfs \\\n  -v zfdash_config:/root/.config/ZfDash \\\n  -v zfdash_data:/opt/zfdash/data \\\n  -v /etc:/host-etc:ro \\\n  -v /run/udev:/run/udev:ro \\\n  -p 5001:5001 \\\n  --restart unless-stopped \\\n  ad4mts/zfdash:latest"
+        "command": "sudo docker run -d --name zfdash \\\n  --privileged \\\n  --device=/dev/zfs:/dev/zfs \\\n  -v zfdash_config:/root/.config/ZfDash \\\n  -v zfdash_data:/opt/zfdash/data \\\n  -v /etc:/host-etc:ro \\\n  -v /dev/disk:/dev/disk:ro \\\n  -v /run/udev:/run/udev:ro \\\n  -p 5001:5001 \\\n  --restart unless-stopped \\\n  ad4mts/zfdash:latest"
       }
     ],
     "notes": [
@@ -23,7 +22,6 @@
       "If source is local cache -> check the GitHub Readme for the latest instructions."
     ]
   },
-  
   "native": {
     "title": "Native/Binary Installation",
     "steps": [
@@ -40,7 +38,6 @@
       "Your configuration and credentials will be preserved during the update."
     ]
   },
-  
   "source": {
     "title": "Source/Development Installation",
     "steps": [
