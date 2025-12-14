@@ -184,6 +184,67 @@ class PipeServerTransport(ServerTransport):
         return "pipe"
 
 
+class SocketClientHandler:
+    """
+    Thread-safe handler for a single client connection.
+    
+    Each accepted client gets its own handler instance with independent
+    socket, file object, and write lock. This enables concurrent client
+    connections (e.g., GUI + WebUI simultaneously).
+    """
+    
+    def __init__(self, client_socket: socket.socket):
+        """
+        Initialize handler for an accepted client socket.
+        
+        Args:
+            client_socket: The socket returned by accept()
+        """
+        self.client_socket = client_socket
+        self.client_file = client_socket.makefile('rw', buffering=1, encoding='utf-8', errors='replace')
+        self._write_lock = threading.Lock()
+        self._closed = False
+    
+    def receive_line(self) -> str:
+        """Read one line from client (blocking)."""
+        if self._closed:
+            return ""
+        try:
+            line = self.client_file.readline()
+            if not line:  # EOF
+                return ""
+            return line.rstrip('\n\r')
+        except Exception:
+            return ""
+    
+    def send_line(self, data: str) -> None:
+        """Send one line to client (thread-safe)."""
+        if self._closed:
+            return
+        with self._write_lock:
+            if not data.endswith('\n'):
+                data = data + '\n'
+            self.client_file.write(data)
+            self.client_file.flush()
+    
+    def close(self) -> None:
+        """Close client connection (idempotent)."""
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self.client_file.close()
+        except Exception:
+            pass
+        try:
+            self.client_socket.close()
+        except Exception:
+            pass
+    
+    def get_type(self) -> str:
+        return "socket_client"
+
+
 class SocketServerTransport(ServerTransport):
     """
     Server transport using Unix domain socket.
@@ -261,10 +322,8 @@ class SocketServerTransport(ServerTransport):
             # Set ownership to target user
             os.chown(self.socket_path, self.uid, self.gid)
             
-            # Start listening (queue size 1 - allows one pending connection while processing current client)
-            # Note: With queue=1, if a client is actively connected, a 2nd client can connect() but will
-            # wait in queue until the 1st client's session ends. Queue=0 would reject immediately with ECONNREFUSED.
-            self.server_socket.listen(1)
+            # Start listening (backlog=5 for concurrent clients: GUI + multiple WebUI sessions)
+            self.server_socket.listen(5)
             
         except Exception as e:
             # Cleanup on error
@@ -307,6 +366,41 @@ class SocketServerTransport(ServerTransport):
                 except Exception:
                     pass
             raise OSError(f"Failed to accept connection: {e}") from e
+    
+    def accept_client(self, timeout: Optional[float] = None) -> Optional[SocketClientHandler]:
+        """
+        Accept a client connection and return a handler (for concurrent mode).
+        
+        Args:
+            timeout: Optional timeout in seconds. None = blocking, 0 = non-blocking.
+                     Returns None on timeout.
+        
+        Returns:
+            SocketClientHandler for the new client, or None on timeout.
+            
+        Raises:
+            OSError: If accept fails (not timeout)
+            RuntimeError: If socket not initialized
+        """
+        if self.server_socket is None:
+            raise RuntimeError("Socket not initialized")
+        
+        # Set timeout if specified
+        old_timeout = self.server_socket.gettimeout()
+        if timeout is not None:
+            self.server_socket.settimeout(timeout)
+        
+        try:
+            client_socket, _ = self.server_socket.accept()
+            return SocketClientHandler(client_socket)
+        except socket.timeout:
+            return None  # Timeout, not an error
+        except Exception as e:
+            raise OSError(f"Failed to accept connection: {e}") from e
+        finally:
+            # Restore original timeout
+            if timeout is not None:
+                self.server_socket.settimeout(old_timeout)
     
     def receive_line(self) -> str:
         """

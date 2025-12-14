@@ -45,9 +45,12 @@ daemon_log_file_path = None # Store the determined log path
 # Removed handle_signal function
 # Removed handle_connection function
 
-should_shutdown = False
+import threading
 
-def _execute_command_task(transport, request_data, uid):
+# Thread-safe shutdown event (replaces simple bool for concurrent safety)
+shutdown_event = threading.Event()
+
+def _execute_command_task(transport, request_data, uid, shutdown_event):
     """
     Worker function that runs in the thread pool.
     Executes a single command and sends the response via the transport.
@@ -111,74 +114,76 @@ def _execute_command_task(transport, request_data, uid):
             pass
 
 
-def run_command_loop(transport):
+def run_command_loop(transport, executor, shutdown_event):
     """
-    Main command loop with async execution via ThreadPoolExecutor.
-    The main loop only reads requests and dispatches them to worker threads.
-    This ensures long-running commands don't block other operations.
-    """
-    global should_shutdown, target_uid
-    from concurrent.futures import ThreadPoolExecutor
+    Command loop for a single client connection.
+    Uses shared ThreadPoolExecutor for async command execution.
     
-    # Use 4 workers - enough for typical usage without overwhelming the system
-    with ThreadPoolExecutor(max_workers=4, thread_name_prefix="daemon_worker") as executor:
-        futures = []
-        
-        while not should_shutdown:
+    Args:
+        transport: Client transport (PipeServerTransport or SocketClientHandler)
+        executor: Shared ThreadPoolExecutor for command execution
+        shutdown_event: threading.Event to signal shutdown
+    """
+    global target_uid
+    futures = []
+    
+    while not shutdown_event.is_set():
+        try:
+            line = transport.receive_line()
+            if not line:  # EOF - client disconnected
+                print("DAEMON: Client disconnected (EOF)", file=sys.stderr)
+                break
+            
+            if not line.strip():
+                continue
+            
+            print(f"DAEMON: Received request: {line.strip()[:100]}...", file=sys.stderr)
+            
             try:
-                line = transport.receive_line()
-                if not line:  # EOF
-                    print("DAEMON: Client disconnected (EOF)", file=sys.stderr)
-                    break
-                
-                if not line.strip():
-                    continue
-                
-                print(f"DAEMON: Received request: {line.strip()[:100]}...", file=sys.stderr)
-                
-                try:
-                    request = json.loads(line)
-                    command = request.get("command")
-                    request_id = request.get("meta", {}).get("request_id")
+                request = json.loads(line)
+                command = request.get("command")
+                request_id = request.get("meta", {}).get("request_id")
 
-                    # Handle shutdown synchronously (must be immediate)
-                    if command == "shutdown_daemon":
-                        print("DAEMON: Received shutdown command.", file=sys.stderr)
-                        response = {"status": "success", "data": "Daemon shutting down gracefully.", "meta": {"request_id": request_id}}
-                        try:
-                            transport.send_line(json.dumps(response))
-                        except (BrokenPipeError, OSError):
-                            pass
-                        should_shutdown = True
-                        break
-
-                    # Submit all other commands to thread pool (non-blocking)
-                    future = executor.submit(_execute_command_task, transport, request, target_uid)
-                    futures.append(future)
-                    
-                    # Periodic cleanup: only when list gets large (preserves most recent futures)
-                    if len(futures) > 100:
-                        futures = [f for f in futures if not f.done()]
-
-                except json.JSONDecodeError as json_err:
-                    print(f"DAEMON: JSON Decode Error: {json_err}", file=sys.stderr)
-                    response = {"status": "error", "error": f"Invalid JSON: {json_err}", "meta": {"request_id": None}}
+                # Handle shutdown synchronously (must be immediate)
+                if command == "shutdown_daemon":
+                    print("DAEMON: Received shutdown command.", file=sys.stderr)
+                    response = {"status": "success", "data": "Daemon shutting down gracefully.", "meta": {"request_id": request_id}}
                     try:
                         transport.send_line(json.dumps(response))
-                    except:
+                    except (BrokenPipeError, OSError):
                         pass
+                    shutdown_event.set()  # Signal all threads to stop
+                    break
 
-            except Exception as e:
-                print(f"DAEMON: Unexpected error in command loop: {e}", file=sys.stderr)
-                break
-        
-        # Wait for pending tasks on shutdown (with timeout)
-        print(f"DAEMON: Waiting for {len(futures)} pending tasks to complete...", file=sys.stderr)
-        for f in futures:
+                # Submit command to shared thread pool (non-blocking)
+                future = executor.submit(_execute_command_task, transport, request, target_uid, shutdown_event)
+                futures.append(future)
+                
+                # Periodic cleanup: only when list gets large
+                if len(futures) > 100:
+                    futures = [f for f in futures if not f.done()]
+
+            except json.JSONDecodeError as json_err:
+                print(f"DAEMON: JSON Decode Error: {json_err}", file=sys.stderr)
+                response = {"status": "error", "error": f"Invalid JSON: {json_err}", "meta": {"request_id": None}}
+                try:
+                    transport.send_line(json.dumps(response))
+                except:
+                    pass
+
+        except Exception as e:
+            print(f"DAEMON: Unexpected error in command loop: {e}", file=sys.stderr)
+            break
+    
+    # Wait for this client's pending tasks (with timeout)
+    pending = [f for f in futures if not f.done()]
+    if pending:
+        print(f"DAEMON: Waiting for {len(pending)} pending tasks for this client...", file=sys.stderr)
+        for f in pending:
             try:
                 f.result(timeout=10)
             except Exception as e:
-                print(f"DAEMON: Task failed during shutdown: {e}", file=sys.stderr)
+                print(f"DAEMON: Task failed during client cleanup: {e}", file=sys.stderr)
 
 def main():
     """Main daemon execution function, communicating via stdin/stdout pipes."""
@@ -281,10 +286,15 @@ def main():
     # --- End Flask Key Check ---
 
 
-    # --- Setup Communication Channel (Simplified with ipc_server) ---
+    # --- Setup Communication Channel ---
+    from concurrent.futures import ThreadPoolExecutor
+    
+    # Calculate worker count: at least 8, scales with CPU count for larger systems
+    max_workers = max(8, (os.cpu_count() or 4) * 2)
+    
     try:
         if args.listen_socket:
-            # Socket server mode
+            # Socket server mode - concurrent clients
             log(f"Creating socket server: {args.listen_socket}", "INFO")
             transport = SocketServerTransport(
                 socket_path=args.listen_socket,
@@ -294,45 +304,82 @@ def main():
             transport_mode = f"Socket: {args.listen_socket}"
             
             log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
+            log(f"ThreadPoolExecutor: max_workers={max_workers}", "INFO")
             
-            # Socket Accept Loop
-            try:
-                while not should_shutdown:
-                    log("Waiting for client connection...", "DEBUG")
-                    try:
-                        transport.accept_connection()
-                        log("Client connected", "INFO")
-                        
-                        transport.send_line(json.dumps({"status": "ready"}))
-                        log("Sent ready signal to client", "DEBUG")
-                        
-                        run_command_loop(transport)
-                        log("Client session ended", "INFO")
-                        
-                    except KeyboardInterrupt:
-                        raise
-                    except Exception as e:
-                        log(f"Error in client session: {e}", "ERROR")
-                        # Continue to accept next client unless shutdown
-            finally:
-                transport.close()
+            # Shared executor for all clients
+            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="daemon_worker") as executor:
+                client_threads = []
+                
+                try:
+                    while not shutdown_event.is_set():
+                        log("Waiting for client connection...", "DEBUG")
+                        try:
+                            # Accept with 1s timeout to check shutdown_event periodically
+                            client_handler = transport.accept_client(timeout=1.0)
+                            if client_handler is None:
+                                continue  # Timeout, check shutdown_event
+                            
+                            log("Client connected", "INFO")
+                            
+                            def handle_client(handler, exec, event):
+                                """Handle a single client in its own thread."""
+                                try:
+                                    handler.send_line(json.dumps({"status": "ready"}))
+                                    run_command_loop(handler, exec, event)
+                                except Exception as e:
+                                    print(f"DAEMON: Error in client thread: {e}", file=sys.stderr)
+                                finally:
+                                    handler.close()
+                                    log("Client session ended", "INFO")
+                            
+                            # Spawn thread for this client (pass args to avoid closure issues)
+                            t = threading.Thread(
+                                target=handle_client,
+                                args=(client_handler, executor, shutdown_event),
+                                daemon=True,
+                                name=f"client_{len(client_threads)}"
+                            )
+                            t.start()
+                            client_threads.append(t)
+                            
+                            # Cleanup finished threads periodically
+                            if len(client_threads) > 10:
+                                client_threads = [t for t in client_threads if t.is_alive()]
+                                
+                        except KeyboardInterrupt:
+                            raise
+                        except Exception as e:
+                            if not shutdown_event.is_set():
+                                log(f"Error accepting client: {e}", "ERROR")
+                    
+                    # Wait for client threads on shutdown
+                    active = [t for t in client_threads if t.is_alive()]
+                    if active:
+                        log(f"Waiting for {len(active)} client threads to finish...", "INFO")
+                        for t in active:
+                            t.join(timeout=5.0)
+                            
+                finally:
+                    transport.close()
 
         else:
-            # Pipe mode (stdin/stdout)
+            # Pipe mode (stdin/stdout) - single client
             log("Using pipe transport (stdin/stdout)", "INFO")
             transport = PipeServerTransport()
             transport_mode = "Pipe (stdin/stdout)"
             
             log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
             
-            try:
-                transport.accept_connection()
-                transport.send_line(json.dumps({"status": "ready"}))
-                run_command_loop(transport)
-            finally:
-                transport.close()
+            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="daemon_worker") as executor:
+                try:
+                    transport.accept_connection()
+                    transport.send_line(json.dumps({"status": "ready"}))
+                    run_command_loop(transport, executor, shutdown_event)
+                finally:
+                    transport.close()
         
     except KeyboardInterrupt:
+        shutdown_event.set()
         log("Interrupted by user (Ctrl+C), shutting down...", "WARNING")
     except Exception as e:
         log(f"Failed to setup transport or fatal error: {e}", "CRITICAL")
