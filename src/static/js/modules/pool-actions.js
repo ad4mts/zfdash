@@ -351,7 +351,7 @@ function handleCreatePoolConfirm() {
  * Handle import pool action
  */
 export function handleImportPool() {
-    let modalHtml = `<p class="text-muted">Searching for importable pools...</p>
+    let modalHtml = `<p class="text-muted" id="import-status-msg">Loading...</p>
         <div id="importable-pools-list" class="list-group"></div> <hr>
         <div class="row g-3 align-items-center"> <div class="col-auto">
         <label for="import-new-name" class="col-form-label">Import Selected As:</label>
@@ -363,6 +363,7 @@ export function handleImportPool() {
         <label class="form-check-label" for="import-force-check"> Force Import (-f) </label>
         </div>`;
     let modalFooterHtml = `
+        <button type="button" class="btn btn-outline-secondary" id="importModalRescanButton"><i class="bi bi-arrow-clockwise"></i> Rescan</button>
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button type="button" class="btn btn-primary" id="importModalConfirmSelectedButton" disabled>Import Selected</button>
         <button type="button" class="btn btn-warning" id="importModalConfirmAllButton" disabled>Import All</button>`;
@@ -390,12 +391,16 @@ export function handleImportPool() {
  */
 function setupImportPoolModal() {
     const listGroup = document.getElementById('importable-pools-list');
+    const statusMsg = document.getElementById('import-status-msg');
     const newNameInput = document.getElementById('import-new-name');
     const forceCheck = document.getElementById('import-force-check');
     const importSelectedBtn = document.getElementById('importModalConfirmSelectedButton');
+    const importAllBtn = document.getElementById('importModalConfirmAllButton');
+    const rescanBtn = document.getElementById('importModalRescanButton');
 
     newNameInput.disabled = true;
 
+    // Setup import selected handler
     importSelectedBtn.onclick = () => {
         const selectedItem = listGroup.querySelector('.list-group-item.active');
         if (!selectedItem) return;
@@ -421,46 +426,73 @@ function setupImportPoolModal() {
         );
     };
 
+    // Setup rescan handler
+    rescanBtn.onclick = () => {
+        fetchImportablePools(listGroup, statusMsg, importSelectedBtn, importAllBtn, newNameInput);
+    };
+
+    // Always start fresh scan when modal opens
+    fetchImportablePools(listGroup, statusMsg, importSelectedBtn, importAllBtn, newNameInput);
+}
+
+/**
+ * Fetch importable pools from API (always fresh, no caching)
+ */
+function fetchImportablePools(listGroup, statusMsg, importSelectedBtn, importAllBtn, newNameInput) {
+    statusMsg.textContent = 'Scanning for importable pools...';
+    listGroup.innerHTML = '<div class="list-group-item text-muted"><i class="bi bi-hourglass-split"></i> Scanning...</div>';
+    importSelectedBtn.disabled = true;
+    if (importAllBtn) importAllBtn.disabled = true;
+
     apiCall('/api/importable_pools')
         .then(result => {
-            listGroup.innerHTML = '';
-            const importAllBtn = document.getElementById('importModalConfirmAllButton');
-            if (!result.data || result.data.length === 0) {
-                listGroup.innerHTML = '<div class="list-group-item text-muted">No importable pools found.</div>';
-                if (importAllBtn) importAllBtn.disabled = true;
-                return;
-            }
-
-            result.data.forEach(pool => {
-                const a = document.createElement('a');
-                a.href = "#";
-                a.className = 'list-group-item list-group-item-action flex-column align-items-start py-2';
-                a.dataset.poolId = pool.id || pool.name;
-                a.innerHTML = `
-                    <div class="d-flex w-100 justify-content-between">
-                        <h6 class="mb-1">${pool.name}</h6>
-                        <small class="${pool.state !== 'ONLINE' ? 'text-danger fw-bold' : 'text-muted'}">${pool.state || '?'}</small>
-                    </div>
-                    <p class="mb-1"><small>ID: ${pool.id || 'N/A'}</small></p>
-                    ${pool.action ? `<small class="text-info">${pool.action}</small>` : ''}
-                `;
-                a.onclick = (e) => {
-                    e.preventDefault();
-                    listGroup.querySelectorAll('a.active').forEach(el => el.classList.remove('active'));
-                    a.classList.add('active');
-                    importSelectedBtn.disabled = false;
-                    newNameInput.disabled = false;
-                };
-                listGroup.appendChild(a);
-            });
-            if (importAllBtn) importAllBtn.disabled = false;
+            const pools = result.data || [];
+            statusMsg.textContent = pools.length ? 'Found importable pools:' : '';
+            renderImportablePools(pools, listGroup, importSelectedBtn, importAllBtn, newNameInput);
         })
         .catch(error => {
             listGroup.innerHTML = `<div class="list-group-item text-danger">Error finding pools: ${error.message}</div>`;
+            statusMsg.textContent = 'Error during scan:';
             importSelectedBtn.disabled = true;
-            const importAllBtn = document.getElementById('importModalConfirmAllButton');
             if (importAllBtn) importAllBtn.disabled = true;
         });
+}
+
+/**
+ * Render importable pools list
+ */
+function renderImportablePools(pools, listGroup, importSelectedBtn, importAllBtn, newNameInput) {
+    listGroup.innerHTML = '';
+
+    if (!pools || pools.length === 0) {
+        listGroup.innerHTML = '<div class="list-group-item text-muted">No importable pools found.</div>';
+        if (importAllBtn) importAllBtn.disabled = true;
+        return;
+    }
+
+    pools.forEach(pool => {
+        const a = document.createElement('a');
+        a.href = "#";
+        a.className = 'list-group-item list-group-item-action flex-column align-items-start py-2';
+        a.dataset.poolId = pool.id || pool.name;
+        a.innerHTML = `
+            <div class="d-flex w-100 justify-content-between">
+                <h6 class="mb-1">${pool.name}</h6>
+                <small class="${pool.state !== 'ONLINE' ? 'text-danger fw-bold' : 'text-muted'}">${pool.state || '?'}</small>
+            </div>
+            <p class="mb-1"><small>ID: ${pool.id || 'N/A'}</small></p>
+            ${pool.action ? `<small class="text-info">${pool.action}</small>` : ''}
+        `;
+        a.onclick = (e) => {
+            e.preventDefault();
+            listGroup.querySelectorAll('a.active').forEach(el => el.classList.remove('active'));
+            a.classList.add('active');
+            importSelectedBtn.disabled = false;
+            newNameInput.disabled = false;
+        };
+        listGroup.appendChild(a);
+    });
+    if (importAllBtn) importAllBtn.disabled = false;
 }
 
 /**

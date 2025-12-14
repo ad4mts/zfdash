@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (
     QCheckBox, QLineEdit, QLabel, QDialogButtonBox, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QMessageBox
 )
-from PySide6.QtCore import Qt, Slot
+from PySide6.QtCore import Qt, Slot, Signal
 from PySide6.QtGui import QIcon, QColor
 
 from typing import List, Dict, Optional, Tuple, Any
@@ -16,13 +16,18 @@ from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicatio
 
 class ImportPoolDialog(QDialog):
     """Dialog to select and configure ZFS pool import."""
+    
+    # Signal emitted when user requests a rescan
+    rescan_requested = Signal()
 
-    def __init__(self, importable_pools: List[Dict[str, str]], zfs_client: ZfsManagerClient, parent=None):
+    def __init__(self, importable_pools: List[Dict[str, str]], zfs_client: ZfsManagerClient, 
+                 is_scanning: bool = False, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Import ZFS Pools")
         self.setMinimumWidth(600)
 
         self._pools_data = importable_pools
+        self._is_scanning = is_scanning
         # Store the client instance (even if not used directly in this dialog)
         self.zfs_client = zfs_client
         if self.zfs_client is None:
@@ -30,8 +35,11 @@ class ImportPoolDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
+        # --- Header Label ---
+        self.header_label = QLabel("Importable Pools:")
+        layout.addWidget(self.header_label)
+        
         # --- Pool Table ---
-        layout.addWidget(QLabel("Found Importable Pools:"))
         self.pools_table = QTableWidget()
         self.pools_table.setColumnCount(3)
         self.pools_table.setHorizontalHeaderLabels(["Name", "ID", "State"])
@@ -47,23 +55,8 @@ class ImportPoolDialog(QDialog):
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
 
-        self.pools_table.setRowCount(len(self._pools_data))
-        for row, pool_info in enumerate(self._pools_data):
-            name_item = QTableWidgetItem(pool_info.get("name", "N/A"))
-            id_item = QTableWidgetItem(pool_info.get("id", "N/A"))
-            state_item = QTableWidgetItem(pool_info.get("state", "N/A"))
-
-            # Store pool name/id in the name item's data role for easy access
-            name_item.setData(Qt.ItemDataRole.UserRole, pool_info.get("name", pool_info.get("id")))
-            name_item.setToolTip(f"ID: {pool_info.get('id', 'N/A')}\nAction: {pool_info.get('action', '')}\nConfig:\n{pool_info.get('config', '')}")
-
-            if pool_info.get("state") != "ONLINE":
-                 state_item.setForeground(QColor(Qt.GlobalColor.red))
-
-            self.pools_table.setItem(row, 0, name_item)
-            self.pools_table.setItem(row, 1, id_item)
-            self.pools_table.setItem(row, 2, state_item)
-
+        # Populate table based on state
+        self._populate_pools_table()
         layout.addWidget(self.pools_table)
 
         # --- Options ---
@@ -87,10 +80,15 @@ class ImportPoolDialog(QDialog):
         self.import_all_button = QPushButton(QIcon.fromTheme("folder-open"), "Import All (-a)")
         self.import_all_button.setToolTip("Attempt to import all found pools (use Force cautiously).")
         self.import_all_button.clicked.connect(self._accept_all)
+        
+        self.rescan_button = QPushButton(QIcon.fromTheme("view-refresh"), "Rescan")
+        self.rescan_button.setToolTip("Scan again for importable pools (clears cached results).")
+        self.rescan_button.clicked.connect(self._request_rescan)
 
         action_button_layout.addWidget(self.import_selected_button)
         action_button_layout.addWidget(self.import_all_button)
         action_button_layout.addStretch()
+        action_button_layout.addWidget(self.rescan_button)
         layout.addLayout(action_button_layout)
 
         # --- Standard Dialog Buttons ---
@@ -108,15 +106,73 @@ class ImportPoolDialog(QDialog):
 
     @Slot()
     def _update_ui_state(self):
-        """Enable/disable controls based on selection."""
+        """Enable/disable controls based on selection and scanning state."""
         has_selection = len(self.pools_table.selectedItems()) > 0
-        self.import_selected_button.setEnabled(has_selection)
+        has_pools = len(self._pools_data) > 0
+        
+        # Update header label
+        if self._is_scanning:
+            self.header_label.setText("Importable Pools: (scanning...)")
+        elif has_pools:
+            self.header_label.setText(f"Importable Pools ({len(self._pools_data)} found):")
+        else:
+            self.header_label.setText("Importable Pools:")
+        
+        self.import_selected_button.setEnabled(has_selection and not self._is_scanning)
         self.new_name_label.setEnabled(has_selection)
         self.new_name_edit.setEnabled(has_selection)
-        # Force checkbox is always available for both selected and all
-        # self.force_checkbox.setEnabled(has_selection or len(self._pools_data) > 0)
-        # Import All is always enabled if there are pools
-        self.import_all_button.setEnabled(len(self._pools_data) > 0)
+        self.import_all_button.setEnabled(has_pools and not self._is_scanning)
+        self.rescan_button.setEnabled(not self._is_scanning)
+    
+    def _populate_pools_table(self):
+        """Populate the pools table with current data or status message."""
+        # Show scanning or empty message as placeholder row
+        if self._is_scanning:
+            self.pools_table.setRowCount(1)
+            item = QTableWidgetItem("Scanning for pools... please wait")
+            item.setForeground(QColor(Qt.GlobalColor.gray))
+            self.pools_table.setItem(0, 0, item)
+            self.pools_table.setSpan(0, 0, 1, 3)  # Span all columns
+            return
+        
+        if not self._pools_data:
+            self.pools_table.setRowCount(1)
+            item = QTableWidgetItem("No importable pools found. Click 'Rescan' to search again.")
+            item.setForeground(QColor(Qt.GlobalColor.gray))
+            self.pools_table.setItem(0, 0, item)
+            self.pools_table.setSpan(0, 0, 1, 3)  # Span all columns
+            return
+        
+        # Clear any row spans and populate with pool data
+        self.pools_table.clearSpans()
+        self.pools_table.setRowCount(len(self._pools_data))
+        for row, pool_info in enumerate(self._pools_data):
+            name_item = QTableWidgetItem(pool_info.get("name", "N/A"))
+            id_item = QTableWidgetItem(pool_info.get("id", "N/A"))
+            state_item = QTableWidgetItem(pool_info.get("state", "N/A"))
+
+            # Store pool name/id in the name item's data role for easy access
+            name_item.setData(Qt.ItemDataRole.UserRole, pool_info.get("name", pool_info.get("id")))
+            name_item.setToolTip(f"ID: {pool_info.get('id', 'N/A')}\nAction: {pool_info.get('action', '')}\nConfig:\n{pool_info.get('config', '')}")
+
+            if pool_info.get("state") != "ONLINE":
+                state_item.setForeground(QColor(Qt.GlobalColor.red))
+
+            self.pools_table.setItem(row, 0, name_item)
+            self.pools_table.setItem(row, 1, id_item)
+            self.pools_table.setItem(row, 2, state_item)
+    
+    def update_pools(self, pools: List[Dict[str, str]]):
+        """Update the dialog with new pool data (called when scan completes)."""
+        self._pools_data = pools
+        self._is_scanning = False
+        self._populate_pools_table()
+        self._update_ui_state()
+    
+    def set_scanning(self, is_scanning: bool):
+        """Set the scanning state and update UI."""
+        self._is_scanning = is_scanning
+        self._update_ui_state()
 
     def _get_selected_pool_identifier(self) -> Optional[str]:
         """Gets the name or ID stored in the selected row's UserRole."""
@@ -165,6 +221,15 @@ class ImportPoolDialog(QDialog):
             self._result_new_name = None # Not applicable for 'all'
             self._result_force = self.force_checkbox.isChecked()
             self.accept()
+    
+    @Slot()
+    def _request_rescan(self):
+        """Handle rescan button - set scanning state and emit signal."""
+        self._is_scanning = True
+        self._pools_data = []  # Clear current data
+        self._populate_pools_table()
+        self._update_ui_state()
+        self.rescan_requested.emit()  # Main window will start scan and update us
 
     def get_import_details(self) -> Optional[Dict[str, Any]]:
         """Returns the details for the import operation."""

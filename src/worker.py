@@ -1,15 +1,13 @@
-from PySide6.QtCore import QThread, Signal, Slot, Qt
-from PySide6.QtGui import QCursor
-from PySide6.QtWidgets import QApplication # For cursor changes
+from PySide6.QtCore import QThread, Signal, Slot
 
-# Assuming zfs_manager exists and has the required functions
-# import zfs_manager
-import time
 import traceback
 
 class Worker(QThread):
     """
     Generic worker thread for running ZFS commands or other long tasks.
+    
+    Note: Removed WaitCursor handling - UI stays responsive during operations.
+    Action buttons are disabled via main_window._update_action_states() instead.
     """
     # Signal(result_type)
     result_ready = Signal(object)  # Emits the result of the task
@@ -25,17 +23,13 @@ class Worker(QThread):
 
     @Slot()
     def run(self):
-        QApplication.setOverrideCursor(QCursor(Qt.WaitCursor))
         self.status_update.emit(f"Starting task: {self.task_func.__name__}...")
         try:
-            # Simulate some work for quick tasks if needed
-            # time.sleep(0.1)
             result = self.task_func(*self.args, **self.kwargs)
 
             # Check if the task was stopped *during* execution before emitting
             if not self._is_running:
                  self.status_update.emit(f"Task aborted: {self.task_func.__name__}")
-                 QApplication.restoreOverrideCursor()
                  return # Don't emit results if stopped
 
             self.result_ready.emit(result)
@@ -51,12 +45,6 @@ class Worker(QThread):
                 print(f"Error in worker thread ({self.task_func.__name__}): {e}\n{error_trace}")
                 self.error_occurred.emit(f"Error during '{self.task_func.__name__}': {e}", error_trace)
                 self.status_update.emit(f"Task failed: {self.task_func.__name__}")
-        finally:
-            # Check _is_running again before restoring cursor,
-            # as stop() might have been called *after* the task finished but before finally.
-            if self._is_running:
-                 QApplication.restoreOverrideCursor()
-
 
     def stop(self):
         # Only change state if it's actually running
@@ -66,4 +54,3 @@ class Worker(QThread):
             # Note: This doesn't forcefully stop the underlying zfs command.
             # Proper cancellation might require process termination, which is complex.
             # We primarily prevent signals from being emitted after stop() is called.
-            QApplication.restoreOverrideCursor() # Ensure cursor is restored if stopped

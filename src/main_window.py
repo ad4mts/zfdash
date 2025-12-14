@@ -743,8 +743,8 @@ class MainWindow(QMainWindow):
 
         # General Actions
         self.create_pool_action.setEnabled(can_run_action)
-        self.import_pool_action.setEnabled(can_run_action)
-        self.refresh_action.setEnabled(can_run_action)
+        self.import_pool_action.setEnabled(True)  # Always enabled - scan is read-only
+        self.refresh_action.setEnabled(True)  # Always enabled - read-only operation
         self.log_viewer_action.setEnabled(True) # Always enabled
 
         # Pool Actions
@@ -805,11 +805,8 @@ class MainWindow(QMainWindow):
 
         self._action_in_progress = True
         self._update_status_bar(f"Starting {op_name}...")
-        # Disable UI elements
-        self.refresh_action.setEnabled(False)
-        self.tree_view.setEnabled(False)
-        self.details_tabs.setEnabled(False)
-        self._update_action_states() # Update actions based on disabled state
+        # Disable action buttons only (via _update_action_states), keep UI responsive
+        self._update_action_states()
 
         # Create and connect worker
         self._worker = Worker(task_func, *args, **kwargs)
@@ -894,14 +891,6 @@ class MainWindow(QMainWindow):
         # Check if the window is still valid before enabling/updating
         if self:
             self._action_in_progress = False
-
-            # Explicitly re-enable controls disabled in _run_worker_task
-            self.refresh_action.setEnabled(True)
-            if self.tree_view:
-                self.tree_view.setEnabled(True)
-            if self.details_tabs:
-                self.details_tabs.setEnabled(True)
-
             # Update action states based on the now-finished action and current selection
             self._update_action_states()
         self._worker = None
@@ -940,46 +929,93 @@ class MainWindow(QMainWindow):
 
     @Slot()
     def _import_pool(self):
-        if self._action_in_progress or (self._worker and self._worker.isRunning()): return
-        self.setEnabled(False); self._update_status_bar("Searching for importable pools...")
-        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        """Show import pool dialog and start fresh scan (or connect to existing scan)."""
+        is_already_scanning = self._worker and self._worker.isRunning()
+        
+        if not is_already_scanning:
+            # Start fresh scan
+            self._action_in_progress = True
+            self._update_status_bar("Scanning for importable pools...")
+            self._update_action_states()
+            
+            self._worker = Worker(self.zfs_client.list_importable_pools)
+            self._worker.error_occurred.connect(self._handle_worker_error)
+            self._worker.finished.connect(self._on_action_worker_finished)
+            self._worker.start()
+        
+        # Show dialog with scanning state
+        dialog = ImportPoolDialog(
+            importable_pools=[],
+            zfs_client=self.zfs_client,
+            is_scanning=True,
+            parent=self
+        )
+        self._import_dialog = dialog
+        
+        # Connect worker result to update dialog (UniqueConnection prevents duplicates)
         try:
-            # Use the client instance to list pools
-            success, msg, importable_pools = self.zfs_client.list_importable_pools()
-        except (ZfsCommandError, ZfsClientCommunicationError, TimeoutError) as e:
-            QApplication.restoreOverrideCursor(); self.setEnabled(True); self._update_status_bar(f"Error listing pools: {e}"); QMessageBox.critical(self, "Error Listing Pools", f"{e}\n\nDetails:\n{getattr(e, 'details', '')}"); return
-        except Exception as e:
-            QApplication.restoreOverrideCursor(); self.setEnabled(True); self._update_status_bar(f"Unexpected error listing pools: {e}"); QMessageBox.critical(self, "Error", f"An unexpected error occurred: {e}\n{traceback.format_exc()}"); return
-        finally: # Ensure cursor/enabled restored
-            QApplication.restoreOverrideCursor()
-            if not self.isEnabled(): self.setEnabled(True); self._update_action_states()
-
-        self._update_status_bar(msg if success else f"Error: {msg}")
-        if not success: QMessageBox.critical(self, "Error Listing Pools", msg); return
-        if not importable_pools: QMessageBox.information(self, "Import Pool", "No importable ZFS pools found."); return
-
-        dialog = ImportPoolDialog(importable_pools, zfs_client=self.zfs_client, parent=self)
+            self._worker.result_ready.disconnect(self._on_import_scan_result)
+        except RuntimeError:
+            pass  # Not connected yet
+        self._worker.result_ready.connect(self._on_import_scan_result)
+        
+        # Connect rescan signal
+        dialog.rescan_requested.connect(self._on_import_rescan_requested)
+        
+        # Show dialog (blocks until closed)
         if dialog.exec():
-             import_details = dialog.get_import_details()
-             if import_details:
-                  action = import_details.get("action")  # 'selected' or 'all'
-                  pool_id = import_details.get("pool_id")
-                  new_name = import_details.get("new_name")
-                  force = import_details.get("force", False)
+            import_details = dialog.get_import_details()
+            if import_details:
+                action = import_details.get("action")
+                pool_id = import_details.get("pool_id")
+                new_name = import_details.get("new_name")
+                force = import_details.get("force", False)
 
-                  if action == 'all':
-                      self._run_worker_task(
-                           self.zfs_client.execute_generic_action,
-                           "import_pool", "All available pools imported.", force=force,
-                           op_name="Importing All Pools"
-                      )
-                  elif action == 'selected' and pool_id:
-                       self._run_worker_task(
-                           self.zfs_client.execute_generic_action,
-                           "import_pool", f"Pool '{pool_id}' imported.", pool_id, new_name=new_name, force=force,
-                           op_name=f"Importing Pool {pool_id}"
-                       )
-                  # else: No action or pool selected
+                if action == 'all':
+                    self._run_worker_task(
+                        self.zfs_client.execute_generic_action,
+                        "import_pool", "All available pools imported.", force=force,
+                        op_name="Importing All Pools"
+                    )
+                elif action == 'selected' and pool_id:
+                    self._run_worker_task(
+                        self.zfs_client.execute_generic_action,
+                        "import_pool", f"Pool '{pool_id}' imported.", pool_id, new_name=new_name, force=force,
+                        op_name=f"Importing Pool {pool_id}"
+                    )
+        
+        self._import_dialog = None
+    
+    @Slot(object)
+    def _on_import_scan_result(self, result):
+        """Update the open import dialog with scan results."""
+        self._update_status_bar("Scan complete.")
+        
+        if not self._import_dialog:
+            return
+        
+        if isinstance(result, tuple) and len(result) == 3:
+            success, msg, pools = result
+            if success:
+                self._import_dialog.update_pools(pools)
+            else:
+                self._import_dialog.update_pools([])  # Show empty with error
+    
+    @Slot()
+    def _on_import_rescan_requested(self):
+        """Handle rescan request - start new scan."""
+        if self._action_in_progress or (self._worker and self._worker.isRunning()):
+            return  # Already scanning
+        
+        self._action_in_progress = True
+        self._update_status_bar("Rescanning for importable pools...")
+        self._update_action_states()
+        
+        self._worker = Worker(self.zfs_client.list_importable_pools)
+        self._worker.result_ready.connect(self._on_import_scan_result)
+        self._worker.error_occurred.connect(self._handle_worker_error)
+        self._worker.finished.connect(self._on_action_worker_finished)
+        self._worker.start()
 
     @Slot()
     def _export_pool(self):
