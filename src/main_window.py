@@ -1368,7 +1368,7 @@ class MainWindow(QMainWindow):
         self._run_worker_task(
             self.zfs_client.execute_generic_action, "load_key",
             f"Key loaded for {dataset_name}",
-            dataset_name, recursive=recursive, keylocation=key_location, passphrase=bool(passphrase),
+            dataset_name, recursive=recursive, keylocation=key_location, passphrase=passphrase,
             op_name=f"Loading key for {dataset_name}"
         )
 
