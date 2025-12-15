@@ -59,16 +59,19 @@ class ZfsClientCommunicationError(Exception):
 
 # --- ZFS Manager Client Class ---
 class ZfsManagerClient:
-    def __init__(self, daemon_process: subprocess.Popen, transport: LineBufferedTransport):
+    def __init__(self, daemon_process: subprocess.Popen, transport: LineBufferedTransport, owns_daemon: bool = True):
         """
         Initialize the client with the running daemon process and IPC transport.
         
         Args:
-            daemon_process: The daemon subprocess.Popen object
+            daemon_process: The daemon subprocess.Popen object (can be None for external daemons)
             transport: LineBufferedTransport for JSON-line protocol communication
+            owns_daemon: If True, this client will shut down the daemon on close.
+                        Set to False when connecting to an external/persistent daemon.
         """
         self.daemon_process = daemon_process
         self.transport = transport
+        self.owns_daemon = owns_daemon
         self.pending_requests: Dict[int, queue.Queue] = {}
         self.request_lock = threading.Lock()
         self.request_id_counter = 0
@@ -76,10 +79,10 @@ class ZfsManagerClient:
         self.reader_thread: Optional[threading.Thread] = None
         self._communication_error = None # To store fatal reader errors
 
-        if daemon_process is None or transport is None:
-            raise ValueError("Invalid daemon process or transport provided.")
+        if transport is None:
+            raise ValueError("Invalid transport provided.")
 
-        print(f"MANAGER_CLIENT: Initialized with {transport.get_type()} transport", file=sys.stderr)
+        print(f"MANAGER_CLIENT: Initialized with {transport.get_type()} transport (owns_daemon={owns_daemon})", file=sys.stderr)
         print("MANAGER_CLIENT: Starting reader thread...", file=sys.stderr)
         self.reader_thread = threading.Thread(target=self._reader_thread_target, daemon=True)
         self.reader_thread.start()
@@ -426,23 +429,21 @@ class ZfsManagerClient:
             return False, f"Error sending shutdown command: {e}"
 
     def close(self):
-        """Shuts down the reader thread, closes pipes, and terminates the daemon process."""
+        """Shuts down the reader thread, closes pipes, and shuts down the daemon."""
         #print("MANAGER_CLIENT: Initiating shutdown...", file=sys.stderr)
         if self.shutdown_event.is_set():
             #print("MANAGER_CLIENT: Already shutting down.", file=sys.stderr)
             return
 
         # 1. Attempt graceful shutdown command (ONLY if we own the daemon)
-        # If pid != 0, we launched it and should clean it up.
-        # If pid == 0, it's an external daemon, so we just disconnect.
-        if self.daemon_process and self.daemon_process.pid != 0:
+        if self.owns_daemon and self.daemon_process:
             try:
                  self.shutdown_daemon() # Try sending the command
             except Exception as e:
                  print(f"MANAGER_CLIENT: Ignored error during optional shutdown command: {e}", file=sys.stderr)
             time.sleep(0.5) # Give daemon a moment to process shutdown
         else:
-            print("MANAGER_CLIENT: External daemon still running, skipping shutdown command.", file=sys.stderr)
+            print("MANAGER_CLIENT: External daemon, skipping shutdown command.", file=sys.stderr)
 
         # 2. Signal reader thread to stop (fix: NOW set this, after sending shutdown request or it fails)
         self.shutdown_event.set()
@@ -468,8 +469,11 @@ class ZfsManagerClient:
                 print("MANAGER_CLIENT: Skipping join (called from reader thread).", file=sys.stderr)
         self.reader_thread = None
 
-        # 5. Terminate and wait for daemon process (skip if external daemon with pid=0)
-        if self.daemon_process and self.daemon_process.pid != 0:
+        # 5. Terminate and wait for daemon process (last resort / webui or gui must be root)
+        # Note: terminate()/kill() may fail if daemon runs as root and we're a user process.
+        # That's expected - we rely on shutdown_daemon IPC command above for graceful exit.
+        # This fallback only works in Docker (where WebUI is also root).
+        if self.owns_daemon and self.daemon_process:
             if self.daemon_process.poll() is None:
                 print(f"MANAGER_CLIENT: Terminating daemon process (PID: {self.daemon_process.pid})...", file=sys.stderr)
                 try:

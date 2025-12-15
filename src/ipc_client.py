@@ -548,7 +548,7 @@ def _launch_daemon_with_socket_server(daemon_path: str, uid: int, gid: int, is_s
                     except Exception:
                         pass
                 
-                # Terminate daemon if started
+                # Terminate daemon if started (works only if we are root in docker)
                 if process and process.poll() is None:
                     try:
                         process.terminate()
@@ -737,7 +737,7 @@ def _launch_daemon_with_pipes(daemon_path: str, uid: int, gid: int, is_script: b
                         try: os.close(fd)
                         except Exception: pass
             
-            # Terminate daemon if started
+            # Terminate daemon if started (works only if we are root in docker)
             if process and process.poll() is None:
                 try:
                     process.terminate()

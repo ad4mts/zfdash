@@ -29,7 +29,7 @@ def _cleanup():
     
     print("MAIN: Cleaning up...", file=sys.stderr)
     
-    # Close client (which terminates daemon if it owns it)
+    # Close client (which shuts down daemon if it owns it)
     if _zfs_client:
         try:
             _zfs_client.close()
@@ -37,7 +37,7 @@ def _cleanup():
             print(f"MAIN: Cleanup error: {e}", file=sys.stderr)
         _zfs_client = None
     
-    # Kill orphan daemon if client wasn't created yet
+    # Kill orphan daemon if client wasn't created yet (works only if we are root in docker)
     if _daemon_process and _daemon_process.poll() is None:
         print(f"MAIN: Terminating orphan daemon (PID: {_daemon_process.pid})...", file=sys.stderr)
         try:
@@ -47,7 +47,7 @@ def _cleanup():
             try:
                 _daemon_process.kill()
             except Exception:
-                pass
+                pass  # Silently fail - can't kill root process as user
         _daemon_process = None
     
     print("MAIN: Exiting.", file=sys.stderr)
@@ -239,18 +239,8 @@ if __name__ == "__main__":
                 
                 print(f"MAIN: Successfully connected to daemon socket.", file=sys.stderr)
                 
-                # Create fake process object (daemon is external, don't terminate it)
-                class ExternalDaemonProcess:
-                    def __init__(self):
-                        self.pid = 0
-                        self.returncode = 1
-                    def poll(self): return self.returncode
-                    def terminate(self): pass
-                    def wait(self, timeout=None): return self.returncode
-                    def kill(self): pass
-                
-                fake_process = ExternalDaemonProcess()
-                zfs_manager_client = ZfsManagerClient(fake_process, buffered)
+                # Create client with owns_daemon=False (don't shut down external daemon on close)
+                zfs_manager_client = ZfsManagerClient(None, buffered, owns_daemon=False)
                 _zfs_client = zfs_manager_client  # Register for cleanup
                 
                 print("MAIN: ZFS Manager client created. Proceeding with UI launch.", file=sys.stderr)
