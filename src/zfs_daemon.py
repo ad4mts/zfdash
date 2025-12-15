@@ -306,6 +306,15 @@ def main():
             log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
             log(f"ThreadPoolExecutor: max_workers={max_workers}", "INFO")
             
+            # Ignore SIGINT and SIGHUP in socket mode - daemon should persist
+            # SIGINT: when client hits Ctrl+C
+            # SIGHUP: when parent process (sudo) exits
+            # Shutdown is handled via the shutdown_daemon IPC command
+            import signal
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            signal.signal(signal.SIGHUP, signal.SIG_IGN)
+            log("Socket mode: SIGINT/SIGHUP ignored (use stop-daemon or shutdown command)", "INFO")
+            
             # Shared executor for all clients
             with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="daemon_worker") as executor:
                 client_threads = []

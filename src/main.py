@@ -10,7 +10,7 @@ import argparse # Import argparse
 from typing import Optional
 
 # Import new dependencies
-from ipc_client import launch_daemon
+from ipc_client import launch_daemon, connect_to_existing_socket_daemon, stop_socket_daemon
 from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
 import constants
 from paths import IS_FROZEN
@@ -27,7 +27,7 @@ def _cleanup():
         return
     _cleanup_done = True
     
-    print("MAIN: Cleaning up...", file=sys.stderr)
+    #print("MAIN: Cleaning up...", file=sys.stderr)
     
     # Close client (which shuts down daemon if it owns it)
     if _zfs_client:
@@ -50,7 +50,7 @@ def _cleanup():
                 pass  # Silently fail - can't kill root process as user
         _daemon_process = None
     
-    print("MAIN: Exiting.", file=sys.stderr)
+    #print("MAIN: Exiting.", file=sys.stderr)
 
 def _signal_handler(signum, frame):
     """Handle termination signals."""
@@ -101,6 +101,7 @@ def _show_startup_error(title, message):
 
 
 
+
 # Main execution dispatcher
 if __name__ == "__main__":
 
@@ -109,9 +110,11 @@ if __name__ == "__main__":
         pass
 
     usage_str = (
-        "%(prog)s [-h] [-w] [--host HOST] [-p PORT] [--debug] [--socket] [--connect-socket [PATH]]\n"
+        "%(prog)s [-h] [-w] [--host HOST] [-p PORT] [--debug] [--socket [PATH]]\n"
+        "   or: %(prog)s --connect-socket [PATH]  # Connect only (no auto-launch)\n"
+        "   or: %(prog)s --launch-daemon [PATH]   # Launch daemon and exit\n"
+        "   or: %(prog)s --stop-daemon [PATH]     # Stop running daemon\n"
         "   or: %(prog)s --daemon --uid UID --gid GID [--listen-socket [PATH]]\n"
-        "   or: %(prog)s --connect-socket [PATH]  # Connect to existing daemon\n"
     )
 
     parser = argparse.ArgumentParser(
@@ -120,16 +123,17 @@ if __name__ == "__main__":
         formatter_class=RawDefaultsHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  Run GUI with auto-launched daemon (default):\n"
+            "  Run GUI with pipe-mode daemon (default, daemon exits with GUI):\n"
             "    python3 src/main.py\n\n"
-            "  Run Web UI (auto-launch daemon):\n"
-            "    python3 src/main.py --web\n\n"
-            "  Connect GUI/Web to existing daemon socket (default path):\n"
-            "    python3 src/main.py --connect-socket\n\n"
-            "  Connect to explicit daemon socket path:\n"
-            "    python3 src/main.py --web --connect-socket /run/user/1000/zfdash.sock\n\n"
-            # linux-only: the example above uses '/run/user/1000' which follows systemd/XDG runtime dir layout; other OSes may use different paths
-            "  Start the daemon manually (run as root or with privilege escalation):\n"
+            "  Run Web UI with persistent socket daemon (recommended):\n"
+            "    python3 src/main.py --web --socket\n\n"
+            "  Connect to existing socket daemon (error if not running):\n"
+            "    python3 src/main.py --web --connect-socket\n\n"
+            "  Launch daemon in background and exit:\n"
+            "    python3 src/main.py --launch-daemon\n\n"
+            "  Stop a running socket daemon:\n"
+            "    python3 src/main.py --stop-daemon\n\n"
+            "  Start daemon manually (run as root or with privilege escalation):\n"
             "    sudo python3 src/main.py --daemon --uid $(id -u) --gid $(id -g) --listen-socket\n"
         ),
     )
@@ -144,9 +148,14 @@ if __name__ == "__main__":
     client_group.add_argument('--host', default='127.0.0.1', help='Host/IP to bind the Web UI server.')
     client_group.add_argument('-p', '--port', default=5001, type=int, help='Port to bind the Web UI server.')
     client_group.add_argument('--debug', action='store_true', help='Enable debug mode with verbose logging (affects both client and daemon).')
-    client_group.add_argument('--socket', action='store_true', help='Use Unix socket IPC instead of pipes, and launch daemon automatically (experimental).')
+    client_group.add_argument('--socket', type=str, metavar='PATH', nargs='?', const='',
+                              help='Use persistent socket daemon. Connects if running, launches if not. Daemon persists after client exit. PATH optional.')
     client_group.add_argument('--connect-socket', type=str, metavar='PATH', nargs='?', const='',
-                              help='Connect to existing daemon socket instead of launching one. If PATH not specified, uses default from get_daemon_socket_path(uid).')
+                              help='Connect to existing socket daemon only (error if not running). PATH optional.')
+    client_group.add_argument('--launch-daemon', type=str, metavar='PATH', nargs='?', const='',
+                              help='Launch a persistent socket daemon and exit. PATH optional.')
+    client_group.add_argument('--stop-daemon', type=str, metavar='PATH', nargs='?', const='',
+                              help='Stop a running socket daemon and exit. PATH optional.')
 
     # Daemon options (grouped)
     daemon_group = parser.add_argument_group(
@@ -206,62 +215,132 @@ if __name__ == "__main__":
             print(f"MAIN: Error running zfs_daemon: {e}\n{traceback.format_exc()}", file=sys.stderr)
             sys.exit(1)
 
+    elif args.stop_daemon is not None:
+        # --- Stop Daemon Mode ---
+        from paths import get_daemon_socket_path
+        socket_path = args.stop_daemon if args.stop_daemon else get_daemon_socket_path(os.getuid())
+        
+        print(f"MAIN: Stopping daemon at {socket_path}...", file=sys.stderr)
+        try:
+            stop_socket_daemon(socket_path)
+        except Exception as e:
+            print(f"MAIN: Failed to stop daemon: {e}", file=sys.stderr)
+            sys.exit(1)
+        sys.exit(0)
+
+    elif args.launch_daemon is not None:
+        # --- Launch Daemon Mode (launch and exit) ---
+        from paths import get_daemon_socket_path
+        socket_path = args.launch_daemon if args.launch_daemon else get_daemon_socket_path(os.getuid())
+        
+        # Check if already running
+        if os.path.exists(socket_path):
+            try:
+                transport = connect_to_existing_socket_daemon(socket_path)
+                transport.close()
+                print(f"MAIN: Daemon already running at {socket_path}", file=sys.stderr)
+                
+                # Ask to restart if interactive
+                if sys.stdin.isatty():
+                    try:
+                        response = input("Restart daemon? [y/N]: ").strip().lower()
+                        if response in ('y', 'yes'):
+                            stop_socket_daemon(socket_path)
+                            # Wait for daemon to fully shutdown
+                            import time
+                            for _ in range(10):  # Up to 5 seconds
+                                time.sleep(0.5)
+                                try:
+                                    test = connect_to_existing_socket_daemon(socket_path)
+                                    test.close()
+                                except Exception:
+                                    break  # Daemon is down
+                        else:
+                            sys.exit(0)
+                    except (EOFError, KeyboardInterrupt):
+                        sys.exit(0)
+                else:
+                    sys.exit(0)
+            except Exception:
+                pass  # Not running (stale socket), will launch
+        
+        print(f"MAIN: Launching daemon at {socket_path}...", file=sys.stderr)
+        try:
+            daemon_process, transport = launch_daemon(use_socket=True, debug=args.debug)
+            print(f"MAIN: Daemon launched successfully (PID: {daemon_process.pid})", file=sys.stderr)
+            print(f"MAIN: Socket: {socket_path}", file=sys.stderr)
+            transport.close()  # Disconnect, daemon keeps running
+        except Exception as e:
+            print(f"MAIN: Failed to launch daemon: {e}", file=sys.stderr)
+            sys.exit(1)
+        sys.exit(0)
+
     elif args.web or not (args.web or args.daemon):
         # --- Web UI or GUI Mode --- (Both need a daemon)
         mode = "Web UI" if args.web else "GUI"
         
-        # Check if connecting to existing daemon socket
-        if args.connect_socket is not None:  # Flag present (with or without path)
-            # Determine socket path
-            if args.connect_socket == '':  # Flag present but no path specified
-                from paths import get_daemon_socket_path
-                socket_path = get_daemon_socket_path(os.getuid())
-                print(f"MAIN: Using default daemon socket: {socket_path}", file=sys.stderr)
-            else:
-                socket_path = args.connect_socket
-                print(f"MAIN: Using specified daemon socket: {socket_path}", file=sys.stderr)
+        # Determine connection mode: socket (--socket or --connect-socket) vs pipe (default)
+        use_socket_mode = args.socket is not None or args.connect_socket is not None
+        
+        if use_socket_mode:
+            # --- Socket Mode ---
+            from paths import get_daemon_socket_path
             
-            # Connect to existing daemon socket
-            print(f"MAIN: {mode} connecting to existing daemon at {socket_path}...", file=sys.stderr)
+            # Determine socket path and whether we can auto-launch
+            if args.connect_socket is not None:
+                # --connect-socket: connect only, no auto-launch
+                allow_launch = False
+                socket_path = args.connect_socket if args.connect_socket else get_daemon_socket_path(os.getuid())
+            else:
+                # --socket: connect or launch
+                allow_launch = True
+                socket_path = args.socket if args.socket else get_daemon_socket_path(os.getuid())
+            
+            print(f"MAIN: {mode} using socket mode (path: {socket_path}, auto-launch: {allow_launch})", file=sys.stderr)
+            
             try:
-                from ipc_client import SocketTransport, LineBufferedTransport
-                from ipc_helpers import connect_to_unix_socket, wait_for_ready_signal
+                # Try connecting to existing socket daemon
+                transport = connect_to_existing_socket_daemon(socket_path)
                 
-                # Check socket exists
-                if not os.path.exists(socket_path):
-                    raise FileNotFoundError(f"Socket does not exist: {socket_path}")
-                
-                # Connect to socket
-                client_sock = connect_to_unix_socket(socket_path, timeout=constants.IPC_CONNECT_TIMEOUT, check_process=None)
-                transport = SocketTransport(client_sock)
-                buffered = LineBufferedTransport(transport)
-                wait_for_ready_signal(buffered, process=None, timeout=constants.IPC_CONNECT_TIMEOUT)
-                
-                print(f"MAIN: Successfully connected to daemon socket.", file=sys.stderr)
-                
-                # Create client with owns_daemon=False (don't shut down external daemon on close)
-                zfs_manager_client = ZfsManagerClient(None, buffered, owns_daemon=False)
+                # Socket mode: daemon persists, we don't own it
+                zfs_manager_client = ZfsManagerClient(None, transport, owns_daemon=False)
                 _zfs_client = zfs_manager_client  # Register for cleanup
                 
                 print("MAIN: ZFS Manager client created. Proceeding with UI launch.", file=sys.stderr)
                 
-            except Exception as e:
-                # linux-only: sudo and $(id -u) shell syntax in error message
-                _show_startup_error(f"{mode} Connection Error", 
-                                  f"Failed to connect to daemon socket:\n{e}\n\nMake sure the daemon is running:\n"
-                                  f"sudo python3 src/main.py --daemon --uid $(id -u) --gid $(id -g) --listen-socket {socket_path}")
-                sys.exit(1)
+            except (FileNotFoundError, RuntimeError) as e:
+                # Socket doesn't exist or connection failed
+                if not allow_launch:
+                    _show_startup_error(f"{mode} Connection Error", str(e))
+                    sys.exit(1)
+                
+                # --socket mode: launch new daemon
+                print(f"MAIN: {e}", file=sys.stderr)
+                print(f"MAIN: Launching new socket daemon...", file=sys.stderr)
+                try:
+                    daemon_process, transport = launch_daemon(use_socket=True, debug=args.debug)
+                    print(f"MAIN: Daemon launched (PID: {daemon_process.pid}). Socket: {socket_path}", file=sys.stderr)
+                    
+                    # Socket mode: daemon persists, we don't own it (don't track daemon_process)
+                    zfs_manager_client = ZfsManagerClient(None, transport, owns_daemon=False)
+                    _zfs_client = zfs_manager_client  # Register for cleanup
+                    
+                    print("MAIN: ZFS Manager client created. Proceeding with UI launch.", file=sys.stderr)
+                except Exception as launch_e:
+                    _show_startup_error(f"{mode} Startup Error", 
+                                      f"Failed to launch daemon:\n{launch_e}")
+                    sys.exit(1)
         else:
-            # Launch own daemon (existing code)
-            print(f"MAIN: {mode} mode requested. Launching dedicated daemon...", file=sys.stderr)
+            # --- Pipe Mode (default) ---
+            print(f"MAIN: {mode} mode requested. Launching pipe-mode daemon...", file=sys.stderr)
             try:
                 print("MAIN: Launching daemon...", file=sys.stderr)
-                daemon_process, transport = launch_daemon(use_socket=args.socket, debug=args.debug)
+                daemon_process, transport = launch_daemon(use_socket=False, debug=args.debug)
                 _daemon_process = daemon_process  # Register for cleanup (before client created)
                 print(f"MAIN: Daemon launched successfully (PID: {daemon_process.pid}). Creating client...", file=sys.stderr)
 
-                # Create the ZFS Manager Client instance
-                zfs_manager_client = ZfsManagerClient(daemon_process, transport)
+                # Pipe mode: we own the daemon, it dies when we close
+                zfs_manager_client = ZfsManagerClient(daemon_process, transport, owns_daemon=True)
                 _zfs_client = zfs_manager_client  # Register for cleanup
 
                 print("MAIN: ZFS Manager client created. Proceeding with UI launch.", file=sys.stderr)
