@@ -75,4 +75,10 @@ POLL_INTERVAL = 0.1                # Generic short poll interval used for retry 
 READER_SELECT_TIMEOUT = 0.2        # Timeout used in select() in reader thread loop in client to check read responses from daemon (seconds)
 READY_SELECT_TIMEOUT = 0.1         # Timeout used in select() in wait_for_ready_signal
 
+
+# --- TCP Agent Constants ---
+DEFAULT_AGENT_PORT = 5555      # Default TCP port for agent mode
+AUTH_TIMEOUT_SECONDS = 30      # Timeout for authentication handshake (seconds)
+NONCE_BYTES = 32               # Size of random nonce for challenge (bytes)
+
 # --- END OF FILE constants.py ---

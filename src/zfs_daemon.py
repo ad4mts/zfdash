@@ -13,6 +13,13 @@ from paths import DAEMON_STDERR_FILENAME, get_daemon_log_file_path
 # This module contains NO daemon launching or privilege escalation code.
 from ipc_server import PipeServerTransport, SocketServerTransport
 
+# TCP transport for Agent Mode (network-accessible daemon)
+try:
+    from ipc_tcp_server import TCPServerTransport
+    TCP_AVAILABLE = True
+except ImportError:
+    TCP_AVAILABLE = False
+
 # Assuming zfs_manager_core is in the same directory or PYTHONPATH
 import zfs_manager_core
 from zfs_manager_core import ZfsCommandError
@@ -185,6 +192,239 @@ def run_command_loop(transport, executor, shutdown_event):
             except Exception as e:
                 print(f"DAEMON: Task failed during client cleanup: {e}", file=sys.stderr)
 
+# =============================================================================
+# Server Mode Helpers
+# =============================================================================
+
+def _handle_client(handler, executor, shutdown_event, log, transport_type="socket"):
+    """
+    Handle a single client connection in its own thread.
+    Sends ready signal, runs command loop, then cleans up.
+    """
+    try:
+        handler.send_line(json.dumps({"status": "ready"}))
+        run_command_loop(handler, executor, shutdown_event)
+    except Exception as e:
+        print(f"DAEMON: Error in {transport_type} client thread: {e}", file=sys.stderr)
+    finally:
+        handler.close()
+        log(f"{transport_type.upper()} client session ended", "INFO")
+
+
+def _tcp_accept_loop(tcp_transport, executor, shutdown_event, client_threads, log):
+    """
+    Accept loop for TCP clients (runs in separate thread).
+    Spawns a handler thread for each authenticated connection.
+    """
+    while not shutdown_event.is_set():
+        try:
+            tcp_handler = tcp_transport.accept_client(timeout=1.0)
+            if tcp_handler is None:
+                continue
+            
+            addr = tcp_handler.get_address()
+            log(f"TCP client connected from {addr[0]}:{addr[1]}", "INFO")
+            
+            t = threading.Thread(
+                target=_handle_client,
+                args=(tcp_handler, executor, shutdown_event, log, "tcp"),
+                daemon=True,
+                name=f"tcp_client_{len(client_threads)}"
+            )
+            t.start()
+            client_threads.append(t)
+            
+        except Exception as e:
+            if not shutdown_event.is_set():
+                print(f"DAEMON: TCP accept error: {e}", file=sys.stderr)
+
+
+def _socket_accept_loop(socket_transport, executor, shutdown_event, client_threads, log):
+    """
+    Accept loop for Unix socket clients (runs in main thread).
+    Spawns a handler thread for each connection.
+    """
+    while not shutdown_event.is_set():
+        log("Waiting for socket client connection...", "DEBUG")
+        try:
+            client_handler = socket_transport.accept_client(timeout=1.0)
+            if client_handler is None:
+                continue  # Timeout, check shutdown_event
+            
+            log("Socket client connected", "INFO")
+            
+            t = threading.Thread(
+                target=_handle_client,
+                args=(client_handler, executor, shutdown_event, log, "socket"),
+                daemon=True,
+                name=f"socket_client_{len(client_threads)}"
+            )
+            t.start()
+            client_threads.append(t)
+            
+            # Cleanup finished threads periodically
+            if len(client_threads) > 10:
+                client_threads[:] = [t for t in client_threads if t.is_alive()]
+                
+        except KeyboardInterrupt:
+            raise
+        except Exception as e:
+            if not shutdown_event.is_set():
+                log(f"Error accepting socket client: {e}", "ERROR")
+
+
+def _create_socket_transport(socket_path, target_uid, target_gid, log):
+    """
+    Create and initialize Unix socket transport.
+    
+    Returns:
+        SocketServerTransport instance
+    """
+    log(f"Creating socket server: {socket_path}", "INFO")
+    return SocketServerTransport(
+        socket_path=socket_path,
+        uid=target_uid,
+        gid=target_gid
+    )
+
+
+def _create_tcp_transport(port, log):
+    """
+    Create and initialize TCP transport for Agent Mode.
+    
+    Returns:
+        TCPServerTransport instance, or None if creation fails
+    """
+    if not TCP_AVAILABLE:
+        log("Agent mode requested but ipc_tcp module not available", "ERROR")
+        return None
+    
+    try:
+        transport = TCPServerTransport(host="0.0.0.0", port=port)
+        log(f"Agent Mode: TCP server listening on port {port}", "INFO")
+        return transport
+    except Exception as e:
+        log(f"Failed to start TCP server: {e}", "ERROR")
+        return None
+
+
+def _cleanup_transports(socket_transport, tcp_transport, log):
+    """Close all transports safely."""
+    if socket_transport:
+        socket_transport.close()
+    if tcp_transport:
+        try:
+            tcp_transport.close()
+            log("TCP transport closed", "INFO")
+        except Exception as e:
+            log(f"Error closing TCP transport: {e}", "ERROR")
+
+
+def _wait_for_client_threads(client_threads, log):
+    """Wait for active client threads to finish (with timeout)."""
+    active = [t for t in client_threads if t.is_alive()]
+    if active:
+        log(f"Waiting for {len(active)} client threads to finish...", "INFO")
+        for t in active:
+            t.join(timeout=5.0)
+
+
+# =============================================================================
+# Server Mode Entry Point
+# =============================================================================
+
+def _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event, log):
+    """
+    Run daemon in server mode (Unix socket and/or TCP).
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    import signal
+    
+    # Setup transports based on args
+    socket_transport = None
+    tcp_transport = None
+    modes = []
+    
+    if args.listen_socket:
+        socket_transport = _create_socket_transport(
+            args.listen_socket, target_uid, target_gid, log
+        )
+        modes.append(f"Socket: {args.listen_socket}")
+    
+    if args.agent:
+        tcp_transport = _create_tcp_transport(args.agent_port, log)
+        if tcp_transport:
+            modes.append(f"TCP: 0.0.0.0:{args.agent_port}")
+    
+    mode_desc = " + ".join(modes) if modes else "None"
+    
+    log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} "
+        f"(PID: {os.getpid()}) [{mode_desc}]", "INFO")
+    log(f"ThreadPoolExecutor: max_workers={max_workers}", "INFO")
+    
+    # Ignore signals in server mode - daemon should persist
+    signal.signal(signal.SIGINT, signal.SIG_IGN)
+    signal.signal(signal.SIGHUP, signal.SIG_IGN)
+    log("Server mode: SIGINT/SIGHUP ignored (use stop-daemon or shutdown command)", "INFO")
+    
+    # Run accept loops
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="daemon_worker") as executor:
+        client_threads = []
+        
+        try:
+            # Start TCP accept thread if enabled
+            if tcp_transport:
+                tcp_thread = threading.Thread(
+                    target=_tcp_accept_loop,
+                    args=(tcp_transport, executor, shutdown_event, client_threads, log),
+                    daemon=True,
+                    name="tcp_accept"
+                )
+                tcp_thread.start()
+                log("TCP accept thread started", "INFO")
+            
+            # Run socket accept loop or wait for shutdown
+            if socket_transport:
+                _socket_accept_loop(socket_transport, executor, shutdown_event, client_threads, log)
+            else:
+                log("Running in TCP-only mode, waiting for shutdown signal...", "INFO")
+                while not shutdown_event.is_set():
+                    shutdown_event.wait(timeout=1.0)
+            
+            _wait_for_client_threads(client_threads, log)
+            
+        finally:
+            _cleanup_transports(socket_transport, tcp_transport, log)
+
+
+def _run_pipe_mode(target_uid, target_gid, max_workers, shutdown_event, log):
+    """
+    Run daemon in pipe mode (stdin/stdout for single client).
+    
+    Args:
+        target_uid: User ID for permission context
+        target_gid: Group ID for permission context
+        max_workers: ThreadPoolExecutor worker count
+        shutdown_event: threading.Event for shutdown signaling
+        log: Logging function
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    
+    log("Using pipe transport (stdin/stdout)", "INFO")
+    transport = PipeServerTransport()
+    transport_mode = "Pipe (stdin/stdout)"
+    
+    log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
+    
+    with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="daemon_worker") as executor:
+        try:
+            transport.accept_connection()
+            transport.send_line(json.dumps({"status": "ready"}))
+            run_command_loop(transport, executor, shutdown_event)
+        finally:
+            transport.close()
+
+
 def main():
     """Main daemon execution function, communicating via stdin/stdout pipes."""
     global target_uid, target_gid, daemon_log_file_path
@@ -195,6 +435,8 @@ def main():
     parser.add_argument('--gid', required=True, type=int, help="Real Group ID of the GUI/WebUI process owner")
     parser.add_argument('--daemon', action='store_true', help="Flag indicating daemon mode (for main.py)")
     parser.add_argument('--listen-socket', type=str, nargs='?', const='', help="Unix socket path to create and listen on (if not provided, uses stdin/stdout pipes). If flag present without path, uses default from get_daemon_socket_path(uid)")
+    parser.add_argument('--agent', action='store_true', help="Enable Agent Mode: Listen on TCP port for network connections (requires authentication)")
+    parser.add_argument('--agent-port', type=int, default=5555, help="TCP port for Agent Mode (default: 5555)")
     parser.add_argument('--debug', action='store_true', help="Enable debug output to both terminal and log file")
     args = parser.parse_args()
     target_uid = args.uid
@@ -292,100 +534,14 @@ def main():
     # Calculate worker count: at least 8, scales with CPU count for larger systems
     max_workers = max(8, (os.cpu_count() or 4) * 2)
     
+    # Determine mode: server (socket and/or TCP) vs pipe
+    use_server_mode = args.listen_socket or args.agent
+    
     try:
-        if args.listen_socket:
-            # Socket server mode - concurrent clients
-            log(f"Creating socket server: {args.listen_socket}", "INFO")
-            transport = SocketServerTransport(
-                socket_path=args.listen_socket,
-                uid=target_uid,
-                gid=target_gid
-            )
-            transport_mode = f"Socket: {args.listen_socket}"
-            
-            log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
-            log(f"ThreadPoolExecutor: max_workers={max_workers}", "INFO")
-            
-            # Ignore SIGINT and SIGHUP in socket mode - daemon should persist
-            # SIGINT: when client hits Ctrl+C
-            # SIGHUP: when parent process (sudo) exits
-            # Shutdown is handled via the shutdown_daemon IPC command
-            import signal
-            signal.signal(signal.SIGINT, signal.SIG_IGN)
-            signal.signal(signal.SIGHUP, signal.SIG_IGN)
-            log("Socket mode: SIGINT/SIGHUP ignored (use stop-daemon or shutdown command)", "INFO")
-            
-            # Shared executor for all clients
-            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="daemon_worker") as executor:
-                client_threads = []
-                
-                try:
-                    while not shutdown_event.is_set():
-                        log("Waiting for client connection...", "DEBUG")
-                        try:
-                            # Accept with 1s timeout to check shutdown_event periodically
-                            client_handler = transport.accept_client(timeout=1.0)
-                            if client_handler is None:
-                                continue  # Timeout, check shutdown_event
-                            
-                            log("Client connected", "INFO")
-                            
-                            def handle_client(handler, exec, event):
-                                """Handle a single client in its own thread."""
-                                try:
-                                    handler.send_line(json.dumps({"status": "ready"}))
-                                    run_command_loop(handler, exec, event)
-                                except Exception as e:
-                                    print(f"DAEMON: Error in client thread: {e}", file=sys.stderr)
-                                finally:
-                                    handler.close()
-                                    log("Client session ended", "INFO")
-                            
-                            # Spawn thread for this client (pass args to avoid closure issues)
-                            t = threading.Thread(
-                                target=handle_client,
-                                args=(client_handler, executor, shutdown_event),
-                                daemon=True,
-                                name=f"client_{len(client_threads)}"
-                            )
-                            t.start()
-                            client_threads.append(t)
-                            
-                            # Cleanup finished threads periodically
-                            if len(client_threads) > 10:
-                                client_threads = [t for t in client_threads if t.is_alive()]
-                                
-                        except KeyboardInterrupt:
-                            raise
-                        except Exception as e:
-                            if not shutdown_event.is_set():
-                                log(f"Error accepting client: {e}", "ERROR")
-                    
-                    # Wait for client threads on shutdown
-                    active = [t for t in client_threads if t.is_alive()]
-                    if active:
-                        log(f"Waiting for {len(active)} client threads to finish...", "INFO")
-                        for t in active:
-                            t.join(timeout=5.0)
-                            
-                finally:
-                    transport.close()
-
+        if use_server_mode:
+            _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event, log)
         else:
-            # Pipe mode (stdin/stdout) - single client
-            log("Using pipe transport (stdin/stdout)", "INFO")
-            transport = PipeServerTransport()
-            transport_mode = "Pipe (stdin/stdout)"
-            
-            log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
-            
-            with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="daemon_worker") as executor:
-                try:
-                    transport.accept_connection()
-                    transport.send_line(json.dumps({"status": "ready"}))
-                    run_command_loop(transport, executor, shutdown_event)
-                finally:
-                    transport.close()
+            _run_pipe_mode(target_uid, target_gid, max_workers, shutdown_event, log)
         
     except KeyboardInterrupt:
         shutdown_event.set()

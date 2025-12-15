@@ -31,6 +31,7 @@ curl -sSL https://raw.githubusercontent.com/ad4mts/zfdash/main/get-zfdash.sh | b
 * [🚀 Installation & Running](#-installation--running)
 * [🐳 Docker Usage](#-docker-usage)
 * [💡 Usage Tutorial](#-usage-tutorial)
+* [🗺️ Roadmap](#️-roadmap)
 * [🤝 Contributing](#-contributing)
 * [💖 Motivation](#-motivation)
 * [⚠️ IMPORTANT WARNINGS](#️-important-warnings)
@@ -227,6 +228,34 @@ This configuration is suitable for **trusted local networks** and **home lab set
 *   **Navigation:** The left pane shows the ZFS object tree. The right pane shows details/actions for the selected object via tabs (Properties, Snapshots, etc.). The top bar/menu has global actions (Refresh 🔄, Create, Import) & Web UI user menu.
 *   **Common Tasks:** Select an object in the tree, then use the right pane tabs or top bar/menu buttons. Examples: Check Pool Status/Properties tabs for health/usage. Use the Snapshots tab to create/delete/rollback/clone. Use the top bar/menu to create datasets. Use the Encryption tab to manage keys.
 *   **Remember:** Destructive actions are irreversible. Double-check selections & keep backups!
+
+## 🗺️ Roadmap
+
+### ⚡ Daemon & Architecture Features
+- [x] **Persistent Daemon**: Run daemon detached with `--launch-daemon`.
+- [x] **Concurrent Clients**: Daemon now handles threaded and concurrent connections in --socket mode (GUI + WebUI simultaneously).
+- [x] **Resilient Reconnection**: Clients automatically reconnect to daemon if connection drops.
+- [x] **Cross-Platform Support**: Linux, experimental macOS/FreeBSD support.
+
+### 🎨 UI & User Experience
+- [x] **Rich Modals**: Modern Bootstrap modals replacing native browser alerts in WebUI.
+- [x] **Visual VDEV Management**: Enhanced UI for adding/removing VDEVs (including Special/Log/Dedup).
+- [x] **Contextual Help**: Guidance for ZFS concepts (VDEV types, RAIDZ levels).
+- [x] **Three-Button Confirmations**: Clearer safety dialogs for critical actions.
+- [x] **Smart Filter Toggle**: "Show All Devices" option for advanced users.
+
+### 🌐 Agent Mode & Remote Management (In Progress)
+- [x] **TCP Transport**: Secure TCP communication foundation.
+- [x] **Authentication**: Challenge-Response handshake with credentials.
+- [ ] **Web UI "Control Center"**: Interface to manage remote agents.
+- [ ] **Agent Discovery**: Auto-discovery of agents on the local network.
+- [ ] **Multi-Server Context**: Seamlessly switch between local and remote ZFS servers.
+
+### 💾 Backup & Replication Features
+- [ ] **ZFS Send/Receive**: Core functionality for data replication.
+- [ ] **Backup Job Manager**: UI for configuring schedule, source, and destination.
+- [ ] **Remote Replication**: Direct backup to other ZfDash agents.
+- [ ] **Progress Monitoring**: Real-time status of long-running transfer tasks.
 
 ## 🤝 Contributing
 
