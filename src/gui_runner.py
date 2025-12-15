@@ -60,6 +60,85 @@ def show_critical_error(title, message):
         print(f"GUI_RUNNER: Error displaying GUI error message: {e}", file=sys.stderr)
 
 
+def _ensure_desktop_file_for_wayland():
+    """
+    Ensure a .desktop file exists for Wayland icon support.
+    
+    Wayland requires a .desktop file to show application icons - setWindowIcon() alone
+    doesn't work. This function creates a user-local .desktop file if:
+    - Running on Linux (Wayland is Linux-only)
+    - No system-level .desktop file exists (/usr/share/applications/zfdash.desktop)
+    - Icon file exists
+    
+    The file is cleaned up on exit to avoid leaving a broken menu entry.
+    """
+    import platform
+    import atexit
+    
+    if platform.system() != 'Linux':
+        return  # Wayland is Linux-only
+    
+    # Check if system-level .desktop file exists (installed via install.sh)
+    system_desktop = '/usr/share/applications/zfdash.desktop'
+    if os.path.exists(system_desktop):
+        return  # Already installed, use system file
+    
+    # Check if icon exists
+    if not os.path.exists(ICON_PATH):
+        return  # No icon to reference
+    
+    # Create user-local .desktop file using XDG-compliant path
+    from pathlib import Path
+    xdg_data_home = os.environ.get('XDG_DATA_HOME', os.path.join(str(Path.home()), '.local', 'share'))
+    local_apps_dir = os.path.join(xdg_data_home, 'applications')
+    local_desktop = os.path.join(local_apps_dir, 'zfdash.desktop')
+    
+    try:
+        os.makedirs(local_apps_dir, exist_ok=True)
+        
+        # Determine executable command and working directory based on how we're running
+        from paths import DAEMON_SCRIPT_PATH, DAEMON_IS_SCRIPT, RESOURCES_BASE_DIR
+        if DAEMON_IS_SCRIPT:
+            # Running from source - use uv run with project directory
+            exec_cmd = f"uv run {DAEMON_SCRIPT_PATH}"
+            # Project root is parent of src/ (RESOURCES_BASE_DIR is src/)
+            project_dir = os.path.dirname(str(RESOURCES_BASE_DIR))
+            path_line = f"Path={project_dir}"
+        else:
+            # Frozen executable
+            exec_cmd = DAEMON_SCRIPT_PATH
+            path_line = ""  # Not needed for frozen
+        
+        # Write .desktop file with absolute paths
+        desktop_content = f"""[Desktop Entry]
+Type=Application
+Name=ZfDash
+Comment=ZFS Management Dashboard
+Icon={ICON_PATH}
+Exec={exec_cmd}
+{path_line}
+Terminal=false
+Categories=System;Utility;
+StartupWMClass=zfdash
+"""
+        with open(local_desktop, 'w') as f:
+            f.write(desktop_content)
+        
+        # Register cleanup on exit
+        def cleanup_desktop_file():
+            try:
+                if os.path.exists(local_desktop):
+                    os.remove(local_desktop)
+            except Exception:
+                pass  # Best effort cleanup
+        
+        atexit.register(cleanup_desktop_file)
+        
+    except Exception as e:
+        # Non-fatal - icon just won't show on Wayland
+        print(f"WARN: Could not create .desktop file for Wayland: {e}", file=sys.stderr)
+
+
 # --- Main GUI Application Entry Point Function (Modified) ---
 def start_gui(zfs_client: ZfsManagerClient):
     """Sets up and runs the main GUI application, using the provided ZFS client."""
@@ -78,8 +157,14 @@ def start_gui(zfs_client: ZfsManagerClient):
     QApplication.setApplicationName(APP_NAME)
     QApplication.setApplicationVersion(APP_VERSION)
     QApplication.setOrganizationName(APP_ORG)
+    
+
 
     # --- Set Window Icon (Path from paths.py module) ---
+    # Ensure Wayland can find the icon via .desktop file
+    _ensure_desktop_file_for_wayland()
+    QApplication.setDesktopFileName("zfdash")
+    #------------------------------------------
     try:
         if os.path.exists(ICON_PATH):
             app.setWindowIcon(QIcon(ICON_PATH))
@@ -89,6 +174,7 @@ def start_gui(zfs_client: ZfsManagerClient):
         print(f"ERROR: Failed to set window icon: {e}", file=sys.stderr)
         traceback.print_exc(file=sys.stderr) # Print traceback for icon errors
     # --- End Set Window Icon ---
+
 
     # --- Create and Show Main Window (Pass ZFS Client) ---
     try:

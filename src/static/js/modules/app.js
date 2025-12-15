@@ -51,8 +51,181 @@ import { formatSize, findObjectByPath, validateSizeOrNone } from './utils.js';
 // Note: Use default import 'dom' to get the mutable object
 import dom, { initDomElements } from './dom-elements.js';
 
-import { setLoadingState, updateStatus, showModal, hideModal, showErrorAlert, showConfirmModal, showTripleChoiceModal } from './ui.js';
+import { setLoadingState, updateStatus, showModal, hideModal, showErrorAlert, showConfirmModal, showTripleChoiceModal, showDaemonDisconnectedOverlay, hideDaemonDisconnectedOverlay, updateDaemonDisconnectedMessage } from './ui.js';
 import { showInfo, showSuccess, showError, showWarning } from './notifications.js';
+
+// Health check state (for socket mode daemon disconnection detection)
+let healthCheckInterval = null;
+let healthCheckActive = false;
+let daemonDisconnected = false;  // Tracks if daemon is currently disconnected
+let reconnectInterval = null;  // Auto-reconnect interval
+
+/**
+ * Check if fetch response indicates auth failure (session expired).
+ * If so, redirects to login and returns true. Otherwise returns false.
+ */
+function isAuthFailure(response) {
+    const contentType = response.headers.get('content-type') || '';
+    if (!contentType.includes('application/json') || response.status === 401 || response.status === 403) {
+        console.log('Session expired, redirecting to login');
+        window.location.href = '/login';
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Start health check polling (only for socket mode).
+ * Polls /api/health every 5 seconds to detect daemon disconnection.
+ * Also runs one check immediately on start.
+ */
+function startHealthCheck() {
+    if (healthCheckInterval || healthCheckActive) return;
+    healthCheckActive = true;
+
+    healthCheckInterval = setInterval(doHealthCheck, 1000);  // Check every 1 second
+    console.log('Health check polling started');
+}
+
+/**
+ * The health check logic - checks daemon connection status.
+ * Returns true if healthy, false if disconnected.
+ */
+async function doHealthCheck() {
+    try {
+        const response = await fetch('/api/health');
+        if (isAuthFailure(response)) return false;  // Session expired, redirecting
+
+        if (!response.ok) {
+            // Server error - might be temporary
+            console.warn('Health check failed with status:', response.status);
+            return true;  // Treat as healthy, let data fetch handle it
+        }
+
+        const data = await response.json();
+
+        // Only show overlay if not in pipe mode (owns_daemon=false) when unhealthy
+        if (!data.healthy && !data.owns_daemon) {
+            daemonDisconnected = true;
+            stopHealthCheck();
+            showDaemonDisconnectedOverlay(data.message || 'Daemon connection lost', handleReconnect);
+            startAutoReconnect();  // Start auto-reconnect loop
+            return false;
+        }
+        return true;
+    } catch (error) {
+        // Network error - could be server down or daemon issue
+        // Don't set daemonDisconnected here since we can't determine if it's pipe mode
+        // (in pipe mode, network errors mean the whole app is down anyway)
+        console.error('Health check error:', error);
+        stopHealthCheck();
+
+        // Differentiate network error (WebUI server unreachable) from other errors
+        if (error.name === 'TypeError' || (error.message && error.message.includes('Failed to fetch'))) {
+            showDaemonDisconnectedOverlay(
+                'Cannot reach ZfDash Web Interface.\nThe application server may have stopped.',
+                handleReconnect,
+                { title: 'Connection Lost', showDaemonHelp: false }
+            );
+        } else {
+            showDaemonDisconnectedOverlay('Cannot connect to server. The daemon may have stopped.', handleReconnect);
+        }
+
+        startAutoReconnect();  // Start auto-reconnect loop
+        return false;
+    }
+}
+
+/**
+ * Stop health check polling.
+ */
+function stopHealthCheck() {
+    if (healthCheckInterval) {
+        clearInterval(healthCheckInterval);
+        healthCheckInterval = null;
+    }
+    healthCheckActive = false;
+}
+
+/**
+ * Start auto-reconnect loop (tries every 1 second).
+ */
+function startAutoReconnect() {
+    if (reconnectInterval) return;  // Already running
+
+    reconnectInterval = setInterval(async () => {
+        try {
+            const response = await fetch('/api/reconnect', { method: 'POST' });
+            if (isAuthFailure(response)) {
+                stopAutoReconnect();
+                return;  // Redirecting to login
+            }
+            const data = await response.json();
+
+            if (data.success) {
+                stopAutoReconnect();
+                daemonDisconnected = false;
+                hideDaemonDisconnectedOverlay();
+                hideModal();
+
+                if (dom.zfsTree) {
+                    dom.zfsTree.innerHTML = '<div class="text-muted p-3">Loading...</div>';
+                }
+
+                showSuccess('Reconnected', 'Successfully reconnected to the daemon.');
+                startHealthCheck();
+                await fetchAndRenderData();
+            }
+        } catch (error) {
+            // Silently continue trying
+        }
+    }, 2000);
+}
+
+/**
+ * Stop auto-reconnect loop.
+ */
+function stopAutoReconnect() {
+    if (reconnectInterval) {
+        clearInterval(reconnectInterval);
+        reconnectInterval = null;
+    }
+}
+
+/**
+ * Handle reconnect button click from the disconnected overlay.
+ * Calls /api/reconnect and if successful, hides overlay and refreshes data.
+ */
+async function handleReconnect() {
+    try {
+        const response = await fetch('/api/reconnect', { method: 'POST' });
+        if (isAuthFailure(response)) return;  // Redirecting to login
+        const data = await response.json();
+
+        if (data.success) {
+            // Successfully reconnected
+            stopAutoReconnect();  // Stop auto-reconnect loop
+            daemonDisconnected = false;  // Clear disconnected flag
+            hideDaemonDisconnectedOverlay();
+            hideModal();  // Close any open error modal
+
+            // Clear any error displayed in the tree view
+            if (dom.zfsTree) {
+                dom.zfsTree.innerHTML = '<div class="text-muted p-3">Loading...</div>';
+            }
+
+            showSuccess('Reconnected', 'Successfully reconnected to the daemon.');
+            startHealthCheck();  // Restart health monitoring
+            await fetchAndRenderData();  // Refresh all data
+        } else {
+            // Reconnect failed - update message in overlay
+            updateDaemonDisconnectedMessage(data.message || 'Reconnect failed. Is the daemon running?');
+        }
+    } catch (error) {
+        console.error('Reconnect error:', error);
+        updateDaemonDisconnectedMessage('Reconnect failed: ' + error.message);
+    }
+}
 
 import {
     updateAuthStateUI,
@@ -132,6 +305,13 @@ window.AUTO_SNAPSHOT_SORT_ORDER_WEB = AUTO_SNAPSHOT_SORT_ORDER_WEB;
  * Fetch and render all ZFS data
  */
 async function fetchAndRenderData() {
+    // Skip if daemon is disconnected (overlay will handle reconnection)
+    if (daemonDisconnected) {
+        console.log('Skipping data fetch - daemon disconnected');
+        setLoadingState(false);
+        return;
+    }
+
     if (!state.isAuthenticated) {
         setLoadingState(false);
         return;
@@ -386,10 +566,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('create-pool-button')?.classList.remove('disabled');
     document.getElementById('import-pool-button')?.classList.remove('disabled');
 
-    // STEP 7: Check authentication status
-    // If user is authenticated, this will call fetchAndRenderData() via the 
-    // callback we set up with setAuthCallbacks() above
-    checkAuthStatus(fetchAndRenderData);
+    // STEP 7: Check daemon health first (for socket mode)
+    // This MUST complete before we try to fetch data
+    (async () => {
+        const healthy = await doHealthCheck();
+        if (healthy) {
+            startHealthCheck();  // Start periodic polling
+        }
+
+        // STEP 8: Check authentication status
+        // If user is authenticated, this will call fetchAndRenderData() via the 
+        // callback we set up with setAuthCallbacks() above
+        checkAuthStatus(fetchAndRenderData);
+    })();
 
     // Refresh button
     if (dom.refreshButton) {

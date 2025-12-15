@@ -25,7 +25,7 @@ try:
     import config_manager
     from config_manager import PASSWORD_INFO_KEY, \
                                PBKDF2_ALGORITHM, PBKDF2_ITERATIONS, PBKDF2_SALT_BYTES
-    from paths import TEMPLATES_DIR, STATIC_DIR, FLASK_KEY_PERSISTENT_PATH, CREDENTIALS_FILE_PATH
+    from paths import TEMPLATES_DIR, STATIC_DIR, FLASK_KEY_PERSISTENT_PATH, CREDENTIALS_FILE_PATH, ICON_PATH
     import utils # For formatting/parsing in backend if needed
     # Import models needed for type checking in dict conversion
     from models import ZfsObject, Pool, Dataset, Snapshot
@@ -623,6 +623,81 @@ def auth_status():
     else:
         return jsonify(status="success", authenticated=False)
 
+@app.route('/api/health')
+@login_required
+def api_health():
+    """
+    Check daemon connection health.
+    
+    Used by the frontend to poll for daemon disconnection in socket mode.
+    Returns connection status and error message if unhealthy.
+    """
+    try:
+        zfs_client = _get_zfs_client()
+        
+        # Check if client has health check methods (for compatibility)
+        if not hasattr(zfs_client, 'is_connection_healthy'):
+            return jsonify(
+                status="success",
+                healthy=True,
+                message="Health check not available",
+                owns_daemon=True
+            )
+        
+        healthy = zfs_client.is_connection_healthy()
+        error = zfs_client.get_connection_error() if not healthy else None
+        owns_daemon = getattr(zfs_client, 'owns_daemon', True)
+        
+        return jsonify(
+            status="success" if healthy else "error",
+            healthy=healthy,
+            message=error or "Daemon connection healthy",
+            owns_daemon=owns_daemon
+        )
+    except Exception as e:
+        app.logger.error(f"Health check error: {e}")
+        return jsonify(
+            status="error",
+            healthy=False,
+            message=f"Health check failed: {e}",
+            owns_daemon=True
+        )
+
+@app.route('/api/reconnect', methods=['POST'])
+@login_required
+def api_reconnect():
+    """
+    Attempt to reconnect to the daemon.
+    
+    Only works in socket mode (owns_daemon=False).
+    Returns success/failure status with message.
+    """
+    try:
+        zfs_client = _get_zfs_client()
+        
+        # Check if reconnect method exists
+        if not hasattr(zfs_client, 'reconnect'):
+            return jsonify(
+                status="error",
+                success=False,
+                message="Reconnect not available (old client version)"
+            )
+        
+        success, message = zfs_client.reconnect()
+        
+        return jsonify(
+            status="success" if success else "error",
+            success=success,
+            message=message
+        )
+    except Exception as e:
+        app.logger.error(f"Reconnect error: {e}")
+        return jsonify(
+            status="error",
+            success=False,
+            message=f"Reconnect failed: {e}"
+        )
+
 @app.route('/api/version')
 def version_info():
     """Return version and application information."""
@@ -675,6 +750,18 @@ def check_updates():
     result["releases_url"] = update_info["releases_url"]
     
     return jsonify(**result)
+
+@app.route('/favicon.ico')
+def favicon():
+    """Serve the application icon as favicon."""
+    try:
+        # ICON_PATH is an absolute path, extract directory and filename
+        icon_dir = os.path.dirname(ICON_PATH)
+        icon_file = os.path.basename(ICON_PATH)
+        return send_from_directory(icon_dir, icon_file, mimetype='image/png')
+    except Exception as e:
+        app.logger.warning(f"Could not serve favicon: {e}")
+        return '', 204  # No content
 
 # Serve static files (JS, CSS) - Handled automatically by Flask
 

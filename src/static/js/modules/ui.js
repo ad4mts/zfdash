@@ -500,3 +500,121 @@ export function showInputModal(title, htmlMessage, defaultValue = '', placeholde
         }, { once: true });
     });
 }
+
+/**
+ * Show daemon disconnected overlay.
+ * Creates a full-page overlay blocking the UI when daemon connection is lost.
+ * @param {string} message - Error message to display
+ * @param {Function} onReconnect - Callback function when Reconnect button is clicked
+ */
+export function showDaemonDisconnectedOverlay(message, onReconnect = null, options = {}) {
+    const { title = 'Daemon Connection Lost', showDaemonHelp = true } = options;
+
+    // Check if overlay already exists - update message if so
+    const existingOverlay = document.getElementById('daemon-disconnected-overlay');
+    if (existingOverlay) {
+        const msgEl = existingOverlay.querySelector('.daemon-error-message');
+        if (msgEl) {
+            msgEl.textContent = message;
+        }
+        // Update title if changed
+        const titleEl = existingOverlay.querySelector('.daemon-overlay-title');
+        if (titleEl) titleEl.textContent = title;
+
+        return;
+    }
+
+    const overlay = document.createElement('div');
+    overlay.id = 'daemon-disconnected-overlay';
+    overlay.style.cssText = `
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.85);
+        z-index: 9999;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    `;
+
+    const helpHtml = showDaemonHelp ? `
+                <p style="color: #555; font-size: 0.95rem; margin-bottom: 1rem;">
+                    Click <strong style="color: #6a64e8;">Reconnect</strong> to try again, or start the daemon:
+                </p>
+                <div class="mb-4 p-3" style="background: #2d2d3a; border-radius: 8px; font-family: var(--bs-font-monospace); font-size: 0.85rem;">
+                    <div style="color: #a0a0b0;">$ <span style="color: #fff;">zfdash --launch-daemon</span></div>
+                    <div style="color: #777; font-size: 0.8rem; margin-top: 6px;">or: uv run src/main.py --launch-daemon</div>
+                </div>`
+        :
+        `<p style="color: #555; font-size: 0.95rem; margin-bottom: 1rem;">
+                    Click <strong style="color: #6a64e8;">Reconnect</strong> to try again.
+                </p>`;
+
+    overlay.innerHTML = `
+        <div class="card border-0" style="width: 440px; max-width: 95vw; margin: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); border-radius: 12px; overflow: hidden;">
+            <div class="py-3 px-4" style="background: linear-gradient(135deg, #6a64e8 0%, #5752d6 100%);">
+                <div class="d-flex align-items-center text-white">
+                    <i class="bi bi-exclamation-triangle-fill me-2" style="font-size: 1.3rem;"></i>
+                    <span class="daemon-overlay-title" style="font-weight: 600; font-size: 1.1rem;">${title}</span>
+                </div>
+            </div>
+            <div class="px-4 py-4" style="background: #fff;">
+                <div class="daemon-error-message mb-3 p-3" 
+                     style="background: #f8f9fa; border-radius: 8px; font-family: var(--bs-font-monospace); font-size: 0.85rem; color: #dc3545; line-height: 1.4;">
+                    ${escapeHtmlForModal(message)}
+                </div>
+                ${helpHtml}
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn flex-fill text-white py-2" id="daemon-reconnect-btn" 
+                            style="background: #6a64e8; border-radius: 8px; font-weight: 500; font-size: 0.95rem;">
+                        <i class="bi bi-arrow-repeat me-1"></i>Reconnect
+                    </button>
+                    <button type="button" class="btn flex-fill py-2" onclick="location.reload()"
+                            style="background: #f0f0f5; border-radius: 8px; color: #555; font-size: 0.95rem;">
+                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+
+    // Attach reconnect handler
+    const reconnectBtn = document.getElementById('daemon-reconnect-btn');
+    if (reconnectBtn && onReconnect) {
+        reconnectBtn.addEventListener('click', async () => {
+            reconnectBtn.disabled = true;
+            reconnectBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Reconnecting...';
+            await onReconnect();
+            reconnectBtn.disabled = false;
+            reconnectBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Reconnect';
+        });
+    }
+}
+
+/**
+ * Update the error message in the daemon disconnected overlay.
+ * @param {string} message - New error message
+ */
+export function updateDaemonDisconnectedMessage(message) {
+    const overlay = document.getElementById('daemon-disconnected-overlay');
+    if (overlay) {
+        const msgEl = overlay.querySelector('.daemon-error-message');
+        if (msgEl) {
+            msgEl.textContent = message;
+        }
+    }
+}
+
+/**
+ * Hide daemon disconnected overlay if it exists.
+ */
+export function hideDaemonDisconnectedOverlay() {
+    const overlay = document.getElementById('daemon-disconnected-overlay');
+    if (overlay) {
+        overlay.remove();
+    }
+}

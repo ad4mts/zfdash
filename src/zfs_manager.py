@@ -95,28 +95,37 @@ class ZfsManagerClient:
     def _reader_thread_target(self):
         """Target function for the thread reading responses from the daemon via transport."""
         print("MANAGER_CLIENT: Reader thread started.", file=sys.stderr)
+        
+        # Capture transport locally to avoid race conditions during reconnect
+        # If self.transport is replaced by reconnect(), this thread should stick to the old one (which will be closed) and exit
+        transport = self.transport
+        
         while not self.shutdown_event.is_set():
             try:
                 # Check if there's data to read using select with a short timeout
                 # This allows checking the shutdown_event periodically
                 try:
-                    ready_to_read, _, _ = select.select([self.transport.fileno()], [], [], constants.READER_SELECT_TIMEOUT)
+                    ready_to_read, _, _ = select.select([transport.fileno()], [], [], constants.READER_SELECT_TIMEOUT)
                 except (ValueError, OSError):
                     # Handle case where file descriptor is closed/invalid
                     if not self.shutdown_event.is_set():
-                        print("MANAGER_CLIENT: Transport file descriptor invalid/closed.", file=sys.stderr)
+                        # Only log if we haven't been replaced (if self.transport != transport, we expect this close)
+                        if self.transport == transport:
+                            print("MANAGER_CLIENT: Transport file descriptor invalid/closed.", file=sys.stderr)
                     break
 
                 if not ready_to_read:
                     continue # Timeout, loop back to check shutdown_event
 
                 # Data is available, read a line
-                line_bytes = self.transport.receive_line()
+                line_bytes = transport.receive_line()
 
                 if not line_bytes:
                     # EOF reached - daemon likely exited or closed connection
-                    print("MANAGER_CLIENT: Reader thread detected EOF. Daemon likely closed connection.", file=sys.stderr)
-                    self._communication_error = ZfsClientCommunicationError("Daemon connection closed (EOF).")
+                    # Only report error if we are still the active transport
+                    if self.transport == transport:
+                         print("MANAGER_CLIENT: Reader thread detected EOF. Daemon likely closed connection.", file=sys.stderr)
+                         self._communication_error = ZfsClientCommunicationError("Daemon connection closed (EOF).")
                     break # Exit reader loop
 
                 line_str = line_bytes.decode('utf-8', errors='replace').strip()
@@ -156,8 +165,10 @@ class ZfsManagerClient:
             except (OSError, BrokenPipeError, ValueError) as e:
                 # This except belongs to the outer try block started at the beginning of the loop
                 if not self.shutdown_event.is_set(): # Avoid error message during clean shutdown
-                    print(f"MANAGER_CLIENT: Reader thread pipe error: {e}", file=sys.stderr)
-                    self._communication_error = ZfsClientCommunicationError(f"Pipe communication error: {e}")
+                    # Verify we are still the active transport
+                    if self.transport == transport:
+                         print(f"MANAGER_CLIENT: Reader thread pipe error: {e}", file=sys.stderr)
+                         self._communication_error = ZfsClientCommunicationError(f"Pipe communication error: {e}")
                 break # Exit reader loop on pipe error
 
             except Exception as e:
@@ -170,8 +181,9 @@ class ZfsManagerClient:
 
         # --- Reader Thread Cleanup (Outside the while loop) ---
         print("MANAGER_CLIENT: Reader thread exiting.", file=sys.stderr)
-        # Notify any pending requests about the communication failure
-        self._notify_pending_of_error()
+        # Notify any pending requests about the communication failure - only if we are the active thread
+        if self.transport == transport:
+            self._notify_pending_of_error()
 
     def _notify_pending_of_error(self):
         """Notify all pending requests about a communication failure."""
@@ -427,6 +439,97 @@ class ZfsManagerClient:
         except (ZfsCommandError, ZfsClientCommunicationError) as e:
             # Daemon might already be dead or communication failed
             return False, f"Error sending shutdown command: {e}"
+
+    def is_connection_healthy(self) -> bool:
+        """
+        Check if daemon connection is still alive.
+        
+        Returns True if connection appears healthy, False otherwise.
+        This is useful for socket mode where the daemon can be shut down externally.
+        """
+        # If shutdown already triggered or communication error occurred
+        if self.shutdown_event.is_set() or self._communication_error:
+            return False
+        # Check if reader thread is still alive (it exits on EOF/errors)
+        if self.reader_thread and not self.reader_thread.is_alive():
+            return False
+        return True
+
+    def get_connection_error(self) -> Optional[str]:
+        """
+        Get the current connection error message, if any.
+        
+        Returns the error message string, or None if no error.
+        """
+        if self._communication_error:
+            return str(self._communication_error)
+        if self.reader_thread and not self.reader_thread.is_alive() and not self.shutdown_event.is_set():
+            return "Daemon connection lost (reader thread exited)"
+        return None
+
+    def reconnect(self) -> Tuple[bool, str]:
+        """
+        Attempt to reconnect to an existing socket daemon.
+        
+        This is only applicable in socket mode (owns_daemon=False).
+        In pipe mode, reconnection is not possible.
+        
+        Returns:
+            Tuple of (success: bool, message: str)
+        """
+        if self.owns_daemon:
+            return False, "Reconnection not available in pipe mode. Please restart the application."
+        
+        # print(f"MANAGER_CLIENT: Attempting to reconnect to daemon...", file=sys.stderr)
+        
+        try:
+            # Use abstracted connect function
+            from ipc_client import connect_to_daemon
+            
+            # Try to connect to existing daemon
+            new_transport = connect_to_daemon()
+            
+            # Close old transport if any
+            if self.transport:
+                try:
+                    self.transport.close()
+                except Exception:
+                    pass
+            
+            # Reset state
+            self.transport = new_transport
+            self._communication_error = None
+            self.shutdown_event.clear()
+            
+            # Clear pending requests (they won't get responses now)
+            with self.request_lock:
+                self.pending_requests.clear()
+            
+            # Start new reader thread
+            if self.reader_thread and self.reader_thread.is_alive():
+                # Old thread should exit on its own when transport was closed
+                pass
+            
+            self.reader_thread = threading.Thread(target=self._reader_thread_target, daemon=True)
+            self.reader_thread.start()
+            
+            print(f"MANAGER_CLIENT: Successfully reconnected to daemon.", file=sys.stderr)
+            return True, "Successfully reconnected to daemon."
+            
+        except FileNotFoundError as e:
+            error_msg = f"Daemon socket not found. Please launch the daemon first:\n  zfdash --launch-daemon"
+            # print(f"MANAGER_CLIENT: Reconnect failed - {error_msg}", file=sys.stderr)
+            return False, error_msg
+            
+        except RuntimeError as e:
+            error_msg = f"Failed to connect to daemon: {e}"
+            # print(f"MANAGER_CLIENT: Reconnect failed - {error_msg}", file=sys.stderr)
+            return False, error_msg
+            
+        except Exception as e:
+            error_msg = f"Unexpected error during reconnection: {e}"
+            # print(f"MANAGER_CLIENT: Reconnect failed - {error_msg}", file=sys.stderr)
+            return False, error_msg
 
     def close(self):
         """Shuts down the reader thread, closes pipes, and shuts down the daemon."""

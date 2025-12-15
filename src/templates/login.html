@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html lang="en" style="height: 100%;">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ZfDash Login</title>
+    <link rel="icon" type="image/png" href="/favicon.ico">
     <!-- Add Bootstrap -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Add Bootstrap Icons -->
@@ -11,6 +13,7 @@
     <!-- Link Custom CSS -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
 </head>
+
 <body class="login-page">
 
     <div class="login-wrapper">
@@ -25,27 +28,31 @@
             <div class="login-body">
                 <!-- Flash messages container -->
                 {% with messages = get_flashed_messages(with_categories=true) %}
-                    {% if messages %}
-                        <div class="flash-messages mb-3">
-                            {% for category, message in messages %}
-                                <div class="alert alert-{{ category }} alert-dismissible fade show small py-2" role="alert">
-                                    {{ message }}
-                                    <button type="button" class="btn-close btn-sm py-1" data-bs-dismiss="alert" aria-label="Close"></button>
-                                </div>
-                            {% endfor %}
-                        </div>
-                    {% endif %}
+                {% if messages %}
+                <div class="flash-messages mb-3">
+                    {% for category, message in messages %}
+                    <div class="alert alert-{{ category }} alert-dismissible fade show small py-2" role="alert">
+                        {{ message }}
+                        <button type="button" class="btn-close btn-sm py-1" data-bs-dismiss="alert"
+                            aria-label="Close"></button>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
                 {% endwith %}
 
                 <!-- The form submission is handled by Flask server-side -->
-                <form id="login-form" method="POST" action="{{ url_for('login') }}{% if request.args.next %}?next={{ request.args.next|urlencode }}{% endif %}">
+                <form id="login-form" method="POST"
+                    action="{{ url_for('login') }}{% if request.args.next %}?next={{ request.args.next|urlencode }}{% endif %}">
                     <div class="mb-3">
                         <label for="username" class="form-label">Username</label>
-                        <input type="text" class="form-control" id="username" name="username" required placeholder="Enter your username">
+                        <input type="text" class="form-control" id="username" name="username" required
+                            placeholder="Enter your username">
                     </div>
                     <div class="mb-4">
                         <label for="password" class="form-label">Password</label>
-                        <input type="password" class="form-control" id="password" name="password" required placeholder="Enter your password">
+                        <input type="password" class="form-control" id="password" name="password" required
+                            placeholder="Enter your password">
                     </div>
                     <div class="d-grid">
                         <button type="submit" class="btn-app btn-app-primary btn-app-lg">Login</button>
@@ -60,4 +67,5 @@
     <!-- Login Page Effects -->
     <script src="{{ url_for('static', filename='js/login.js') }}"></script>
 </body>
+
 </html>

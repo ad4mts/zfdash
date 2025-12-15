@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
     QHeaderView, QPushButton, QInputDialog, QLineEdit
 )
 from PySide6.QtGui import QAction, QIcon, QKeySequence, QFont
-from PySide6.QtCore import Qt, Slot, QModelIndex, QItemSelection, QMetaObject
+from PySide6.QtCore import Qt, Slot, QModelIndex, QItemSelection, QMetaObject, QTimer
 
 # Local imports
 try:
@@ -73,6 +73,15 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(self.APP_NAME)
         self.setGeometry(100, 100, 1200, 800) # Set default size
+        
+        # Set window icon explicitly (Wayland requires this on the window, not just app)
+        try:
+            from paths import ICON_PATH
+            import os
+            if os.path.exists(ICON_PATH):
+                self.setWindowIcon(QIcon(ICON_PATH))
+        except Exception:
+            pass  # Fallback to app icon
 
         # UI elements (initialize to None)
         self.tree_view: Optional[QTreeView] = None
@@ -98,6 +107,13 @@ class MainWindow(QMainWindow):
         QMetaObject.invokeMethod(
             self, "refresh_all_data", Qt.ConnectionType.QueuedConnection
         )
+
+        # Connection health check for socket mode (daemon can be stopped externally)
+        self._connection_check_timer = None
+        self._daemon_disconnected_shown = False
+        self._force_close = False  # Skip confirmation when closing due to daemon disconnect
+        if not self.zfs_client.owns_daemon: # Only do this if not in pipe mode
+            self._setup_connection_health_check()
 
     # --- Dialog Positioning Helpers ---
     def _center_dialog_on_window(self, dialog):
@@ -142,9 +158,162 @@ class MainWindow(QMainWindow):
         self._center_dialog_on_window(msg_box)
         msg_box.exec()
 
+    # --- Connection Health Check (Socket Mode Only) ---
+    def _setup_connection_health_check(self):
+        """Set up periodic health check timer for socket mode."""
+        from PySide6.QtCore import QTimer
+        self._connection_check_timer = QTimer(self)
+        self._connection_check_timer.timeout.connect(self._check_daemon_connection)
+        self._connection_check_timer.start(1000)  # Check every 1 second
+        print("MAIN_WINDOW: Connection health check started (socket mode).", file=sys.stderr)
+
+    @Slot()
+    def _check_daemon_connection(self):
+        """Periodically check if daemon connection is still healthy."""
+        if self._daemon_disconnected_shown:
+            return  # Already showing dialog, don't check again
+        
+        if not self.zfs_client.is_connection_healthy():
+            # Stop timer and show dialog
+            if self._connection_check_timer:
+                self._connection_check_timer.stop()
+            self._show_daemon_disconnected_dialog()
+
+    def _show_daemon_disconnected_dialog(self):
+        """Show a non-modal dialog when daemon connection is lost, with auto-reconnect."""
+        if self._daemon_disconnected_shown:
+            return
+        self._daemon_disconnected_shown = True
+        
+        # Get error and truncate to first line to avoid duplicating instructions in dialog
+        full_error = self.zfs_client.get_connection_error() or "Connection to daemon lost"
+        error_msg = full_error.split('\n')[0]  # First line only
+        
+        # Disable main UI to prevent further actions
+        if self.tree_view:
+            self.tree_view.setEnabled(False)
+        if self.details_tabs:
+            self.details_tabs.setEnabled(False)
+        self._update_action_states()
+        
+        # Start auto-reconnect timer
+        self._start_auto_reconnect()
+        
+        # Create and show dialog
+        self._disconnect_dialog = QMessageBox(self)
+        self._disconnect_dialog.setIcon(QMessageBox.Icon.Critical)
+        self._disconnect_dialog.setWindowTitle("Daemon Connection Lost")
+        self._disconnect_dialog.setText(
+            f"The connection to the ZfDash daemon has been lost.\n\n"
+            f"Error: {error_msg}\n\n"
+            f"Auto-reconnecting... or click 'Reconnect' to try now.\n\n"
+            f"If the daemon is not running, launch it first:\n"
+            f"  zfdash --launch-daemon\n\n"
+            f"Or if running from source:\n"
+            f"  uv run src/main.py --launch-daemon"
+        )
+        
+        # Add Reconnect and Close buttons
+        reconnect_btn = self._disconnect_dialog.addButton("Reconnect", QMessageBox.ButtonRole.AcceptRole)
+        close_btn = self._disconnect_dialog.addButton("Close Application", QMessageBox.ButtonRole.RejectRole)
+        self._disconnect_dialog.setDefaultButton(reconnect_btn)
+        
+        # _center_dialog_on_window calls .show() internally, no need to call again
+        self._center_dialog_on_window(self._disconnect_dialog)
+        self._disconnect_dialog.buttonClicked.connect(self._on_disconnect_dialog_button)
+    
+    def _on_disconnect_dialog_button(self, button):
+        """Handle button click on disconnect dialog."""
+        role = self._disconnect_dialog.buttonRole(button)
+        
+        if role == QMessageBox.ButtonRole.AcceptRole:
+            # Stop auto-reconnect during manual attempt to avoid race conditions
+            self._stop_auto_reconnect()
+            
+            # Manual reconnect attempt
+            self._update_status_bar("Reconnecting to daemon...")
+            success, message = self.zfs_client.reconnect()
+            
+            if success:
+                self._on_reconnect_success()
+            else:
+                # Recreate dialog with updated error (QMessageBox closes on button click)
+                self._recreate_disconnect_dialog(message)
+        else:
+            # Close application
+            self._stop_auto_reconnect()
+            self._force_close = True
+            self.close()
+
+    def _recreate_disconnect_dialog(self, error_message: str):
+        """Recreate disconnect dialog with updated error message after failed reconnect."""
+        # Store error properly using the same type as zfs_manager.py internals
+        self.zfs_client._communication_error = ZfsClientCommunicationError(error_message)
+        
+        # Reset state for new dialog
+        self._daemon_disconnected_shown = False
+        self._disconnect_dialog = None
+        
+        # Ensure UI stays disabled (belt and suspenders)
+        if self.tree_view:
+            self.tree_view.setEnabled(False)
+        if self.details_tabs:
+            self.details_tabs.setEnabled(False)
+        
+        # Show new dialog (this will restart auto-reconnect)
+        self._show_daemon_disconnected_dialog()
+
+    def _start_auto_reconnect(self):
+        """Start auto-reconnect timer that tries every 1 second."""
+        if hasattr(self, '_auto_reconnect_timer') and self._auto_reconnect_timer:
+            return  # Already running
+        
+        self._auto_reconnect_timer = QTimer(self)
+        self._auto_reconnect_timer.timeout.connect(self._try_auto_reconnect)
+        self._auto_reconnect_timer.start(1000)
+
+    def _stop_auto_reconnect(self):
+        """Stop auto-reconnect timer."""
+        if hasattr(self, '_auto_reconnect_timer') and self._auto_reconnect_timer:
+            self._auto_reconnect_timer.stop()
+            self._auto_reconnect_timer = None
+
+    def _try_auto_reconnect(self):
+        """Attempt to reconnect silently. On success, restore UI."""
+        success, message = self.zfs_client.reconnect()
+        
+        if success:
+            self._on_reconnect_success()
+
+    def _on_reconnect_success(self):
+        """Handle successful reconnection - restore UI state."""
+        self._stop_auto_reconnect()
+        self._daemon_disconnected_shown = False
+        
+        # Close dialog if open
+        if hasattr(self, '_disconnect_dialog') and self._disconnect_dialog:
+            self._disconnect_dialog.close()
+            self._disconnect_dialog = None
+        
+        # Re-enable UI
+        if self.tree_view:
+            self.tree_view.setEnabled(True)
+        if self.details_tabs:
+            self.details_tabs.setEnabled(True)
+        
+        # Restart health check timer
+        if self._connection_check_timer:
+            self._connection_check_timer.start(1000)
+        
+        self._show_info_message("Reconnected", "Successfully reconnected to the daemon.")
+        self.refresh_all_data()
+
+
+
     # --- UI Creation Methods ---
 
     def _create_actions(self):
+
         """Create QAction objects for menus and toolbars."""
         self.log_viewer_action = QAction(
             QIcon.fromTheme("document-print-preview"), "View &Logs...", self
@@ -1563,7 +1732,11 @@ class MainWindow(QMainWindow):
             else:
                 print("WARN: Aborting running worker on exit (may not stop immediately).")
 
-        # Simple exit confirmation
+        # Skip confirmation if force_close is set (e.g., from daemon disconnect dialog)
+        if getattr(self, '_force_close', False):
+            print("User confirmed quit (from disconnect dialog).")
+            event.accept()
+            return
         reply = QMessageBox.question(
             self,
             f"Quit {self.APP_NAME}?",
@@ -1606,7 +1779,8 @@ class MainWindow(QMainWindow):
             try:
                 success, msg = self.zfs_client.shutdown_daemon()
                 if success:
-                    self._show_info_message("Daemon Shutdown", "Daemon shutdown command sent successfully.")
+                    # Don't show message - health check will handle reconnect UI
+                    pass
                 else:
                     self._show_warning_message("Shutdown Warning", f"Could not cleanly shutdown daemon:\n{msg}")
             except Exception as e:

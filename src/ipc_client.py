@@ -236,6 +236,126 @@ class LineBufferedTransport:
         """Access underlying transport (for socket-specific ops)."""
         return self.transport
 
+# ============================================================================
+# Connect to existing daemon
+# ============================================================================
+def connect_to_daemon():
+    """
+    Connect to an existing daemon with auto-detected socket path.
+    
+    This is the abstracted public interface for connecting to an existing daemon.
+    Callers should use this instead of connect_to_existing_socket_daemon directly.
+    
+    Returns:
+        LineBufferedTransport connected to the daemon
+        
+    Raises:
+        FileNotFoundError: If daemon socket doesn't exist
+        RuntimeError: If connection fails
+    """
+    socket_path = get_daemon_socket_path(os.getuid())
+    return connect_to_existing_socket_daemon(socket_path)
+
+def connect_to_existing_socket_daemon(socket_path: str):
+    """
+    Connect to an existing socket daemon.
+    
+    Args:
+        socket_path: Path to Unix domain socket
+        
+    Returns:
+        LineBufferedTransport connected to the daemon
+        
+    Raises:
+        FileNotFoundError: If socket doesn't exist
+        RuntimeError: If connection fails (stale socket, daemon not responding)
+    """
+    
+    if not os.path.exists(socket_path):
+        raise FileNotFoundError(
+            f"Daemon socket not found: {socket_path}\n"
+            f"Start the daemon with: sudo python3 src/main.py --daemon --uid $(id -u) --gid $(id -g) --listen-socket"
+        )
+    
+    print(f"IPC: Connecting to existing daemon socket at {socket_path}...", file=sys.stderr)
+    try:
+        # Short timeout for existing daemon (should connect immediately)
+        client_sock = connect_to_unix_socket(socket_path, timeout=5.0, check_process=None)
+        transport = SocketTransport(client_sock)
+        buffered = LineBufferedTransport(transport)
+        wait_for_ready_signal(buffered, process=None, timeout=constants.IPC_CONNECT_TIMEOUT)
+        print(f"IPC: Successfully connected to existing daemon.", file=sys.stderr)
+        return buffered
+    except (TimeoutError, RuntimeError, OSError) as e:
+        raise RuntimeError(f"IPC: Socket exists but connection failed: {e}")
+
+# ============================================================================
+# Stop existing daemon
+# ============================================================================
+def stop_daemon() -> bool:
+    """
+    Stop not running daemon with auto-detected socket path.
+    
+    This is the abstracted public interface for stopping the daemon.
+    Callers should use this instead of stop_socket_daemon directly.
+    
+    Returns:
+        True if daemon was stopped or socket was cleaned up
+        False if no socket exists (nothing to do)
+    """
+    socket_path = get_daemon_socket_path(os.getuid())
+    return stop_socket_daemon(socket_path)
+
+def stop_socket_daemon(socket_path: str = None) -> bool:
+    """
+    Stop a running socket daemon, or clean up stale socket if daemon not running.
+    
+    Args:
+        socket_path: Path to Unix domain socket (uses default if None)
+        
+    Returns:
+        True if daemon was stopped or socket was cleaned up
+        False if no socket exists (nothing to do)
+    """
+    import json
+    from ipc_helpers import check_and_remove_stale_socket
+    
+    if socket_path is None:
+        from paths import get_daemon_socket_path
+        socket_path = get_daemon_socket_path(os.getuid())
+    
+    if not os.path.exists(socket_path):
+        print(f"IPC: No daemon socket found at {socket_path}", file=sys.stderr)
+        return False
+    
+    try:
+        transport = connect_to_existing_socket_daemon(socket_path)
+    except (FileNotFoundError, RuntimeError):
+        # Socket exists but can't connect - use helper to remove stale socket
+        check_and_remove_stale_socket(socket_path)
+        return True
+    
+    try:
+        # Send shutdown command
+        request = {"command": "shutdown_daemon", "args": [], "kwargs": {}, "meta": {"request_id": 0}}
+        transport.send_line(json.dumps(request).encode('utf-8'))
+        
+        # Read response
+        response_line = transport.receive_line()
+        if response_line:
+            response = json.loads(response_line.decode('utf-8'))
+            if response.get("status") == "success":
+                print(f"IPC: Daemon shutdown successful.", file=sys.stderr)
+                return True
+            else:
+                raise RuntimeError(f"Shutdown failed: {response.get('error', 'Unknown error')}")
+        else:
+            # EOF - daemon already shutting down
+            print(f"IPC: Daemon shutdown (connection closed).", file=sys.stderr)
+            return True
+    finally:
+        transport.close()
+
 
 # ============================================================================
 # Platform-Specific Daemon Launcher
@@ -355,90 +475,6 @@ def _build_daemon_command(daemon_path: str, uid: int, gid: int,
     else:
         # Unknown tool, try direct execution
         return [escalation_tool] + base_cmd
-
-def connect_to_existing_socket_daemon(socket_path: str):
-    """
-    Connect to an existing socket daemon.
-    
-    Args:
-        socket_path: Path to Unix domain socket
-        
-    Returns:
-        LineBufferedTransport connected to the daemon
-        
-    Raises:
-        FileNotFoundError: If socket doesn't exist
-        RuntimeError: If connection fails (stale socket, daemon not responding)
-    """
-    
-    if not os.path.exists(socket_path):
-        raise FileNotFoundError(
-            f"Daemon socket not found: {socket_path}\n"
-            f"Start the daemon with: sudo python3 src/main.py --daemon --uid $(id -u) --gid $(id -g) --listen-socket"
-        )
-    
-    print(f"IPC: Connecting to existing daemon socket at {socket_path}...", file=sys.stderr)
-    try:
-        # Short timeout for existing daemon (should connect immediately)
-        client_sock = connect_to_unix_socket(socket_path, timeout=5.0, check_process=None)
-        transport = SocketTransport(client_sock)
-        buffered = LineBufferedTransport(transport)
-        wait_for_ready_signal(buffered, process=None, timeout=constants.IPC_CONNECT_TIMEOUT)
-        print(f"IPC: Successfully connected to existing daemon.", file=sys.stderr)
-        return buffered
-    except (TimeoutError, RuntimeError, OSError) as e:
-        raise RuntimeError(f"IPC: Socket exists but connection failed: {e}")
-
-
-def stop_socket_daemon(socket_path: str = None) -> bool:
-    """
-    Stop a running socket daemon, or clean up stale socket if daemon not running.
-    
-    Args:
-        socket_path: Path to Unix domain socket (uses default if None)
-        
-    Returns:
-        True if daemon was stopped or socket was cleaned up
-        False if no socket exists (nothing to do)
-    """
-    import json
-    from ipc_helpers import check_and_remove_stale_socket
-    
-    if socket_path is None:
-        from paths import get_daemon_socket_path
-        socket_path = get_daemon_socket_path(os.getuid())
-    
-    if not os.path.exists(socket_path):
-        print(f"IPC: No daemon socket found at {socket_path}", file=sys.stderr)
-        return False
-    
-    try:
-        transport = connect_to_existing_socket_daemon(socket_path)
-    except (FileNotFoundError, RuntimeError):
-        # Socket exists but can't connect - use helper to remove stale socket
-        check_and_remove_stale_socket(socket_path)
-        return True
-    
-    try:
-        # Send shutdown command
-        request = {"command": "shutdown_daemon", "args": [], "kwargs": {}, "meta": {"request_id": 0}}
-        transport.send_line(json.dumps(request).encode('utf-8'))
-        
-        # Read response
-        response_line = transport.receive_line()
-        if response_line:
-            response = json.loads(response_line.decode('utf-8'))
-            if response.get("status") == "success":
-                print(f"IPC: Daemon shutdown successful.", file=sys.stderr)
-                return True
-            else:
-                raise RuntimeError(f"Shutdown failed: {response.get('error', 'Unknown error')}")
-        else:
-            # EOF - daemon already shutting down
-            print(f"IPC: Daemon shutdown (connection closed).", file=sys.stderr)
-            return True
-    finally:
-        transport.close()
 
 
 def launch_daemon(use_socket: bool = False, debug: bool = False) -> Tuple[subprocess.Popen, LineBufferedTransport]:
