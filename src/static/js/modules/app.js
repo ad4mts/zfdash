@@ -52,6 +52,7 @@ import { formatSize, findObjectByPath, validateSizeOrNone } from './utils.js';
 import dom, { initDomElements } from './dom-elements.js';
 
 import { setLoadingState, updateStatus, showModal, hideModal, showErrorAlert, showConfirmModal, showTripleChoiceModal } from './ui.js';
+import { showInfo, showSuccess, showError, showWarning } from './notifications.js';
 
 import {
     updateAuthStateUI,
@@ -230,13 +231,46 @@ async function fetchAndRenderData() {
 
 /**
  * Handle shutdown daemon action
+ * Uses dedicated endpoint with proper status messages.
  */
-function handleShutdownDaemon() {
-    executeActionWithRefresh(
-        'shutdown_daemon', [], {},
-        "Daemon shutdown requested.", true,
-        "Stop the ZfDash background daemon process?\n(Requires authentication on next start)"
+async function handleShutdownDaemon() {
+    // First confirm with user
+    const confirmed = await showConfirmModal(
+        "Shutdown Daemon",
+        "Stop the ZfDash background daemon process?<br><br>" +
+        "If other clients (like the WebUI) are using this daemon, they will also be disconnected.",
+        "Shutdown",
+        "btn-danger"
     );
+
+    if (!confirmed) return;
+
+    updateStatus('Shutting down daemon...', 'busy');
+
+    try {
+        const response = await fetch('/api/shutdown_daemon', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({})
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            updateStatus('Daemon shutdown requested.', 'success');
+            showSuccess(result.message);
+        } else if (result.status === 'info') {
+            updateStatus('Shutdown not available.', 'info');
+            showWarning(result.message);
+        } else {
+            updateStatus('Shutdown failed.', 'error');
+            showErrorAlert(result.title || 'Shutdown Failed', result.message || 'Unknown error');
+        }
+    } catch (error) {
+        console.error('Shutdown daemon request failed:', error);
+        updateStatus('Shutdown error.', 'error');
+        showErrorAlert('Network Error', `Could not send shutdown request:\n${error.message}`);
+    }
 }
 
 /**

@@ -151,6 +151,11 @@ class MainWindow(QMainWindow):
         )
         self.log_viewer_action.triggered.connect(self._show_log_viewer)
 
+        self.shutdown_daemon_action = QAction(
+            QIcon.fromTheme("system-shutdown"), "Shutdown &Daemon", self
+        )
+        self.shutdown_daemon_action.triggered.connect(self._shutdown_daemon_action)
+
         self.exit_action = QAction(QIcon.fromTheme("application-exit"), "&Exit", self)
         self.exit_action.setShortcut(QKeySequence.StandardKey.Quit)
         self.exit_action.triggered.connect(self.close)
@@ -246,6 +251,7 @@ class MainWindow(QMainWindow):
         file_menu = self.menuBar().addMenu("&File")
         file_menu.addAction(self.log_viewer_action)
         file_menu.addSeparator()
+        file_menu.addAction(self.shutdown_daemon_action)
         file_menu.addAction(self.exit_action)
 
         view_menu = self.menuBar().addMenu("&View")
@@ -1533,32 +1539,78 @@ class MainWindow(QMainWindow):
             return False
 
     def closeEvent(self, event):
-        """Handle the window close event."""
+        """Handle the window close event with simple Yes/No confirmation."""
         worker_active = False
         if self._worker is not None:
-            try: worker_active = self._worker.isRunning()
-            except RuntimeError: worker_active = False
+            try:
+                worker_active = self._worker.isRunning()
+            except RuntimeError:
+                worker_active = False
 
         if worker_active or self._action_in_progress:
-             reply = QMessageBox.question(self, "Operation in Progress", "A background operation is running.\nAborting might leave the system inconsistent.\n\nAbort and exit?", QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
-             if reply == QMessageBox.StandardButton.No: event.ignore(); return
-             else: print("WARN: Aborting running worker on exit (may not stop immediately).")
+            reply = QMessageBox.question(
+                self,
+                "Operation in Progress",
+                "A background operation is running.\n"
+                "Aborting might leave the system inconsistent.\n\n"
+                "Abort and exit?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.No:
+                event.ignore()
+                return
+            else:
+                print("WARN: Aborting running worker on exit (may not stop immediately).")
 
-        # Ask about stopping daemon
-        msg_box = QMessageBox(self); msg_box.setWindowTitle(f"Quit {self.APP_NAME}?"); msg_box.setText(f"Do you want to stop the {self.APP_NAME} background process (daemon)?")
-        msg_box.setInformativeText("The Daemon Process will stop automatically if you quit!")
-        msg_box.setIcon(QMessageBox.Icon.Question)
-        stop_daemon_button = msg_box.addButton("Stop Daemon and Quit", QMessageBox.ButtonRole.AcceptRole)
-        #keep_daemon_button = msg_box.addButton("Quit Only (Leave Daemon Running)", QMessageBox.ButtonRole.DestructiveRole) #not needed anymore
-        cancel_button = msg_box.addButton(QMessageBox.StandardButton.Cancel); msg_box.setDefaultButton(cancel_button)
-        msg_box.exec()
-        clicked_button = msg_box.clickedButton()
+        # Simple exit confirmation
+        reply = QMessageBox.question(
+            self,
+            f"Quit {self.APP_NAME}?",
+            "Are you sure you want to quit?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
 
-        if clicked_button == stop_daemon_button:
-            print("User chose to stop daemon and quit."); self._execute_stop_daemon(); event.accept()
-        #elif clicked_button == keep_daemon_button:
-        #    print("User chose to quit GUI only."); event.accept()
+        if reply == QMessageBox.StandardButton.Yes:
+            print("User confirmed quit.")
+            event.accept()
         else:
-            print("User cancelled quit operation."); event.ignore()
+            print("User cancelled quit.")
+            event.ignore()
+
+    @Slot()
+    def _shutdown_daemon_action(self):
+        """Handle request to shutdown the daemon (without closing the GUI)."""
+        # Refuse to shutdown in pipe mode - daemon is owned by this GUI session
+        if self.zfs_client.owns_daemon:
+            self._show_info_message(
+                "Shutdown Not Available",
+                "The daemon is running in pipe mode and is managed by this GUI session.\n\n"
+                "It will shut down automatically when you exit the application."
+            )
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Shutdown Daemon",
+            "This will shut down the background ZFS daemon service.\n\n"
+            "If other clients (like the WebUI) are using this daemon, they will also be disconnected.\n\n"
+            "Are you sure you want to proceed?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            self._update_status_bar("Shutting down daemon...")
+            try:
+                success, msg = self.zfs_client.shutdown_daemon()
+                if success:
+                    self._show_info_message("Daemon Shutdown", "Daemon shutdown command sent successfully.")
+                else:
+                    self._show_warning_message("Shutdown Warning", f"Could not cleanly shutdown daemon:\n{msg}")
+            except Exception as e:
+                self._show_error_message("Shutdown Error", f"Error during shutdown request:\n{e}")
+
 
 # --- END OF FILE src/main_window.py ---

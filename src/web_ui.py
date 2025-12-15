@@ -542,6 +542,54 @@ def get_pool_iostat_verbose(pool_name):
         return jsonify(status="error", error=str(e)), 500
 
 
+@app.route('/api/shutdown_daemon', methods=['POST'])
+@login_required
+def shutdown_daemon():
+    """Dedicated endpoint to shutdown the daemon with proper status messages."""
+    from paths import IS_DOCKER
+    
+    zfs_client = _get_zfs_client()
+    
+    # Refuse in Docker mode - return info, not error
+    if IS_DOCKER:
+        return jsonify(
+            status="info",
+            title="Shutdown Not Available",
+            message="The daemon is running inside a Docker container and cannot be shutdown from the WebUI.\n\nUse 'docker stop' to stop the container."
+        ), 200
+    
+    # Refuse in pipe mode - return info, not error
+    if zfs_client.owns_daemon:
+        return jsonify(
+            status="info",
+            title="Shutdown Not Available",
+            message="The daemon is running in pipe mode and is managed by this WebUI session.\n\nIt will shut down automatically when the WebUI process exits."
+        ), 200
+    
+    # Send shutdown command
+    try:
+        success, msg = zfs_client.shutdown_daemon()
+        if success:
+            return jsonify(
+                status="success",
+                title="Daemon Shutdown",
+                message="Daemon shutdown command sent successfully.\n\nThe background service will stop shortly."
+            ), 200
+        else:
+            return jsonify(
+                status="error",
+                title="Shutdown Failed",
+                message=f"Could not shutdown daemon:\n{msg}"
+            ), 500
+    except Exception as e:
+        app.logger.exception(f"Error sending shutdown command: {e}")
+        return jsonify(
+            status="error",
+            title="Shutdown Error",
+            message=f"Error during shutdown request:\n{e}"
+        ), 500
+
+
 @app.route('/api/action/<action_name>', methods=['POST'])
 @login_required
 def execute_action(action_name):
