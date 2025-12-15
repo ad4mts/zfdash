@@ -117,24 +117,32 @@ if __name__ == "__main__":
         "   or: %(prog)s --daemon --uid UID --gid GID [--listen-socket [PATH]]\n"
     )
 
+    # Dynamic program name for help examples
+    if IS_FROZEN:
+        prog_name = os.path.basename(sys.argv[0])
+        prog_name_root = prog_name
+    else:
+        prog_name = "uv run src/main.py"
+        prog_name_root = "python3 src/main.py"
+
     parser = argparse.ArgumentParser(
         usage=usage_str,
         description="ZfDash ZFS Manager",
         formatter_class=RawDefaultsHelpFormatter,
         epilog=(
             "Examples:\n"
-            "  Run GUI with pipe-mode daemon (default, daemon exits with GUI):\n"
-            "    python3 src/main.py\n\n"
-            "  Run Web UI with persistent socket daemon (recommended):\n"
-            "    python3 src/main.py --web --socket\n\n"
-            "  Connect to existing socket daemon (error if not running):\n"
-            "    python3 src/main.py --web --connect-socket\n\n"
-            "  Launch daemon in background and exit:\n"
-            "    python3 src/main.py --launch-daemon\n\n"
-            "  Stop a running socket daemon:\n"
-            "    python3 src/main.py --stop-daemon\n\n"
-            "  Start daemon manually (run as root or with privilege escalation):\n"
-            "    sudo python3 src/main.py --daemon --uid $(id -u) --gid $(id -g) --listen-socket\n"
+            f"  Run GUI with pipe-mode daemon (default, daemon exits with GUI):\n"
+            f"    {prog_name}\n\n"
+            f"  Run Web UI with persistent socket daemon (recommended):\n"
+            f"    {prog_name} --web --socket\n\n"
+            f"  Connect to existing socket daemon (error if not running):\n"
+            f"    {prog_name} --web --connect-socket\n\n"
+            f"  Launch daemon in background and exit:\n"
+            f"    {prog_name} --launch-daemon\n\n"
+            f"  Stop a running socket daemon:\n"
+            f"    {prog_name} --stop-daemon\n\n"
+            f"  Start daemon manually (run as root or with privilege escalation):\n"
+            f"    sudo {prog_name_root} --daemon --uid $(id -u) --gid $(id -g) --listen-socket\n"
         ),
     )
 
