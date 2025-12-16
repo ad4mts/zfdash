@@ -181,25 +181,37 @@ class TCPServerTransport:
         """
         Setup TLS context with self-signed certificate.
         
+        Uses tls_manager which tries cryptography library first,
+        then falls back to openssl CLI if available.
+        
         Returns:
-            True if TLS setup succeeded, False if cryptography not installed.
+            True if TLS setup succeeded, False otherwise.
         """
         global TLS_AVAILABLE
         
-        # Lazy import of tls_manager
+        # Import tls_manager - should always succeed as it's stdlib-compatible now
         try:
             from tls_manager import ensure_server_certificate
-            TLS_AVAILABLE = True
-        except ImportError:
+        except ImportError as e:
+            log_error("TCP_SERVER", f"Cannot import tls_manager: {e}")
             TLS_AVAILABLE = False
             return False
         
         from paths import PERSISTENT_DATA_DIR
         
         cert_dir = Path(PERSISTENT_DATA_DIR) / 'tls'
-        cert_dir.mkdir(parents=True, exist_ok=True)
         
-        cert_path, key_path = ensure_server_certificate(cert_dir)
+        try:
+            cert_path, key_path = ensure_server_certificate(cert_dir)
+        except RuntimeError as e:
+            # Neither cryptography nor openssl CLI available
+            log_error("TCP_SERVER", f"Cannot generate TLS certificate: {e}")
+            TLS_AVAILABLE = False
+            return False
+        except Exception as e:
+            log_error("TCP_SERVER", f"Unexpected error setting up TLS: {e}")
+            TLS_AVAILABLE = False
+            return False
         
         # Create SSL context
         self.ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -208,6 +220,7 @@ class TCPServerTransport:
             keyfile=str(key_path)
         )
         
+        TLS_AVAILABLE = True
         log_debug("TCP_SERVER", f"TLS enabled with certificate: {cert_path}")
         return True
     

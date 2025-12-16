@@ -19,6 +19,11 @@ from ipc_tcp_client import connect_to_agent, TlsNegotiationError
 from ipc_tcp_auth import AuthError
 from zfs_manager import ZfsManagerClient
 
+# TLS certificate trust management
+from tls_manager import remove_trusted_certificate
+from paths import USER_CONFIG_DIR
+from pathlib import Path
+
 # Debug logging for verbose messages
 from debug_logging import log_debug, log_info, log_error, log_warning, log_critical
 
@@ -136,6 +141,13 @@ class ControlCenterManager:
                 conn.client.close()
             except Exception as e:
                 print(f"CC_MANAGER: Error closing connection during removal: {e}", file=sys.stderr)
+        
+        # Clear trusted certificate for this host:port (allows re-adding after cert change)
+        try:
+            if remove_trusted_certificate(Path(USER_CONFIG_DIR), conn.host, conn.port):
+                log_debug("CC_MANAGER", f"Cleared trusted certificate for {conn.host}:{conn.port}")
+        except Exception as e:
+            log_debug("CC_MANAGER", f"Could not clear trusted certificate: {e}")
         
         # Clear active connection if this was it
         if self.active_connection == alias:
