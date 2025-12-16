@@ -1,8 +1,24 @@
 /* --- Modal Styles --- */
 
-.modal-dialog { max-width: 600px; }
-.modal-dialog.modal-lg { max-width: 800px; }
-.modal-dialog.modal-xl { max-width: 1140px; }
+/* Secondary modals need higher z-index to stack over actionModal */
+#inputModal,
+#confirmModal,
+#errorModal {
+    z-index: 1060;
+    /* Higher than Bootstrap's default modal z-index (1055) */
+}
+
+.modal-dialog {
+    max-width: 600px;
+}
+
+.modal-dialog.modal-lg {
+    max-width: 800px;
+}
+
+.modal-dialog.modal-xl {
+    max-width: 1140px;
+}
 
 .modal-content {
     border: none;
@@ -29,10 +45,12 @@
     transition: opacity 0.2s ease;
 }
 
-.modal-header .btn-close:hover { opacity: 1; }
+.modal-header .btn-close:hover {
+    opacity: 1;
+}
 
-.modal-body { 
-    max-height: 70vh; 
+.modal-body {
+    max-height: 70vh;
     overflow-y: auto;
     padding: 1.5rem;
 }
@@ -50,29 +68,57 @@
     transition: all 0.2s ease;
 }
 
-.modal-footer .btn:hover { transform: translateY(-1px); }
+.modal-footer .btn:hover {
+    transform: translateY(-1px);
+}
 
 /* --- Create Pool/Add VDEV Specific Modal Styling --- */
-#pool-available-devices, #pool-vdev-config .device-list-in-vdev { font-size: 0.85rem; }
-#pool-available-devices .list-group-item, #pool-vdev-list .list-group-item { padding: 0.3rem 0.6rem; cursor: pointer; }
-#pool-vdev-list .list-group-item { border: 1px solid #eee; background-color: #f8f9fa; margin-bottom: 0.25rem; }
-#pool-vdev-list .list-group-item .d-flex { padding-bottom: 0.2rem; margin-bottom: 0.2rem; border-bottom: 1px solid #eee; }
-#pool-vdev-list .pool-vdev-device-item { background-color: var(--app-pane-bg); border: none; padding-left: 0.8rem; margin-bottom: 1px; }
-
-#pool-available-devices .pool-device-item.active, 
-#pool-vdev-list .pool-vdev-item.active, 
-#pool-vdev-list .pool-vdev-device-item.active { 
-    background-color: var(--app-selected-bg); 
-    color: var(--app-selected-text); 
-    border-color: var(--app-primary-color); 
+#pool-available-devices,
+#pool-vdev-config .device-list-in-vdev {
+    font-size: 0.85rem;
 }
 
-#pool-available-devices .pool-device-item:not(.active):hover, 
-#pool-vdev-list .pool-vdev-device-item:not(.active):hover { 
-    background-color: var(--app-hover-bg); 
+#pool-available-devices .list-group-item,
+#pool-vdev-list .list-group-item {
+    padding: 0.3rem 0.6rem;
+    cursor: pointer;
 }
 
-#pool-vdev-list .pool-vdev-item.active > .d-flex { font-weight: bold; }
+#pool-vdev-list .list-group-item {
+    border: 1px solid #eee;
+    background-color: #f8f9fa;
+    margin-bottom: 0.25rem;
+}
+
+#pool-vdev-list .list-group-item .d-flex {
+    padding-bottom: 0.2rem;
+    margin-bottom: 0.2rem;
+    border-bottom: 1px solid #eee;
+}
+
+#pool-vdev-list .pool-vdev-device-item {
+    background-color: var(--app-pane-bg);
+    border: none;
+    padding-left: 0.8rem;
+    margin-bottom: 1px;
+}
+
+#pool-available-devices .pool-device-item.active,
+#pool-vdev-list .pool-vdev-item.active,
+#pool-vdev-list .pool-vdev-device-item.active {
+    background-color: var(--app-selected-bg);
+    color: var(--app-selected-text);
+    border-color: var(--app-primary-color);
+}
+
+#pool-available-devices .pool-device-item:not(.active):hover,
+#pool-vdev-list .pool-vdev-device-item:not(.active):hover {
+    background-color: var(--app-hover-bg);
+}
+
+#pool-vdev-list .pool-vdev-item.active>.d-flex {
+    font-weight: bold;
+}
 
 /* Available Devices List */
 #pool-available-devices .pool-device-item:hover {
@@ -96,12 +142,12 @@
     margin-bottom: 0.5rem;
 }
 
-#pool-vdev-list .pool-vdev-item > div:first-child {
+#pool-vdev-list .pool-vdev-item>div:first-child {
     padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #dee2e6;
 }
 
-#pool-vdev-list .pool-vdev-item:hover > div:first-child {
+#pool-vdev-list .pool-vdev-item:hover>div:first-child {
     background-color: #f8f9fa;
     cursor: pointer;
 }
@@ -111,7 +157,7 @@
     border-color: var(--app-primary-color);
 }
 
-#pool-vdev-list .pool-vdev-item.active > div:first-child {
+#pool-vdev-list .pool-vdev-item.active>div:first-child {
     background-color: #d6d4fa;
     color: #000;
     font-weight: 600;
@@ -151,11 +197,11 @@
 }
 
 #pool-vdev-list .pool-vdev-device-item {
-     transition: background-color 0.15s ease-in-out;
-     border: 1px solid transparent;
-     margin-bottom: 2px;
-     padding: 0.3rem 0.6rem;
-     border-radius: 0.2rem;
+    transition: background-color 0.15s ease-in-out;
+    border: 1px solid transparent;
+    margin-bottom: 2px;
+    padding: 0.3rem 0.6rem;
+    border-radius: 0.2rem;
 }
 
 #pool-vdev-list .pool-vdev-device-item:hover {
@@ -188,4 +234,6 @@
     color: #a01324;
 }
 
-#pool-vdev-list .pool-vdev-item .remove-vdev-btn i { vertical-align: -0.1em; }
+#pool-vdev-list .pool-vdev-item .remove-vdev-btn i {
+    vertical-align: -0.1em;
+}

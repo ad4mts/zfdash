@@ -410,6 +410,64 @@ async function fetchAndRenderData() {
 }
 
 /**
+ * Update the connection indicator in the navbar.
+ * Fetches current connection status from Control Center API.
+ */
+async function updateConnectionIndicator() {
+    const iconEl = document.getElementById('connection-status-icon');
+    const textEl = document.getElementById('connection-status-text');
+    const detailsEl = document.getElementById('connection-details');
+
+    if (!iconEl || !textEl) return;
+
+    try {
+        const response = await fetch('/api/cc/list');
+        if (!response.ok) return;
+
+        const data = await response.json();
+        if (!data.success) return;
+
+        const isLocal = data.current_mode === 'local';
+        const activeAlias = data.active_alias;
+
+        // Find the active agent details if remote
+        let activeAgent = null;
+        if (!isLocal && activeAlias && data.connections) {
+            activeAgent = data.connections.find(c => c.alias === activeAlias && c.active);
+        }
+
+        if (isLocal) {
+            iconEl.innerHTML = '<i class="bi bi-pc-display text-success"></i>';
+            textEl.textContent = 'Local';
+            textEl.className = 'small text-success';
+            if (detailsEl) {
+                detailsEl.innerHTML = '<i class="bi bi-check-circle me-1 text-success"></i> Connected to local daemon';
+            }
+        } else if (activeAgent) {
+            const tlsIcon = activeAgent.tls_active
+                ? '<i class="bi bi-shield-lock-fill text-info ms-1" title="TLS encrypted"></i>'
+                : '';
+            iconEl.innerHTML = '<i class="bi bi-hdd-network text-info"></i>';
+            textEl.innerHTML = `${activeAgent.alias}${tlsIcon}`;
+            textEl.className = 'small text-info';
+            if (detailsEl) {
+                const tlsStatus = activeAgent.tls_active ? '🔒 Encrypted' : '⚠️ Not encrypted';
+                detailsEl.innerHTML = `
+                    <i class="bi bi-cloud me-1 text-info"></i> Remote: ${activeAgent.host}:${activeAgent.port}<br>
+                    <small class="text-muted">${tlsStatus}</small>
+                `;
+            }
+        } else {
+            iconEl.innerHTML = '<i class="bi bi-question-circle text-warning"></i>';
+            textEl.textContent = 'Unknown';
+            textEl.className = 'small text-warning';
+        }
+    } catch (error) {
+        console.warn('Failed to update connection indicator:', error);
+    }
+}
+
+/**
  * Handle shutdown daemon action
  * Uses dedicated endpoint with proper status messages.
  */
@@ -578,6 +636,9 @@ document.addEventListener('DOMContentLoaded', () => {
         // If user is authenticated, this will call fetchAndRenderData() via the 
         // callback we set up with setAuthCallbacks() above
         checkAuthStatus(fetchAndRenderData);
+
+        // STEP 9: Update connection indicator (shows local/remote in navbar)
+        updateConnectionIndicator();
     })();
 
     // Refresh button

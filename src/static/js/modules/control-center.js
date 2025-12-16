@@ -5,6 +5,8 @@
  */
 
 import * as api from './control-center-api.js';
+import { showSuccess, showError } from './notifications.js';
+import { showConfirmModal } from './ui.js';
 
 // State
 let agents = [];
@@ -101,9 +103,13 @@ async function handleAddAgent(e) {
  * Handle remove agent
  */
 async function handleRemoveAgent(alias) {
-    if (!confirm(`Remove agent '${alias}'?`)) {
-        return;
-    }
+    const confirmed = await showConfirmModal(
+        "Remove Agent",
+        `Are you sure you want to remove agent '<strong>${alias}</strong>'?`,
+        "Remove",
+        "btn-danger"
+    );
+    if (!confirmed) return;
 
     try {
         const result = await api.removeAgent(alias);
@@ -571,13 +577,6 @@ function updateModeIndicator() {
     }
 }
 
-/**
- * Show success message
- */
-function showSuccess(message) {
-    // Simple alert for now, can be enhanced with toast notifications
-    alert(message);
-}
 
 /**
  * Show connecting status in the password modal
@@ -636,12 +635,6 @@ function resetSubmitButton() {
     }
 }
 
-/**
- * Show error message
- */
-function showError(message) {
-    alert('Error: ' + message);
-}
 
 /**
  * Escape HTML to prevent XSS

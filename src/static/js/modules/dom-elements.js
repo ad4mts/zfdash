@@ -87,7 +87,15 @@ const dom = {
     confirmModalBody: null,
     confirmModalLabel: null,
     confirmModalFooter: null,
-    confirmModalConfirmBtn: null
+    confirmModalConfirmBtn: null,
+
+    // Input Modal Elements (dedicated for text input prompts - can stack over #actionModal)
+    inputModalElement: null,
+    inputModal: null,
+    inputModalBody: null,
+    inputModalLabel: null,
+    inputModalFooter: null,
+    inputModalConfirmBtn: null
 };
 
 /**
@@ -161,6 +169,14 @@ export function initDomElements() {
     dom.confirmModalLabel = document.getElementById('confirmModalLabel');
     dom.confirmModalFooter = document.getElementById('confirmModalFooter');
     dom.confirmModalConfirmBtn = document.getElementById('confirmModalConfirmBtn');
+
+    // --- Input Modal Elements (dedicated for text input prompts - can stack over #actionModal) ---
+    dom.inputModalElement = document.getElementById('inputModal');
+    dom.inputModal = dom.inputModalElement ? new bootstrap.Modal(dom.inputModalElement) : null;
+    dom.inputModalBody = document.getElementById('inputModalBody');
+    dom.inputModalLabel = document.getElementById('inputModalLabel');
+    dom.inputModalFooter = document.getElementById('inputModalFooter');
+    dom.inputModalConfirmBtn = document.getElementById('inputModalConfirmBtn');
 }
 
 /**

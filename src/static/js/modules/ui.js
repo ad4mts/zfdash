@@ -26,6 +26,84 @@ document.addEventListener('hide.bs.modal', (event) => {
 }, true); // Capture phase for earlier execution
 
 /**
+ * Create a dynamically stacked modal that can overlay other modals.
+ * 
+ * This creates a new modal DOM element on the fly, allowing unlimited modal stacking.
+ * The modal is automatically cleaned up (removed from DOM) when closed.
+ * 
+ * @param {object} config - Modal configuration
+ * @param {string} config.title - Modal title
+ * @param {string} config.bodyHtml - Modal body HTML content
+ * @param {string} config.footerHtml - Modal footer HTML content
+ * @param {number} config.zIndex - Z-index for stacking (default: auto-calculated)
+ * @param {string} config.size - Modal size: 'sm', 'lg', 'xl' (default: normal)
+ * @returns {object} - { element, modal, show(), hide() }
+ */
+export function createStackableModal(config) {
+    const { title, bodyHtml, footerHtml, zIndex, size } = config;
+
+    // Create unique ID
+    const modalId = `stackable-modal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+
+    // Auto-calculate z-index if not provided (based on existing open modals)
+    const existingModals = document.querySelectorAll('.modal.show');
+    const calculatedZIndex = zIndex ?? (1055 + ((existingModals.length + 1) * 10));
+
+    // Determine size class
+    const sizeClass = size ? `modal-${size}` : '';
+
+    // Create modal element
+    const modalEl = document.createElement('div');
+    modalEl.id = modalId;
+    modalEl.className = 'modal fade';
+    modalEl.tabIndex = -1;
+    modalEl.setAttribute('aria-labelledby', `${modalId}-label`);
+    modalEl.setAttribute('aria-hidden', 'true');
+    modalEl.innerHTML = `
+        <div class="modal-dialog modal-dialog-centered ${sizeClass}">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="${modalId}-label">${title}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">${bodyHtml}</div>
+                <div class="modal-footer">${footerHtml}</div>
+            </div>
+        </div>
+    `;
+
+    // Append to body
+    document.body.appendChild(modalEl);
+
+    // Create Bootstrap modal instance
+    const bsModal = new bootstrap.Modal(modalEl);
+
+    // Set up z-index and backdrop handling when shown
+    modalEl.addEventListener('shown.bs.modal', () => {
+        modalEl.style.zIndex = calculatedZIndex.toString();
+
+        // Find and raise the backdrop z-index
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        if (backdrops.length > 0) {
+            backdrops[backdrops.length - 1].style.zIndex = (calculatedZIndex - 1).toString();
+        }
+    }, { once: true });
+
+    // Clean up on close: dispose modal and remove element from DOM
+    modalEl.addEventListener('hidden.bs.modal', () => {
+        bsModal.dispose();
+        modalEl.remove();
+    }, { once: true });
+
+    return {
+        element: modalEl,
+        modal: bsModal,
+        show: () => bsModal.show(),
+        hide: () => bsModal.hide()
+    };
+}
+
+/**
  * Set loading state for the application
  * @param {boolean} isLoading - Whether app is loading
  */
@@ -211,6 +289,15 @@ export function showErrorAlert(title, message) {
 
         // Show the error modal
         dom.errorModal.show();
+
+        // Fix z-index for proper stacking when shown over actionModal
+        dom.errorModalElement.addEventListener('shown.bs.modal', () => {
+            dom.errorModalElement.style.zIndex = '1060';
+            const backdrops = document.querySelectorAll('.modal-backdrop');
+            if (backdrops.length > 1) {
+                backdrops[backdrops.length - 1].style.zIndex = '1059';
+            }
+        }, { once: true });
     } catch (e) {
         console.error('showErrorAlert failed:', e);
         console.error(`${titleStr}: ${msgStr}`);
@@ -284,69 +371,58 @@ export function getActiveTabId() {
 
 /**
  * Show a confirmation modal and wait for user response.
- * 
- * IMPORTANT: This uses a DEDICATED #confirmModal element, NOT #actionModal.
- * This prevents conflicts when confirmations are needed during other modal operations.
- * DO NOT change this to use #actionModal - it will cause modal state machine conflicts!
- * 
- * ROOT CAUSE FIX: The Promise only resolves AFTER the modal animation fully completes
- * (on 'hidden.bs.modal' event), not on button click. This ensures sequential showConfirmModal
- * calls work correctly by waiting for animation to finish before the next modal opens.
+ * Uses a dynamically created stackable modal to allow proper stacking over other modals.
  * 
  * @param {string} title - Modal title
  * @param {string} htmlMessage - Message body (HTML allowed)
  * @param {string} confirmBtnText - Text for confirm button
  * @param {string} confirmBtnClass - Class for confirm button (e.g., 'btn-danger', 'btn-primary')
+ * @param {number} zIndex - Optional z-index for stacking (auto-calculated if not provided)
  * @returns {Promise<boolean>} - Resolves to true if confirmed, false otherwise.
  */
-export function showConfirmModal(title, htmlMessage, confirmBtnText = "Confirm", confirmBtnClass = "btn-primary") {
+export function showConfirmModal(title, htmlMessage, confirmBtnText = "Confirm", confirmBtnClass = "btn-primary", zIndex = null) {
     return new Promise((resolve) => {
-        // Check if confirm modal elements exist
-        if (!dom.confirmModal || !dom.confirmModalBody || !dom.confirmModalLabel || !dom.confirmModalConfirmBtn) {
-            console.error('Confirm modal elements not found! Falling back to window.confirm.');
-            resolve(window.confirm(title + '\n\n' + htmlMessage.replace(/<[^>]*>/g, '')));
-            return;
-        }
-
         // Track whether user confirmed (default: false for cancel/dismiss)
         let userConfirmed = false;
 
-        // Set modal content
-        dom.confirmModalLabel.textContent = title;
-        dom.confirmModalBody.innerHTML = htmlMessage;
+        // Create footer with cancel and confirm buttons
+        const footerHtml = `
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn ${confirmBtnClass}" id="stackableConfirmBtn">${confirmBtnText}</button>
+        `;
 
-        // Update confirm button text and class
-        dom.confirmModalConfirmBtn.textContent = confirmBtnText;
-        dom.confirmModalConfirmBtn.className = `btn ${confirmBtnClass}`;
+        // Create dynamic stackable modal
+        const stackable = createStackableModal({
+            title,
+            bodyHtml: htmlMessage,
+            footerHtml,
+            zIndex
+        });
 
-        // Confirm button handler - just record choice and close modal
+        const confirmBtn = stackable.element.querySelector('#stackableConfirmBtn');
+
+        // Confirm button handler
         const handleConfirm = () => {
             userConfirmed = true;
-            dom.confirmModal.hide(); // This triggers hidden.bs.modal
+            stackable.hide();
         };
 
         // Hidden event handler - resolve Promise AFTER animation completes
-        const handleHidden = () => {
-            // Cleanup listeners
-            dom.confirmModalConfirmBtn.removeEventListener('click', handleConfirm);
-            dom.confirmModalElement.removeEventListener('hidden.bs.modal', handleHidden);
-
-            // Resolve with result AFTER modal is fully hidden
+        stackable.element.addEventListener('hidden.bs.modal', () => {
             resolve(userConfirmed);
-        };
+        }, { once: true });
 
-        // Attach listeners
-        dom.confirmModalConfirmBtn.addEventListener('click', handleConfirm);
-        dom.confirmModalElement.addEventListener('hidden.bs.modal', handleHidden, { once: true });
+        // Attach listener
+        if (confirmBtn) confirmBtn.addEventListener('click', handleConfirm);
 
         // Show the modal
-        dom.confirmModal.show();
+        stackable.show();
     });
 }
 
 /**
  * Show a modal with three choices: Option A, Option B, and Cancel.
- * Uses the action modal to allow custom footer with three buttons.
+ * Uses a dynamically created stackable modal to allow proper stacking over other modals.
  * 
  * @param {string} title - Modal title
  * @param {string} htmlMessage - Message body (HTML allowed)
@@ -354,69 +430,60 @@ export function showConfirmModal(title, htmlMessage, confirmBtnText = "Confirm",
  * @param {string} optionAClass - Class for first option button (e.g., 'btn-warning')
  * @param {string} optionBText - Text for second option button
  * @param {string} optionBClass - Class for second option button (e.g., 'btn-danger')
+ * @param {number} zIndex - Optional z-index for stacking (auto-calculated if not provided)
  * @returns {Promise<string|null>} - Resolves to 'optionA', 'optionB', or null if cancelled
  */
-export function showTripleChoiceModal(title, htmlMessage, optionAText, optionAClass, optionBText, optionBClass) {
+export function showTripleChoiceModal(title, htmlMessage, optionAText, optionAClass, optionBText, optionBClass, zIndex = null) {
     return new Promise((resolve) => {
-        // Check if action modal elements exist
-        if (!dom.actionModal || !dom.actionModalBody || !dom.actionModalLabel || !dom.actionModalFooter) {
-            console.error('Action modal elements not found!');
-            resolve(null);
-            return;
-        }
-
         // Track user choice (null = cancelled)
         let userChoice = null;
 
-        // Set modal content
-        dom.actionModalLabel.textContent = title;
-        dom.actionModalBody.innerHTML = htmlMessage;
-
-        // Create three-button footer
-        dom.actionModalFooter.innerHTML = `
+        // Create footer with three buttons
+        const footerHtml = `
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
             <button type="button" class="btn ${optionBClass}" id="tripleChoiceBtnB">${optionBText}</button>
             <button type="button" class="btn ${optionAClass}" id="tripleChoiceBtnA">${optionAText}</button>
         `;
 
-        const btnA = document.getElementById('tripleChoiceBtnA');
-        const btnB = document.getElementById('tripleChoiceBtnB');
+        // Create dynamic stackable modal
+        const stackable = createStackableModal({
+            title,
+            bodyHtml: htmlMessage,
+            footerHtml,
+            zIndex
+        });
+
+        const btnA = stackable.element.querySelector('#tripleChoiceBtnA');
+        const btnB = stackable.element.querySelector('#tripleChoiceBtnB');
 
         // Button handlers
         const handleOptionA = () => {
             userChoice = 'optionA';
-            dom.actionModal.hide();
+            stackable.hide();
         };
 
         const handleOptionB = () => {
             userChoice = 'optionB';
-            dom.actionModal.hide();
+            stackable.hide();
         };
 
         // Hidden event handler - resolve Promise AFTER animation completes
-        const handleHidden = () => {
-            // Cleanup listeners
-            if (btnA) btnA.removeEventListener('click', handleOptionA);
-            if (btnB) btnB.removeEventListener('click', handleOptionB);
-            dom.modalElement.removeEventListener('hidden.bs.modal', handleHidden);
-
-            // Resolve with result AFTER modal is fully hidden
+        stackable.element.addEventListener('hidden.bs.modal', () => {
             resolve(userChoice);
-        };
+        }, { once: true });
 
         // Attach listeners
         if (btnA) btnA.addEventListener('click', handleOptionA);
         if (btnB) btnB.addEventListener('click', handleOptionB);
-        dom.modalElement.addEventListener('hidden.bs.modal', handleHidden, { once: true });
 
         // Show the modal
-        dom.actionModal.show();
+        stackable.show();
     });
 }
 
 /**
  * Show an input modal that replaces native prompt() dialogs.
- * Uses the action modal with an input field.
+ * Uses a dynamically created stackable modal to allow proper stacking over other modals.
  * 
  * @param {string} title - Modal title
  * @param {string} htmlMessage - Message/label HTML above the input
@@ -424,44 +491,45 @@ export function showTripleChoiceModal(title, htmlMessage, optionAText, optionACl
  * @param {string} placeholder - Placeholder text for input field
  * @param {string} confirmBtnText - Text for confirm button
  * @param {string} confirmBtnClass - Class for confirm button
+ * @param {number} zIndex - Optional z-index for stacking (auto-calculated if not provided)
  * @returns {Promise<string|null>} - Resolves to input value (trimmed) or null if cancelled
  */
-export function showInputModal(title, htmlMessage, defaultValue = '', placeholder = '', confirmBtnText = 'OK', confirmBtnClass = 'btn-primary') {
+export function showInputModal(title, htmlMessage, defaultValue = '', placeholder = '', confirmBtnText = 'OK', confirmBtnClass = 'btn-primary', zIndex = null) {
     return new Promise((resolve) => {
-        // Check if action modal elements exist
-        if (!dom.actionModal || !dom.actionModalBody || !dom.actionModalLabel || !dom.actionModalFooter) {
-            console.error('Action modal elements not found! Falling back to window.prompt.');
-            resolve(window.prompt(htmlMessage.replace(/<[^>]*>/g, ''), defaultValue));
-            return;
-        }
-
         // Track user input (null = cancelled)
         let userInput = null;
 
-        // Set modal content with input field
-        dom.actionModalLabel.textContent = title;
-        dom.actionModalBody.innerHTML = `
+        // Create body with input field
+        const bodyHtml = `
             <div class="mb-3">
                 ${htmlMessage}
             </div>
-            <input type="text" class="form-control" id="inputModalField" 
+            <input type="text" class="form-control" id="stackableInputField" 
                    value="${escapeHtmlForModal(defaultValue)}" 
                    placeholder="${escapeHtmlForModal(placeholder)}">
         `;
 
         // Create footer
-        dom.actionModalFooter.innerHTML = `
+        const footerHtml = `
             <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn ${confirmBtnClass}" id="inputModalConfirmBtn">${confirmBtnText}</button>
+            <button type="button" class="btn ${confirmBtnClass}" id="stackableInputConfirmBtn">${confirmBtnText}</button>
         `;
 
-        const inputField = document.getElementById('inputModalField');
-        const confirmBtn = document.getElementById('inputModalConfirmBtn');
+        // Create dynamic stackable modal
+        const stackable = createStackableModal({
+            title,
+            bodyHtml,
+            footerHtml,
+            zIndex
+        });
+
+        const inputField = stackable.element.querySelector('#stackableInputField');
+        const confirmBtn = stackable.element.querySelector('#stackableInputConfirmBtn');
 
         // Confirm button handler
         const handleConfirm = () => {
             userInput = inputField ? inputField.value.trim() : '';
-            dom.actionModal.hide();
+            stackable.hide();
         };
 
         // Handle Enter key in input field
@@ -473,26 +541,19 @@ export function showInputModal(title, htmlMessage, defaultValue = '', placeholde
         };
 
         // Hidden event handler - resolve Promise AFTER animation completes
-        const handleHidden = () => {
-            // Cleanup listeners
-            if (confirmBtn) confirmBtn.removeEventListener('click', handleConfirm);
-            if (inputField) inputField.removeEventListener('keydown', handleKeydown);
-            dom.modalElement.removeEventListener('hidden.bs.modal', handleHidden);
-
-            // Resolve with result AFTER modal is fully hidden
+        stackable.element.addEventListener('hidden.bs.modal', () => {
             resolve(userInput);
-        };
+        }, { once: true });
 
         // Attach listeners
         if (confirmBtn) confirmBtn.addEventListener('click', handleConfirm);
         if (inputField) inputField.addEventListener('keydown', handleKeydown);
-        dom.modalElement.addEventListener('hidden.bs.modal', handleHidden, { once: true });
 
-        // Show the modal and focus input
-        dom.actionModal.show();
+        // Show the modal
+        stackable.show();
 
         // Focus input after modal is shown
-        dom.modalElement.addEventListener('shown.bs.modal', () => {
+        stackable.element.addEventListener('shown.bs.modal', () => {
             if (inputField) {
                 inputField.focus();
                 inputField.select();
