@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Control Center - ZfDash Web UI</title>
+  <link rel="icon" type="image/png" href="/favicon.ico">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  <style>
+    .agent-card {
+      transition: all 0.2s ease;
+      border-left: 4px solid transparent;
+    }
+    .agent-card:hover {
+      box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,0.075);
+    }
+    .agent-card.connected {
+      border-left-color: #198754;
+    }
+    .agent-card.active {
+      border-left-color: #0d6efd;
+      background-color: #f8f9fa;
+    }
+    .status-badge {
+      min-width: 90px;
+    }
+  </style>
+</head>
+
+<body class="d-flex flex-column" style="height: 100vh;">
+
+  <!-- Navigation Bar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark flex-shrink-0">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="/">
+        <i class="bi bi-hdd-stack-fill"></i> ZfDash
+      </a>
+      <div class="ms-auto">
+        <a href="/" class="btn btn-sm btn-outline-light">
+          <i class="bi bi-arrow-left"></i> Back to Dashboard
+        </a>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="container-fluid flex-grow-1 overflow-auto py-4">
+    <div class="row mb-4">
+      <div class="col">
+        <h2><i class="bi bi-hdd-network me-2"></i>Control Center</h2>
+        <p class="text-muted">Manage connections to remote ZFS daemons across your network.</p>
+      </div>
+    </div>
+
+    <!-- Current Mode Indicator -->
+    <div class="row mb-3">
+      <div class="col">
+        <div class="alert alert-info d-flex align-items-center">
+          <i class="bi bi-info-circle me-2"></i>
+          <span>Current Mode: <strong id="current-mode-text">Local Daemon</strong></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Agent Form -->
+    <div class="row mb-4">
+      <div class="col">
+        <div class="card">
+          <div class="card-header bg-primary text-white">
+            <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>Add Remote Agent</h5>
+          </div>
+          <div class="card-body">
+            <form id="add-agent-form" class="row g-3">
+              <div class="col-md-3">
+                <label for="agent-alias" class="form-label">Alias</label>
+                <input type="text" class="form-control" id="agent-alias" placeholder="my-server" required>
+              </div>
+              <div class="col-md-4">
+                <label for="agent-host" class="form-label">Host</label>
+                <input type="text" class="form-control" id="agent-host" placeholder="192.168.1.100" required>
+              </div>
+              <div class="col-md-2">
+                <label for="agent-port" class="form-label">Port</label>
+                <input type="number" class="form-control" id="agent-port" value="5555" required>
+              </div>
+              <div class="col-md-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">
+                  <i class="bi bi-plus-lg"></i> Add Agent
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agents List -->
+    <div class="row">
+      <div class="col">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0"><i class="bi bi-server me-2"></i>Remote Agents</h5>
+          </div>
+          <div class="card-body">
+            <div id="agents-list">
+              <!-- Agent cards will be inserted here by JavaScript -->
+              <div class="text-center text-muted py-4">
+                <i class="bi bi-inbox display-1"></i>
+                <p class="mt-3">No remote agents configured yet.</p>
+                <p class="small">Add a remote agent above to get started.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Local Daemon Card (always shown) -->
+    <div class="row mt-3">
+      <div class="col">
+        <div class="card agent-card" id="local-daemon-card">
+          <div class="card-body">
+            <div class="row align-items-center">
+              <div class="col-md-4">
+                <h5 class="mb-1"><i class="bi bi-house-fill me-2"></i>Local Daemon</h5>
+                <small class="text-muted">Default connection</small>
+              </div>
+              <div class="col-md-4 text-center">
+                <span class="badge bg-success status-badge">Local</span>
+              </div>
+              <div class="col-md-4 text-end">
+                <button class="btn btn-primary btn-sm" id="switch-local-btn">
+                  <i class="bi bi-arrow-left-right"></i> Switch to Local
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Password Modal -->
+  <div class="modal fade" id="passwordModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-key me-2"></i>Enter Password
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>Enter the admin password for <strong id="password-agent-name"></strong>:</p>
+          <form id="password-form">
+            <div class="mb-3">
+              <label for="agent-password" class="form-label">Password</label>
+              <input type="password" class="form-control" id="agent-password" required autofocus>
+            </div>
+          </form>
+          <div id="password-error" class="alert alert-danger" style="display: none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="password-submit-btn">
+            Connect
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bootstrap Bundle -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Control Center App -->
+  <script type="module" src="{{ url_for('static', filename='js/modules/control-center.js') }}"></script>
+</body>
+
+</html>
