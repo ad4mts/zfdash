@@ -81,4 +81,13 @@ DEFAULT_AGENT_PORT = 5555      # Default TCP port for agent mode
 AUTH_TIMEOUT_SECONDS = 30      # Timeout for authentication handshake (seconds)
 NONCE_BYTES = 32               # Size of random nonce for challenge (bytes)
 
+# --- TLS Negotiation Protocol ---
+TCP_PROTOCOL_VERSION = 2       # Protocol version (2 = hello handshake)
+HELLO_TIMEOUT_SECONDS = 5      # Timeout for hello handshake (seconds)
+
+# TLS Error Codes (for structured error handling)
+TLS_ERROR_REQUIRED = "TLS_REQUIRED"              # Server requires TLS, client didn't request
+TLS_ERROR_UNAVAILABLE = "TLS_UNAVAILABLE"        # Client wants TLS, server doesn't have it
+TLS_ERROR_PROTOCOL_MISMATCH = "PROTOCOL_MISMATCH"  # Protocol version mismatch
+
 # --- END OF FILE constants.py ---

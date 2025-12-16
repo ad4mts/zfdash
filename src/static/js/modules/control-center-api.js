@@ -18,13 +18,14 @@ export async function listAgents() {
  * @param {string} alias - Agent alias
  * @param {string} host - Remote host
  * @param {number} port - Remote port
+ * @param {boolean} useTls - Whether to use TLS (default: true)
  * @returns {Promise<Object>} Response with success status
  */
-export async function addAgent(alias, host, port) {
+export async function addAgent(alias, host, port, useTls = true) {
     const response = await fetch('/api/cc/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alias, host, port })
+        body: JSON.stringify({ alias, host, port, use_tls: useTls })
     });
     return await response.json();
 }
@@ -92,5 +93,20 @@ export async function switchAgent(alias) {
  */
 export async function checkAgentHealth(alias) {
     const response = await fetch(`/api/cc/health/${alias}`);
+    return await response.json();
+}
+
+/**
+ * Update TLS preference for an agent
+ * @param {string} alias - Agent alias
+ * @param {boolean} useTls - New TLS preference
+ * @returns {Promise<Object>} Response with success status
+ */
+export async function updateTls(alias, useTls) {
+    const response = await fetch('/api/cc/update_tls', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias, use_tls: useTls })
+    });
     return await response.json();
 }

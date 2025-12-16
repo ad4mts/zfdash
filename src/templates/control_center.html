@@ -14,16 +14,20 @@
       transition: all 0.2s ease;
       border-left: 4px solid transparent;
     }
+
     .agent-card:hover {
-      box-shadow: 0 0.125rem 0.5rem rgba(0,0,0,0.075);
+      box-shadow: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.075);
     }
+
     .agent-card.connected {
       border-left-color: #198754;
     }
+
     .agent-card.active {
       border-left-color: #0d6efd;
       background-color: #f8f9fa;
     }
+
     .status-badge {
       min-width: 90px;
     }
@@ -78,7 +82,7 @@
                 <label for="agent-alias" class="form-label">Alias</label>
                 <input type="text" class="form-control" id="agent-alias" placeholder="my-server" required>
               </div>
-              <div class="col-md-4">
+              <div class="col-md-3">
                 <label for="agent-host" class="form-label">Host</label>
                 <input type="text" class="form-control" id="agent-host" placeholder="192.168.1.100" required>
               </div>
@@ -86,7 +90,15 @@
                 <label for="agent-port" class="form-label">Port</label>
                 <input type="number" class="form-control" id="agent-port" value="5555" required>
               </div>
-              <div class="col-md-3 d-flex align-items-end">
+              <div class="col-md-2 d-flex align-items-end">
+                <div class="form-check mb-2">
+                  <input type="checkbox" class="form-check-input" id="agent-use-tls" checked>
+                  <label class="form-check-label" for="agent-use-tls">
+                    <i class="bi bi-shield-lock"></i> Use TLS
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-2 d-flex align-items-end">
                 <button type="submit" class="btn btn-primary w-100">
                   <i class="bi bi-plus-lg"></i> Add Agent
                 </button>
@@ -161,6 +173,10 @@
               <input type="password" class="form-control" id="agent-password" required autofocus>
             </div>
           </form>
+          <div id="password-status" class="alert alert-info align-items-center" style="display: none;">
+            <span class="spinner-border spinner-border-sm me-2"></span>
+            Connecting to agent...
+          </div>
           <div id="password-error" class="alert alert-danger" style="display: none;"></div>
         </div>
         <div class="modal-footer">

@@ -72,6 +72,7 @@ async function handleAddAgent(e) {
     const alias = document.getElementById('agent-alias').value.trim();
     const host = document.getElementById('agent-host').value.trim();
     const port = parseInt(document.getElementById('agent-port').value);
+    const useTls = document.getElementById('agent-use-tls').checked;
 
     if (!alias || !host || !port) {
         showError('All fields are required');
@@ -79,11 +80,13 @@ async function handleAddAgent(e) {
     }
 
     try {
-        const result = await api.addAgent(alias, host, port);
+        const result = await api.addAgent(alias, host, port, useTls);
 
         if (result.success) {
             showSuccess(`Agent '${alias}' added successfully`);
             e.target.reset();
+            // Re-check the TLS checkbox after form reset (it defaults to checked)
+            document.getElementById('agent-use-tls').checked = true;
             await refreshAgentsList();
         } else {
             showError(result.error || 'Failed to add agent');
@@ -127,7 +130,7 @@ function handleConnectAgent(alias) {
         nameEl.textContent = alias;
     }
 
-    // Clear password field and error
+    // Clear password field, error, and status
     const passwordField = document.getElementById('agent-password');
     if (passwordField) {
         passwordField.value = '';
@@ -136,6 +139,13 @@ function handleConnectAgent(alias) {
     if (errorDiv) {
         errorDiv.style.display = 'none';
     }
+    const statusDiv = document.getElementById('password-status');
+    if (statusDiv) {
+        statusDiv.style.display = 'none';
+    }
+
+    // Reset submit button state
+    resetSubmitButton();
 
     if (passwordModal) {
         passwordModal.show();
@@ -155,6 +165,7 @@ function handleConnectAgent(alias) {
 async function handlePasswordSubmit() {
     const password = document.getElementById('agent-password').value;
     const errorDiv = document.getElementById('password-error');
+    const statusDiv = document.getElementById('password-status');
 
     if (!password) {
         errorDiv.textContent = 'Password is required';
@@ -166,8 +177,14 @@ async function handlePasswordSubmit() {
         return;
     }
 
+    // Show connecting status
+    showConnectingStatus();
+
     try {
         const result = await api.connectAgent(pendingConnectAlias, password);
+
+        // Hide connecting status
+        hideConnectingStatus();
 
         if (result.success) {
             if (passwordModal) {
@@ -176,13 +193,170 @@ async function handlePasswordSubmit() {
             showSuccess(result.message || 'Connected successfully');
             await refreshAgentsList();
         } else {
-            errorDiv.textContent = result.error || 'Authentication failed';
-            errorDiv.style.display = 'block';
+            const errorMsg = result.error || 'Authentication failed';
+
+            // Check for structured TLS error codes
+            if (result.tls_error_code === 'TLS_REQUIRED') {
+                // Server requires TLS but client didn't use it
+                errorDiv.innerHTML = `
+                    ${escapeHtml(errorMsg)}
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-info btn-sm" id="retry-tls-btn">
+                            <i class="bi bi-shield-lock"></i> Retry with TLS
+                        </button>
+                    </div>
+                `;
+                errorDiv.style.display = 'block';
+
+                document.getElementById('retry-tls-btn')?.addEventListener('click', async () => {
+                    await handleRetryWithTls(password);
+                });
+            } else if (result.tls_error_code === 'TLS_UNAVAILABLE') {
+                // Client wanted TLS but server doesn't support it
+                errorDiv.innerHTML = `
+                    ${escapeHtml(errorMsg)}
+                    <div class="mt-2">
+                        <button type="button" class="btn btn-warning btn-sm" id="retry-no-tls-btn">
+                            <i class="bi bi-shield-slash"></i> Retry without TLS
+                        </button>
+                    </div>
+                `;
+                errorDiv.style.display = 'block';
+
+                document.getElementById('retry-no-tls-btn')?.addEventListener('click', async () => {
+                    await handleRetryWithoutTls(password);
+                });
+            } else {
+                // Other error (auth failure, connection error, etc.)
+                errorDiv.textContent = errorMsg;
+                errorDiv.style.display = 'block';
+            }
         }
     } catch (error) {
         console.error('Error connecting to agent:', error);
+        hideConnectingStatus();
         errorDiv.textContent = 'Network error while connecting';
         errorDiv.style.display = 'block';
+    }
+}
+
+/**
+ * Handle retry connection without TLS (saves setting then reconnects)
+ */
+async function handleRetryWithoutTls(password) {
+    if (!pendingConnectAlias) return;
+
+    const errorDiv = document.getElementById('password-error');
+
+    // First, update the TLS setting to disabled (this saves permanently)
+    try {
+        await api.updateTls(pendingConnectAlias, false);
+    } catch (e) {
+        console.error('Failed to update TLS setting:', e);
+    }
+
+    // Show connecting status
+    showConnectingStatus();
+
+    try {
+        // Now connect (will use the updated TLS=false setting)
+        const result = await api.connectAgent(pendingConnectAlias, password);
+
+        // Hide connecting status
+        hideConnectingStatus();
+
+        if (result.success) {
+            if (passwordModal) {
+                passwordModal.hide();
+            }
+            showSuccess(result.message || 'Connected (TLS disabled)');
+            await refreshAgentsList();
+        } else {
+            errorDiv.textContent = result.error || 'Connection failed';
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error retrying connection:', error);
+        hideConnectingStatus();
+        errorDiv.textContent = 'Network error while retrying';
+        errorDiv.style.display = 'block';
+    }
+}
+
+/**
+ * Handle retry connection with TLS (saves setting then reconnects)
+ */
+async function handleRetryWithTls(password) {
+    if (!pendingConnectAlias) return;
+
+    const errorDiv = document.getElementById('password-error');
+
+    // First, update the TLS setting to enabled (this saves permanently)
+    try {
+        await api.updateTls(pendingConnectAlias, true);
+    } catch (e) {
+        console.error('Failed to update TLS setting:', e);
+    }
+
+    // Show connecting status
+    showConnectingStatus();
+
+    try {
+        // Now connect (will use the updated TLS=true setting)
+        const result = await api.connectAgent(pendingConnectAlias, password);
+
+        // Hide connecting status
+        hideConnectingStatus();
+
+        if (result.success) {
+            if (passwordModal) {
+                passwordModal.hide();
+            }
+            showSuccess(result.message || 'Connected (TLS enabled)');
+            await refreshAgentsList();
+        } else {
+            errorDiv.textContent = result.error || 'Connection failed';
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error retrying connection with TLS:', error);
+        hideConnectingStatus();
+        errorDiv.textContent = 'Network error while retrying';
+        errorDiv.style.display = 'block';
+    }
+}
+
+/**
+ * Handle toggle TLS setting for a disconnected agent
+ */
+async function handleToggleTls(alias) {
+    try {
+        // Get current agents list to find current TLS state
+        const result = await api.listAgents();
+        if (!result.success) {
+            showError('Failed to get agent info');
+            return;
+        }
+
+        const agent = result.connections.find(a => a.alias === alias);
+        if (!agent) {
+            showError('Agent not found');
+            return;
+        }
+
+        // Toggle the TLS setting
+        const newTlsSetting = !agent.use_tls;
+        const updateResult = await api.updateTls(alias, newTlsSetting);
+
+        if (updateResult.success) {
+            showSuccess(`TLS ${newTlsSetting ? 'enabled' : 'disabled'} for '${alias}'`);
+            await refreshAgentsList();
+        } else {
+            showError(updateResult.error || 'Failed to update TLS setting');
+        }
+    } catch (error) {
+        console.error('Error toggling TLS:', error);
+        showError('Network error while updating TLS setting');
     }
 }
 
@@ -279,6 +453,20 @@ function createAgentCard(agent) {
         ? '<span class="badge bg-success status-badge">Connected</span>'
         : '<span class="badge bg-secondary status-badge">Disconnected</span>';
 
+    // TLS preference/status badges
+    let tlsBadge = '';
+    if (agent.connected) {
+        // Show actual connection TLS status
+        tlsBadge = agent.tls_active
+            ? '<span class="badge bg-info status-badge ms-1" title="Connection is encrypted">🔒 TLS</span>'
+            : '<span class="badge bg-danger status-badge ms-1" title="Connection is NOT encrypted!">⚠️ No TLS</span>';
+    } else {
+        // Show configured TLS preference
+        tlsBadge = agent.use_tls
+            ? '<span class="badge bg-secondary status-badge ms-1" title="TLS enabled (will encrypt when connected)"><i class="bi bi-shield-lock"></i></span>'
+            : '<span class="badge bg-warning status-badge ms-1" title="TLS disabled"><i class="bi bi-shield-slash"></i> No TLS</span>';
+    }
+
     const activeClass = agent.active ? ' active' : '';
     const connectedClass = agent.connected ? ' connected' : '';
 
@@ -296,6 +484,9 @@ function createAgentCard(agent) {
         : `
             <button class="btn btn-success btn-sm me-1" data-action="connect" data-alias="${agent.alias}">
                 <i class="bi bi-plug-fill"></i> Connect
+            </button>
+            <button class="btn btn-outline-secondary btn-sm me-1" data-action="toggle-tls" data-alias="${agent.alias}" title="Toggle TLS">
+                <i class="bi bi-${agent.use_tls ? 'shield-lock' : 'shield-slash'}"></i>
             </button>
         `;
 
@@ -316,7 +507,7 @@ function createAgentCard(agent) {
                         <small class="text-muted">Last connected: ${lastConnected}</small>
                     </div>
                     <div class="col-md-4 text-center">
-                        ${statusBadge}
+                        ${statusBadge}${tlsBadge}
                         ${agent.last_error ? `<div class="text-danger small mt-1">${escapeHtml(agent.last_error)}</div>` : ''}
                     </div>
                     <div class="col-md-4 text-end">
@@ -353,6 +544,9 @@ function attachAgentCardListeners() {
                 case 'remove':
                     handleRemoveAgent(alias);
                     break;
+                case 'toggle-tls':
+                    handleToggleTls(alias);
+                    break;
             }
         });
     });
@@ -383,6 +577,63 @@ function updateModeIndicator() {
 function showSuccess(message) {
     // Simple alert for now, can be enhanced with toast notifications
     alert(message);
+}
+
+/**
+ * Show connecting status in the password modal
+ */
+function showConnectingStatus() {
+    const statusDiv = document.getElementById('password-status');
+    const submitBtn = document.getElementById('password-submit-btn');
+    const passwordField = document.getElementById('agent-password');
+    const errorDiv = document.getElementById('password-error');
+
+    // Hide any existing error
+    if (errorDiv) {
+        errorDiv.style.display = 'none';
+    }
+
+    // Show status
+    if (statusDiv) {
+        statusDiv.style.display = 'flex';
+    }
+
+    // Disable inputs and button
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting...';
+    }
+    if (passwordField) {
+        passwordField.disabled = true;
+    }
+}
+
+/**
+ * Hide connecting status in the password modal
+ */
+function hideConnectingStatus() {
+    const statusDiv = document.getElementById('password-status');
+    if (statusDiv) {
+        statusDiv.style.display = 'none';
+    }
+
+    resetSubmitButton();
+}
+
+/**
+ * Reset the submit button to its default state
+ */
+function resetSubmitButton() {
+    const submitBtn = document.getElementById('password-submit-btn');
+    const passwordField = document.getElementById('agent-password');
+
+    if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = 'Connect';
+    }
+    if (passwordField) {
+        passwordField.disabled = false;
+    }
 }
 
 /**

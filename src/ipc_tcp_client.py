@@ -1,36 +1,60 @@
+"""
+IPC TCP Client Transport
 
+TCP client transport for connecting to remote ZFS Agents.
+Uses the modular security layer for TLS negotiation and authentication.
+"""
 
-
-import sys
 import socket
-import json
 from typing import Optional
 
 # Import IPC transport bases
 from ipc_client import DaemonTransport, LineBufferedTransport
 
-# Import auth protocol
-from ipc_tcp_auth import (
-    _compute_auth_response,
-    AuthError
+# Import security layer
+from ipc_security import (
+    negotiate_tls_client,
+    authenticate_client,
+    TlsNegotiationError
 )
 
-# Import constants
-from config_manager import PBKDF2_ITERATIONS
+# Import auth error for re-export
+from ipc_tcp_auth import AuthError
+
+# Import TLS manager for TOFU verification (optional)
+try:
+    from tls_manager import verify_certificate_tofu
+    TLS_AVAILABLE = True
+except ImportError:
+    TLS_AVAILABLE = False
+    verify_certificate_tofu = None
+
+# Debug logging
+from debug_logging import log_debug
 
 
 # =============================================================================
-# Client Side: TCPClientTransport
+# Re-export for compatibility
+# =============================================================================
+
+# Re-export TlsNegotiationError for callers
+__all__ = ['TCPClientTransport', 'connect_to_agent', 'TlsNegotiationError', 'AuthError']
+
+
+# =============================================================================
+# Client Transport
 # =============================================================================
 
 class TCPClientTransport(DaemonTransport):
     """
     TCP client transport for connecting to a remote Agent.
     
-    Performs Challenge-Response authentication on connect.
+    Uses STARTTLS-style negotiation: plaintext hello handshake first,
+    then optional TLS upgrade, then authentication.
     """
     
-    def __init__(self, host: str, port: int, password: str, timeout: float = 30.0):
+    def __init__(self, host: str, port: int, password: str, 
+                 timeout: float = 30.0, use_tls: bool = True):
         """
         Connect to a remote agent and authenticate.
         
@@ -39,103 +63,105 @@ class TCPClientTransport(DaemonTransport):
             port: Remote port
             password: Admin password for authentication
             timeout: Connection timeout in seconds
+            use_tls: Whether client supports/wants TLS
             
         Raises:
             AuthError: If authentication fails
+            TlsNegotiationError: If TLS negotiation fails
             ConnectionError: If connection fails
-            TimeoutError: If connection or auth times out
+            TimeoutError: If connection times out
         """
         self.host = host
         self.port = port
+        self.use_tls = use_tls
+        self.tls_active = False
         self.socket: Optional[socket.socket] = None
         
-        # Connect and authenticate
+        # Warn if TLS requested but cryptography not installed locally
+        if use_tls and not TLS_AVAILABLE:
+            log_debug("TCP_CLIENT", "TLS requested but cryptography not installed locally")
+        
         self._connect_and_authenticate(password, timeout)
     
     def _connect_and_authenticate(self, password: str, timeout: float) -> None:
-        """Establish connection and perform auth handshake."""
+        """Establish connection with hello handshake, optional TLS, and auth."""
+        sock = None
         try:
-            self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.socket.settimeout(timeout)
+            # Create socket and connect
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(timeout)
             
-            print(f"TCP_CLIENT: Connecting to {self.host}:{self.port}...", file=sys.stderr)
-            self.socket.connect((self.host, self.port))
-            print(f"TCP_CLIENT: Connected, starting authentication...", file=sys.stderr)
+            log_debug("TCP_CLIENT", f"Connecting to {self.host}:{self.port}...")
+            sock.connect((self.host, self.port))
+            log_debug("TCP_CLIENT", "Connected, starting TLS negotiation...")
             
-            # Create file-like object for JSON I/O
-            sock_file = self.socket.makefile('rw', buffering=1, encoding='utf-8', errors='replace')
+            # Phase 1: Hello handshake and optional TLS upgrade
+            self.tls_active, sock = negotiate_tls_client(
+                sock, 
+                tls_supported=self.use_tls,
+                host=self.host
+            )
             
-            try:
-                # Receive challenge
-                challenge_line = sock_file.readline()
-                if not challenge_line:
-                    raise ConnectionError("Server closed connection before sending challenge")
-                
-                challenge = json.loads(challenge_line)
-                
-                if challenge.get("type") != "auth_challenge":
-                    raise AuthError(f"Unexpected message type: {challenge.get('type')}")
-                
-                # Extract challenge parameters
-                salt_hex = challenge.get("salt", "")
-                iterations = challenge.get("iterations", PBKDF2_ITERATIONS)
-                nonce = challenge.get("nonce", "")
-                
-                if not salt_hex or not nonce:
-                    raise AuthError("Invalid challenge: missing salt or nonce")
-                
-                # Compute response
-                response_hmac = _compute_auth_response(password, salt_hex, iterations, nonce)
-                
-                # Send response
-                response = {
-                    "type": "auth_response",
-                    "hmac": response_hmac
-                }
-                sock_file.write(json.dumps(response) + '\n')
-                sock_file.flush()
-                
-                # Receive result
-                result_line = sock_file.readline()
-                if not result_line:
-                    raise AuthError("Server closed connection after auth response")
-                
-                result = json.loads(result_line)
-                
-                if result.get("type") != "auth_result":
-                    raise AuthError(f"Unexpected result type: {result.get('type')}")
-                
-                if not result.get("success"):
-                    error_msg = result.get("error", "Authentication failed")
-                    raise AuthError(error_msg)
-                
-                print(f"TCP_CLIENT: Authentication successful", file=sys.stderr)
-                
-                # Clear timeout for normal operation
-                self.socket.settimeout(None)
-                
-            except Exception:
-                sock_file.close()
-                raise
-                
-        except socket.timeout:
-            self._cleanup()
-            raise TimeoutError(f"Connection to {self.host}:{self.port} timed out")
-        except AuthError:
-            self._cleanup()
+            if self.tls_active:
+                log_debug("TCP_CLIENT", "TLS negotiation succeeded, connection encrypted")
+                # Perform TOFU verification if available
+                self._verify_certificate_tofu(sock)
+            else:
+                log_debug("TCP_CLIENT", "Proceeding without TLS (as negotiated)")
+            
+            # Phase 2: Authentication
+            log_debug("TCP_CLIENT", "Starting authentication...")
+            authenticate_client(sock, password)
+            log_debug("TCP_CLIENT", "Authentication successful")
+            
+            # Store socket for later use
+            self.socket = sock
+            sock.settimeout(None)  # Clear timeout for normal operation
+            
+        except (TlsNegotiationError, AuthError):
+            # Clean up and re-raise  
+            if sock:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
             raise
+        except socket.timeout:
+            if sock:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
+            raise TimeoutError(f"Connection to {self.host}:{self.port} timed out")
         except Exception as e:
-            self._cleanup()
+            if sock:
+                try:
+                    sock.close()
+                except Exception:
+                    pass
             raise ConnectionError(f"Failed to connect to {self.host}:{self.port}: {e}")
     
-    def _cleanup(self) -> None:
-        """Clean up socket on error."""
-        if self.socket:
-            try:
-                self.socket.close()
-            except Exception:
-                pass
-            self.socket = None
+    def _verify_certificate_tofu(self, ssl_socket) -> None:
+        """Verify certificate using Trust-on-First-Use (if available)."""
+        if not TLS_AVAILABLE or verify_certificate_tofu is None:
+            return
+        
+        from pathlib import Path
+        from paths import USER_CONFIG_DIR
+        
+        # Get server certificate
+        cert_der = ssl_socket.getpeercert(binary_form=True)
+        
+        # Verify using TOFU
+        verified, error_msg = verify_certificate_tofu(
+            Path(USER_CONFIG_DIR),
+            self.host,
+            self.port,
+            cert_der
+        )
+        
+        if not verified:
+            raise AuthError(error_msg)
     
     def send(self, data: bytes) -> None:
         """Send data through socket."""
@@ -169,14 +195,17 @@ class TCPClientTransport(DaemonTransport):
             self.socket = None
     
     def get_type(self) -> str:
+        if self.tls_active:
+            return "tls+tcp"
         return "tcp"
 
 
 # =============================================================================
-# Helper: Create line-buffered client transport
+# Helper Function
 # =============================================================================
 
-def connect_to_agent(host: str, port: int, password: str, timeout: float = 30.0) -> LineBufferedTransport:
+def connect_to_agent(host: str, port: int, password: str, 
+                     timeout: float = 30.0, use_tls: bool = True) -> tuple:
     """
     Connect to a remote agent and return a line-buffered transport.
     
@@ -185,14 +214,17 @@ def connect_to_agent(host: str, port: int, password: str, timeout: float = 30.0)
         port: Remote port
         password: Admin password for authentication
         timeout: Connection timeout in seconds
+        use_tls: Whether client supports/wants TLS (default: True)
         
     Returns:
-        LineBufferedTransport ready for JSON-line communication
+        Tuple of (LineBufferedTransport, tls_active: bool)
+        - tls_active is True only if TLS handshake succeeded
         
     Raises:
         AuthError: If authentication fails
+        TlsNegotiationError: If TLS negotiation fails
         ConnectionError: If connection fails
         TimeoutError: If connection times out
     """
-    transport = TCPClientTransport(host, port, password, timeout)
-    return LineBufferedTransport(transport)
+    tcp_transport = TCPClientTransport(host, port, password, timeout, use_tls)
+    return LineBufferedTransport(tcp_transport), tcp_transport.tls_active

@@ -49,6 +49,10 @@ dependencies = [
     # SSL Certificate Authority Bundle
     # Ensures reliable HTTPS requests across all platforms (fixes SSL errors on some systems)
     "certifi>=2024.0.0",
+    
+    # Cryptography library for TLS certificate generation
+    # 41.0+: Stable API for x509 certificate generation
+    "cryptography>=41.0.0",
 ]
 
 [project.urls]
