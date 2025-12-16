@@ -42,6 +42,7 @@ def add_agent():
     alias = data.get('alias', '').strip()
     host = data.get('host', '').strip()
     port = data.get('port')
+    use_tls = data.get('use_tls', True)  # Default to True if not specified
     
     if not alias:
         return jsonify({'success': False, 'error': 'Alias is required'}), 400
@@ -53,7 +54,11 @@ def add_agent():
     except (TypeError, ValueError):
         return jsonify({'success': False, 'error': 'Port must be a number'}), 400
     
-    success, message = _cc_manager.add_connection(alias, host, port)
+    # Convert use_tls to bool if it's a string
+    if isinstance(use_tls, str):
+        use_tls = use_tls.lower() in ('true', '1', 'yes')
+    
+    success, message = _cc_manager.add_connection(alias, host, port, use_tls)
     
     if success:
         return jsonify({'success': True, 'message': message})
@@ -103,12 +108,25 @@ def connect_agent():
     if not password:
         return jsonify({'success': False, 'error': 'Password is required'}), 400
     
-    success, message = _cc_manager.connect_to_agent(alias, password, session)
+    # Get agent's configured TLS setting for error response
+    agent_use_tls = True  # Default
+    if alias in _cc_manager.connections:
+        agent_use_tls = _cc_manager.connections[alias].use_tls
+    
+    success, message, tls_error_code = _cc_manager.connect_to_agent(
+        alias, password, session
+    )
     
     if success:
         return jsonify({'success': True, 'message': message})
     else:
-        return jsonify({'success': False, 'error': message}), 400
+        # Include TLS error code for structured error handling in frontend
+        return jsonify({
+            'success': False, 
+            'error': message,
+            'tls_error_code': tls_error_code,  # None if not a TLS error
+            'agent_tls': agent_use_tls  # Agent's saved TLS preference
+        }), 400
 
 
 @control_center_bp.route('/disconnect', methods=['POST'])
@@ -193,3 +211,33 @@ def check_agent_health(alias):
         'healthy': healthy,
         'message': message
     })
+
+
+@control_center_bp.route('/update_tls', methods=['POST'])
+def update_tls():
+    """Update TLS preference for an agent."""
+    if not _cc_manager:
+        return jsonify({'success': False, 'error': 'Control center not initialized'}), 500
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+    
+    alias = data.get('alias', '').strip()
+    use_tls = data.get('use_tls')
+    
+    if not alias:
+        return jsonify({'success': False, 'error': 'Alias is required'}), 400
+    if use_tls is None:
+        return jsonify({'success': False, 'error': 'use_tls is required'}), 400
+    
+    # Convert to bool if string
+    if isinstance(use_tls, str):
+        use_tls = use_tls.lower() in ('true', '1', 'yes')
+    
+    success, message = _cc_manager.update_tls(alias, use_tls)
+    
+    if success:
+        return jsonify({'success': True, 'message': message})
+    else:
+        return jsonify({'success': False, 'error': message}), 400

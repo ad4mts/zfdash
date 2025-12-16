@@ -15,14 +15,18 @@ from typing import Dict, List, Optional, Tuple, Any
 from datetime import datetime
 
 # Import TCP client transport
-from ipc_tcp_client import connect_to_agent
+from ipc_tcp_client import connect_to_agent, TlsNegotiationError
+from ipc_tcp_auth import AuthError
 from zfs_manager import ZfsManagerClient
+
+# Debug logging for verbose messages
+from debug_logging import log_debug, log_info, log_error, log_warning, log_critical
 
 
 class AgentConnection:
     """Represents a remote ZFS agent connection."""
     
-    def __init__(self, alias: str, host: str, port: int):
+    def __init__(self, alias: str, host: str, port: int, use_tls: bool = True):
         """
         Initialize an agent connection.
         
@@ -30,12 +34,15 @@ class AgentConnection:
             alias: Human-readable name for this connection
             host: Remote host IP or hostname
             port: Remote TCP port
+            use_tls: Whether to use TLS encryption (default: True)
         """
         self.alias = alias
         self.host = host
         self.port = port
+        self.use_tls = use_tls  # User preference for TLS
         self.client: Optional[ZfsManagerClient] = None
         self.connected = False
+        self.tls_active = False  # True only if TLS handshake succeeded
         self.last_error: Optional[str] = None
         self.last_connected: Optional[str] = None
         
@@ -45,6 +52,7 @@ class AgentConnection:
             'alias': self.alias,
             'host': self.host,
             'port': self.port,
+            'use_tls': self.use_tls,
             'last_connected': self.last_connected
         }
     
@@ -54,7 +62,8 @@ class AgentConnection:
         conn = cls(
             alias=data['alias'],
             host=data['host'],
-            port=data['port']
+            port=data['port'],
+            use_tls=data.get('use_tls', True)  # Default True for backward compatibility
         )
         conn.last_connected = data.get('last_connected')
         return conn
@@ -74,7 +83,7 @@ class ControlCenterManager:
         self.storage_path = storage_path
         self.active_connection: Optional[str] = None  # Active agent alias
         
-    def add_connection(self, alias: str, host: str, port: int) -> Tuple[bool, str]:
+    def add_connection(self, alias: str, host: str, port: int, use_tls: bool = True) -> Tuple[bool, str]:
         """
         Add a new agent connection.
         
@@ -82,6 +91,7 @@ class ControlCenterManager:
             alias: Unique alias for this connection
             host: Remote host
             port: Remote port
+            use_tls: Whether to use TLS encryption (default: True)
             
         Returns:
             Tuple of (success, message)
@@ -99,7 +109,7 @@ class ControlCenterManager:
             return False, f"Invalid port number: {port}"
         
         try:
-            self.connections[alias] = AgentConnection(alias, host, port)
+            self.connections[alias] = AgentConnection(alias, host, port, use_tls)
             self.save_connections()
             return True, f"Agent '{alias}' added successfully"
         except Exception as e:
@@ -135,9 +145,9 @@ class ControlCenterManager:
         self.save_connections()
         return True, f"Agent '{alias}' removed successfully"
     
-    def connect_to_agent(self, alias: str, password: str, session: Dict) -> Tuple[bool, str]:
+    def connect_to_agent(self, alias: str, password: str, session: Dict) -> Tuple[bool, str, str]:
         """
-        Connect to a remote agent.
+        Connect to a remote agent using saved TLS setting.
         
         Args:
             alias: Alias of agent to connect to
@@ -145,10 +155,11 @@ class ControlCenterManager:
             session: Flask session dict for caching auth
             
         Returns:
-            Tuple of (success, message)
+            Tuple of (success, message, tls_error_code)
+            - tls_error_code is None on success, or structured code on TLS failure
         """
         if alias not in self.connections:
-            return False, f"Connection '{alias}' not found"
+            return False, f"Connection '{alias}' not found", None
         
         conn = self.connections[alias]
         
@@ -161,10 +172,13 @@ class ControlCenterManager:
             conn.client = None
             conn.connected = False
         
+        # Use saved TLS preference
+        use_tls = conn.use_tls
+        
         try:
             # Connect using TCP client transport
-            print(f"CC_MANAGER: Connecting to {conn.host}:{conn.port}...", file=sys.stderr)
-            transport = connect_to_agent(conn.host, conn.port, password, timeout=30.0)
+            log_debug("CC_MANAGER", f"Connecting to {conn.host}:{conn.port} (TLS: {use_tls})...")
+            transport, tls_active = connect_to_agent(conn.host, conn.port, password, timeout=30.0, use_tls=use_tls)
             
             # Create ZfsManagerClient with the transport
             # owns_daemon=False because this is an external agent
@@ -175,6 +189,7 @@ class ControlCenterManager:
             )
             
             conn.connected = True
+            conn.tls_active = tls_active
             conn.last_error = None
             conn.last_connected = datetime.now().isoformat()
             
@@ -183,14 +198,34 @@ class ControlCenterManager:
             
             self.save_connections()
             
-            return True, f"Successfully connected to '{alias}'"
+            # Return success with appropriate message
+            if tls_active:
+                return True, f"Connected to '{alias}' (TLS encrypted)", None
+            else:
+                return True, f"⚠️ Connected to '{alias}' WITHOUT encryption", None
+            
+        except TlsNegotiationError as e:
+            # Structured TLS error - include error code for frontend
+            conn.last_error = str(e)
+            conn.connected = False
+            conn.tls_active = False
+            log_error("CC_MANAGER", f"TLS negotiation failed: {e} (code: {e.code})")
+            return False, str(e), e.code
+            
+        except AuthError as e:
+            conn.last_error = str(e)
+            conn.connected = False
+            conn.tls_active = False
+            log_error("CC_MANAGER", f"Authentication failed: {e}")
+            return False, str(e), None
             
         except Exception as e:
             error_msg = str(e)
             conn.last_error = error_msg
             conn.connected = False
-            print(f"CC_MANAGER: Connection failed: {error_msg}", file=sys.stderr)
-            return False, f"Failed to connect to '{alias}': {error_msg}"
+            conn.tls_active = False
+            log_error("CC_MANAGER", f"Connection failed: {error_msg}")
+            return False, error_msg, None
     
     def disconnect_from_agent(self, alias: str) -> Tuple[bool, str]:
         """
@@ -280,12 +315,35 @@ class ControlCenterManager:
                 'alias': alias,
                 'host': conn.host,
                 'port': conn.port,
+                'use_tls': conn.use_tls,
                 'connected': conn.connected,
+                'tls_active': conn.tls_active,
                 'active': alias == self.active_connection,
                 'last_connected': conn.last_connected,
                 'last_error': conn.last_error
             })
         return result
+    
+    def update_tls(self, alias: str, use_tls: bool) -> Tuple[bool, str]:
+        """
+        Update TLS preference for an agent.
+        
+        Args:
+            alias: Alias of connection to update
+            use_tls: New TLS preference
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        if alias not in self.connections:
+            return False, f"Connection '{alias}' not found"
+        
+        conn = self.connections[alias]
+        conn.use_tls = use_tls
+        self.save_connections()
+        
+        tls_status = "enabled" if use_tls else "disabled"
+        return True, f"TLS {tls_status} for '{alias}'"
     
     def check_health(self, alias: str) -> Tuple[bool, str]:
         """
@@ -330,14 +388,14 @@ class ControlCenterManager:
             with open(self.storage_path, 'w') as f:
                 json.dump(data, f, indent=2)
             
-            print(f"CC_MANAGER: Saved {len(self.connections)} connections to {self.storage_path}", file=sys.stderr)
+            log_debug("CC_MANAGER", f"Saved {len(self.connections)} connections to {self.storage_path}")
         except Exception as e:
             print(f"CC_MANAGER: Error saving connections: {e}", file=sys.stderr)
     
     def load_connections(self) -> None:
         """Load connection metadata from storage file."""
         if not os.path.exists(self.storage_path):
-            print(f"CC_MANAGER: No saved connections found at {self.storage_path}", file=sys.stderr)
+            log_debug("CC_MANAGER", f"No saved connections found at {self.storage_path}")
             return
         
         try:
@@ -349,6 +407,6 @@ class ControlCenterManager:
                 conn = AgentConnection.from_dict(conn_dict)
                 self.connections[conn.alias] = conn
             
-            print(f"CC_MANAGER: Loaded {len(self.connections)} connections from {self.storage_path}", file=sys.stderr)
+            log_debug("CC_MANAGER", f"Loaded {len(self.connections)} connections from {self.storage_path}")
         except Exception as e:
             print(f"CC_MANAGER: Error loading connections: {e}", file=sys.stderr)

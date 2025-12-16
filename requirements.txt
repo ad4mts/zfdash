@@ -4,8 +4,12 @@ blinker==1.9.0
     # via flask
 certifi==2025.11.12
     # via zfdash (pyproject.toml)
+cffi==2.0.0
+    # via cryptography
 click==8.3.1
     # via flask
+cryptography==46.0.3
+    # via zfdash (pyproject.toml)
 flask==3.1.2
     # via
     #   zfdash (pyproject.toml)
@@ -21,6 +25,8 @@ markupsafe==3.0.3
     #   flask
     #   jinja2
     #   werkzeug
+pycparser==2.23
+    # via cffi
 pyside6==6.8.0.2; platform_system != 'FreeBSD'
     # via zfdash (pyproject.toml)
 pyside6-addons==6.8.0.2; platform_system != 'FreeBSD'
@@ -34,6 +40,8 @@ shiboken6==6.8.0.2; platform_system != 'FreeBSD'
     #   pyside6
     #   pyside6-addons
     #   pyside6-essentials
+typing-extensions==4.15.0
+    # via cryptography
 waitress==3.0.2
     # via zfdash (pyproject.toml)
 werkzeug==3.1.4

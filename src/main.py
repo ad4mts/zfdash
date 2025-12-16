@@ -123,7 +123,8 @@ if __name__ == "__main__":
         prog_name_root = prog_name
     else:
         prog_name = "uv run src/main.py"
-        prog_name_root = "python3 src/main.py"
+        # For daemon commands that need root, use venv Python (sudo ignores venv activation)
+        prog_name_root = ".venv/bin/python src/main.py"
 
     parser = argparse.ArgumentParser(
         usage=usage_str,
@@ -141,8 +142,10 @@ if __name__ == "__main__":
             f"    {prog_name} --launch-daemon\n\n"
             f"  Stop a running socket daemon:\n"
             f"    {prog_name} --stop-daemon\n\n"
-            f"  Start daemon manually (run as root or with privilege escalation):\n"
-            f"    sudo {prog_name_root} --daemon --uid $(id -u) --gid $(id -g) --listen-socket\n"
+            f"  Start daemon manually (run as root with venv Python):\n"
+            f"    sudo {prog_name_root} --daemon --uid $(id -u) --gid $(id -g) --listen-socket\n\n"
+            f"  Start Agent Mode daemon (TCP server with TLS):\n"
+            f"    sudo {prog_name_root} --daemon --uid $(id -u) --gid $(id -g) --agent\n"
         ),
     )
 

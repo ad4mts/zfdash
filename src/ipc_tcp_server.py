@@ -1,34 +1,31 @@
 """
-IPC TCP Transport Layer (Agent Mode)
+IPC TCP Server Transport (Agent Mode)
 
-This module provides TCP-based transport for network-accessible daemon ("Agent Mode").
-It includes Challenge-Response authentication using the admin password from credentials.json.
-
-Server: TCPServerTransport - listens on a TCP port, authenticates clients
-Client: TCPClientTransport - connects to a remote agent, performs auth handshake
+TCP server transport for network-accessible daemon ("Agent Mode").
+Uses the modular security layer for TLS negotiation and authentication.
 
 Security Model:
-- Server sends salt, iterations, and a random nonce
-- Client derives key from password using PBKDF2, then computes HMAC(key, nonce)
-- Server verifies HMAC using stored password hash
+- Server sends hello response with TLS capability
+- If TLS enabled on server, it's required (client can't downgrade)
+- After optional TLS upgrade, challenge-response auth occurs
 - Raw password is NEVER transmitted over the network
 """
 
 import os
-import sys
 import socket
-import json
+import ssl
 import threading
+from pathlib import Path
 from typing import Optional, Tuple
 
-# Import from existing IPC modules for consistency
+# Import from existing IPC modules
 from ipc_client import DaemonTransport, LineBufferedTransport
 
-# Import auth protocol
-from ipc_tcp_auth import (
-    _generate_auth_challenge,
-    _verify_auth_response,
-    AuthError
+# Import security layer
+from ipc_security import (
+    negotiate_tls_server,
+    authenticate_server,
+    TlsNegotiationError
 )
 
 # Import constants
@@ -37,11 +34,17 @@ from constants import (
     AUTH_TIMEOUT_SECONDS
 )
 
-# Import credential constants
+# Import credential reading
 from config_manager import (
     PASSWORD_INFO_KEY,
     _read_credentials
 )
+
+# Debug logging
+from debug_logging import log_debug, log_info, log_error
+
+# TLS manager (lazy import)
+TLS_AVAILABLE = None
 
 
 # =============================================================================
@@ -59,7 +62,7 @@ class TCPClientHandler:
         Initialize handler for an authenticated client.
         
         Args:
-            client_socket: The connected socket
+            client_socket: The connected socket (may be SSL-wrapped)
             client_address: (host, port) of client
         """
         self.client_socket = client_socket
@@ -120,17 +123,19 @@ class TCPServerTransport:
     """
     TCP server transport for Agent Mode.
     
-    Listens on a TCP port, authenticates clients using Challenge-Response,
-    and returns handlers for authenticated connections.
+    Listens on a TCP port, performs STARTTLS-style TLS negotiation,
+    authenticates clients, and returns handlers for authenticated connections.
     """
     
-    def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_AGENT_PORT):
+    def __init__(self, host: str = "0.0.0.0", port: int = DEFAULT_AGENT_PORT, 
+                 use_tls: bool = True):
         """
         Initialize TCP server transport.
         
         Args:
             host: Interface to bind to (default: all interfaces)
             port: Port to listen on (default: 5555)
+            use_tls: Enable TLS encryption (default: True)
             
         Raises:
             OSError: If socket creation or binding fails
@@ -138,8 +143,15 @@ class TCPServerTransport:
         """
         self.host = host
         self.port = port
+        self.ssl_context: Optional[ssl.SSLContext] = None
         self.server_socket: Optional[socket.socket] = None
         self._password_info: Optional[dict] = None
+        
+        # Check TLS availability and setup if requested
+        if use_tls:
+            self.tls_enabled = self._setup_tls()
+        else:
+            self.tls_enabled = False
         
         # Load credentials for authentication
         self._load_credentials()
@@ -157,13 +169,47 @@ class TCPServerTransport:
                 pw_info = user_data[PASSWORD_INFO_KEY]
                 if isinstance(pw_info, dict) and "hash" in pw_info and "salt" in pw_info:
                     self._password_info = pw_info
-                    print(f"TCP_SERVER: Loaded credentials for user '{user_data.get('username', 'unknown')}'", file=sys.stderr)
+                    log_debug("TCP_SERVER", f"Loaded credentials for user '{user_data.get('username', 'unknown')}'")
                     return
         
         raise RuntimeError(
             "Cannot start TCP server: No valid credentials found in credentials.json. "
             "Ensure the daemon has been started at least once to create default credentials."
         )
+    
+    def _setup_tls(self) -> bool:
+        """
+        Setup TLS context with self-signed certificate.
+        
+        Returns:
+            True if TLS setup succeeded, False if cryptography not installed.
+        """
+        global TLS_AVAILABLE
+        
+        # Lazy import of tls_manager
+        try:
+            from tls_manager import ensure_server_certificate
+            TLS_AVAILABLE = True
+        except ImportError:
+            TLS_AVAILABLE = False
+            return False
+        
+        from paths import PERSISTENT_DATA_DIR
+        
+        cert_dir = Path(PERSISTENT_DATA_DIR) / 'tls'
+        cert_dir.mkdir(parents=True, exist_ok=True)
+        
+        cert_path, key_path = ensure_server_certificate(cert_dir)
+        
+        # Create SSL context
+        self.ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        self.ssl_context.load_cert_chain(
+            certfile=str(cert_path),
+            keyfile=str(key_path)
+        )
+        
+        log_debug("TCP_SERVER", f"TLS enabled with certificate: {cert_path}")
+        return True
     
     def _setup_socket(self) -> None:
         """Create socket, bind, and start listening."""
@@ -175,7 +221,7 @@ class TCPServerTransport:
         try:
             self.server_socket.bind((self.host, self.port))
             self.server_socket.listen(5)  # Backlog of 5 connections
-            print(f"TCP_SERVER: Listening on {self.host}:{self.port}", file=sys.stderr)
+            log_debug("TCP_SERVER", f"Listening on {self.host}:{self.port}")
         except Exception as e:
             try:
                 self.server_socket.close()
@@ -185,14 +231,20 @@ class TCPServerTransport:
     
     def accept_client(self, timeout: Optional[float] = None) -> Optional[TCPClientHandler]:
         """
-        Accept a client connection and perform authentication.
+        Accept a client connection and perform TLS negotiation + authentication.
+        
+        Uses STARTTLS-style protocol:
+        1. Accept plaintext TCP connection
+        2. Receive client hello, send server response
+        3. Upgrade to TLS if negotiated
+        4. Perform challenge-response authentication
         
         Args:
             timeout: Optional timeout in seconds. None = blocking.
                      Returns None on timeout.
         
         Returns:
-            TCPClientHandler for authenticated client, or None on timeout/auth failure.
+            TCPClientHandler for authenticated client, or None on timeout/failure.
             
         Raises:
             RuntimeError: If socket not initialized
@@ -207,19 +259,43 @@ class TCPServerTransport:
         
         try:
             client_socket, client_address = self.server_socket.accept()
-            print(f"TCP_SERVER: Connection from {client_address[0]}:{client_address[1]}", file=sys.stderr)
+            log_debug("TCP_SERVER", f"Connection from {client_address[0]}:{client_address[1]}")
             
-            # Set auth timeout on client socket
-            client_socket.settimeout(AUTH_TIMEOUT_SECONDS)
-            
-            # Perform authentication handshake
-            if self._authenticate_client(client_socket, client_address):
-                # Auth successful - clear timeout for normal operation
-                client_socket.settimeout(None)
-                return TCPClientHandler(client_socket, client_address)
-            else:
-                # Auth failed - close connection
-                print(f"TCP_SERVER: Auth failed for {client_address[0]}:{client_address[1]}", file=sys.stderr)
+            try:
+                # Phase 1: TLS negotiation (STARTTLS-style)
+                tls_active, client_socket = negotiate_tls_server(
+                    client_socket,
+                    tls_enabled=self.tls_enabled,
+                    ssl_context=self.ssl_context
+                )
+                
+                if tls_active:
+                    log_debug("TCP_SERVER", f"TLS established for {client_address[0]}")
+                else:
+                    log_debug("TCP_SERVER", f"Plaintext connection for {client_address[0]}")
+                
+                # Phase 2: Authentication
+                if authenticate_server(client_socket, self._password_info):
+                    log_debug("TCP_SERVER", f"Client {client_address[0]} authenticated")
+                    client_socket.settimeout(None)  # Clear timeout for normal ops
+                    return TCPClientHandler(client_socket, client_address)
+                else:
+                    log_info("TCP_SERVER", f"Auth failed for {client_address[0]}:{client_address[1]}")
+                    try:
+                        client_socket.close()
+                    except Exception:
+                        pass
+                    return None
+                    
+            except TlsNegotiationError as e:
+                log_info("TCP_SERVER", f"TLS negotiation failed for {client_address[0]}: {e}")
+                try:
+                    client_socket.close()
+                except Exception:
+                    pass
+                return None
+            except Exception as e:
+                log_error("TCP_SERVER", f"Error handling client {client_address[0]}: {e}")
                 try:
                     client_socket.close()
                 except Exception:
@@ -229,72 +305,11 @@ class TCPServerTransport:
         except socket.timeout:
             return None  # Timeout, not an error
         except Exception as e:
-            print(f"TCP_SERVER: Error accepting connection: {e}", file=sys.stderr)
+            log_error("TCP_SERVER", f"Error accepting connection: {e}")
             return None
         finally:
             if timeout is not None:
                 self.server_socket.settimeout(old_timeout)
-    
-    def _authenticate_client(self, client_socket: socket.socket, client_address: tuple) -> bool:
-        """
-        Perform Challenge-Response authentication with client.
-        
-        Returns:
-            True if authenticated successfully, False otherwise
-        """
-        try:
-            # Create file-like object for easier JSON I/O
-            client_file = client_socket.makefile('rw', buffering=1, encoding='utf-8', errors='replace')
-            
-            try:
-                # Generate and send challenge
-                challenge, expected_hmac = _generate_auth_challenge(self._password_info)
-                client_file.write(json.dumps(challenge) + '\n')
-                client_file.flush()
-                
-                # Receive response
-                response_line = client_file.readline()
-                if not response_line:
-                    print(f"TCP_SERVER: Client {client_address[0]} disconnected during auth", file=sys.stderr)
-                    return False
-                
-                response = json.loads(response_line)
-                
-                if response.get("type") != "auth_response":
-                    print(f"TCP_SERVER: Invalid auth response type from {client_address[0]}", file=sys.stderr)
-                    return False
-                
-                # Verify HMAC
-                client_hmac_hex = response.get("hmac", "")
-                if _verify_auth_response(client_hmac_hex, expected_hmac):
-                    # Send success
-                    result = {"type": "auth_result", "success": True}
-                    client_file.write(json.dumps(result) + '\n')
-                    client_file.flush()
-                    print(f"TCP_SERVER: Client {client_address[0]} authenticated successfully", file=sys.stderr)
-                    return True
-                else:
-                    # Send failure and close
-                    result = {"type": "auth_result", "success": False, "error": "Invalid credentials"}
-                    client_file.write(json.dumps(result) + '\n')
-                    client_file.flush()
-                    print(f"TCP_SERVER: Invalid HMAC from {client_address[0]}", file=sys.stderr)
-                    return False
-                    
-            finally:
-                # Don't close client_file - it would close the socket
-                # Just detach it (we'll create a new one in TCPClientHandler)
-                pass
-                
-        except json.JSONDecodeError as e:
-            print(f"TCP_SERVER: JSON error during auth from {client_address[0]}: {e}", file=sys.stderr)
-            return False
-        except socket.timeout:
-            print(f"TCP_SERVER: Auth timeout from {client_address[0]}", file=sys.stderr)
-            return False
-        except Exception as e:
-            print(f"TCP_SERVER: Auth error from {client_address[0]}: {e}", file=sys.stderr)
-            return False
     
     def close(self) -> None:
         """Close server socket."""
@@ -311,6 +326,3 @@ class TCPServerTransport:
     def get_address(self) -> Tuple[str, int]:
         """Return bound address (host, port)."""
         return (self.host, self.port)
-
-
-

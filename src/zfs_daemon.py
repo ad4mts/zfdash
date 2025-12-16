@@ -54,6 +54,9 @@ daemon_log_file_path = None # Store the determined log path
 
 import threading
 
+# Unified logging - imported at module level for helper functions
+from debug_logging import daemon_log, set_debug_mode, configure_terminal_output
+
 # Thread-safe shutdown event (replaces simple bool for concurrent safety)
 shutdown_event = threading.Event()
 
@@ -72,7 +75,7 @@ def _execute_command_task(transport, request_data, uid, shutdown_event):
         request_id = meta.get("request_id")
         log_enabled = meta.get("log_enabled", False)
 
-        print(f"DAEMON [Thread]: Executing command '{command}' (ReqID={request_id})", file=sys.stderr)
+        daemon_log(f"Executing command '{command}' (ReqID={request_id})", "DEBUG")
         response = {}
 
         if command == "change_password":
@@ -96,23 +99,23 @@ def _execute_command_task(transport, request_data, uid, shutdown_event):
                 result_data = func(*args, **kwargs, _log_enabled=log_enabled, _user_uid=uid)
                 response = {"status": "success", "data": result_data}
             except ZfsCommandError as zfs_err:
-                print(f"DAEMON [Thread]: ZfsCommandError for '{command}': {zfs_err}", file=sys.stderr)
+                daemon_log(f"ZfsCommandError for '{command}': {zfs_err}", "DEBUG")
                 response = {"status": "error", "error": str(zfs_err), "details": zfs_err.stderr}
             except Exception as e:
-                print(f"DAEMON [Thread]: Error executing '{command}': {e}\n{traceback.format_exc()}", file=sys.stderr)
+                daemon_log(f"Error executing '{command}': {e}", "DEBUG")
                 response = {"status": "error", "error": f"Execution error: {e}", "details": traceback.format_exc()}
         else:
-            print(f"DAEMON [Thread]: Unknown command: {command}", file=sys.stderr)
+            daemon_log(f"Unknown command: {command}", "ERROR")
             response = {"status": "error", "error": f"Unknown command: {command}"}
 
         response["meta"] = {"request_id": request_id}
         transport.send_line(json.dumps(response))
-        print(f"DAEMON [Thread]: Sent response for ReqID={request_id}, Cmd='{command}'", file=sys.stderr)
+        daemon_log(f"Sent response for ReqID={request_id}, Cmd='{command}'", "DEBUG")
 
     except (BrokenPipeError, OSError) as e:
-        print(f"DAEMON [Thread]: Client gone during response (ReqID={request_id}): {e}", file=sys.stderr)
+        daemon_log(f"Client gone during response (ReqID={request_id}): {e}", "DEBUG")
     except Exception as e:
-        print(f"DAEMON [Thread]: Unexpected error in task (ReqID={request_id}, Cmd='{command}'): {e}\n{traceback.format_exc()}", file=sys.stderr)
+        daemon_log(f"Unexpected error in task (ReqID={request_id}, Cmd='{command}'): {e}", "ERROR")
         # Try to send error response
         try:
             error_response = {"status": "error", "error": f"Worker thread error: {e}", "meta": {"request_id": request_id}}
@@ -138,13 +141,13 @@ def run_command_loop(transport, executor, shutdown_event):
         try:
             line = transport.receive_line()
             if not line:  # EOF - client disconnected
-                print("DAEMON: Client disconnected (EOF)", file=sys.stderr)
+                daemon_log("Client disconnected (EOF)", "DEBUG")
                 break
             
             if not line.strip():
                 continue
             
-            print(f"DAEMON: Received request: {line.strip()[:100]}...", file=sys.stderr)
+            daemon_log(f"Received request: {line.strip()[:100]}...", "DEBUG")
             
             try:
                 request = json.loads(line)
@@ -153,7 +156,7 @@ def run_command_loop(transport, executor, shutdown_event):
 
                 # Handle shutdown synchronously (must be immediate)
                 if command == "shutdown_daemon":
-                    print("DAEMON: Received shutdown command.", file=sys.stderr)
+                    daemon_log("Received shutdown command.", "INFO")
                     response = {"status": "success", "data": "Daemon shutting down gracefully.", "meta": {"request_id": request_id}}
                     try:
                         transport.send_line(json.dumps(response))
@@ -171,7 +174,7 @@ def run_command_loop(transport, executor, shutdown_event):
                     futures = [f for f in futures if not f.done()]
 
             except json.JSONDecodeError as json_err:
-                print(f"DAEMON: JSON Decode Error: {json_err}", file=sys.stderr)
+                daemon_log(f"JSON Decode Error: {json_err}", "ERROR")
                 response = {"status": "error", "error": f"Invalid JSON: {json_err}", "meta": {"request_id": None}}
                 try:
                     transport.send_line(json.dumps(response))
@@ -179,24 +182,24 @@ def run_command_loop(transport, executor, shutdown_event):
                     pass
 
         except Exception as e:
-            print(f"DAEMON: Unexpected error in command loop: {e}", file=sys.stderr)
+            daemon_log(f"Unexpected error in command loop: {e}", "ERROR")
             break
     
     # Wait for this client's pending tasks (with timeout)
     pending = [f for f in futures if not f.done()]
     if pending:
-        print(f"DAEMON: Waiting for {len(pending)} pending tasks for this client...", file=sys.stderr)
+        daemon_log(f"Waiting for {len(pending)} pending tasks for this client...", "INFO")
         for f in pending:
             try:
                 f.result(timeout=10)
             except Exception as e:
-                print(f"DAEMON: Task failed during client cleanup: {e}", file=sys.stderr)
+                daemon_log(f"Task failed during client cleanup: {e}", "ERROR")
 
 # =============================================================================
 # Server Mode Helpers
 # =============================================================================
 
-def _handle_client(handler, executor, shutdown_event, log, transport_type="socket"):
+def _handle_client(handler, executor, shutdown_event, transport_type="socket"):
     """
     Handle a single client connection in its own thread.
     Sends ready signal, runs command loop, then cleans up.
@@ -205,13 +208,13 @@ def _handle_client(handler, executor, shutdown_event, log, transport_type="socke
         handler.send_line(json.dumps({"status": "ready"}))
         run_command_loop(handler, executor, shutdown_event)
     except Exception as e:
-        print(f"DAEMON: Error in {transport_type} client thread: {e}", file=sys.stderr)
+        daemon_log(f"Error in {transport_type} client thread: {e}", "ERROR")
     finally:
         handler.close()
-        log(f"{transport_type.upper()} client session ended", "INFO")
+        daemon_log(f"{transport_type.upper()} client session ended", "DEBUG")
 
 
-def _tcp_accept_loop(tcp_transport, executor, shutdown_event, client_threads, log):
+def _tcp_accept_loop(tcp_transport, executor, shutdown_event, client_threads):
     """
     Accept loop for TCP clients (runs in separate thread).
     Spawns a handler thread for each authenticated connection.
@@ -223,11 +226,11 @@ def _tcp_accept_loop(tcp_transport, executor, shutdown_event, client_threads, lo
                 continue
             
             addr = tcp_handler.get_address()
-            log(f"TCP client connected from {addr[0]}:{addr[1]}", "INFO")
+            daemon_log(f"TCP client connected from {addr[0]}:{addr[1]}", "DEBUG")
             
             t = threading.Thread(
                 target=_handle_client,
-                args=(tcp_handler, executor, shutdown_event, log, "tcp"),
+                args=(tcp_handler, executor, shutdown_event, "tcp"),
                 daemon=True,
                 name=f"tcp_client_{len(client_threads)}"
             )
@@ -236,26 +239,57 @@ def _tcp_accept_loop(tcp_transport, executor, shutdown_event, client_threads, lo
             
         except Exception as e:
             if not shutdown_event.is_set():
-                print(f"DAEMON: TCP accept error: {e}", file=sys.stderr)
+                daemon_log(f"TCP accept error: {e}", "ERROR")
 
 
-def _socket_accept_loop(socket_transport, executor, shutdown_event, client_threads, log):
+def _stdin_command_listener(shutdown_event):
+    """
+    Listen for commands on stdin (runs in separate thread).
+    Allows graceful shutdown by typing 'q' or 'quit'.
+    """
+    import select
+    
+    while not shutdown_event.is_set():
+        try:
+            # Use select with timeout to allow checking shutdown_event
+            if select.select([sys.stdin], [], [], 1.0)[0]:
+                line = sys.stdin.readline()
+                if not line:  # EOF (stdin closed)
+                    continue
+                
+                cmd = line.strip().lower()
+                if cmd in ('q', 'quit', 'exit', 'stop'):
+                    daemon_log("Received 'quit' command from terminal - shutting down gracefully...", "INFO")
+                    shutdown_event.set()
+                    break
+                elif cmd == 'status':
+                    daemon_log("Daemon is running. Type 'q' or 'quit' to shutdown.", "INFO")
+                elif cmd:
+                    daemon_log(f"Unknown command: '{cmd}'. Type 'q' or 'quit' to shutdown.", "INFO")
+        except Exception as e:
+            # stdin may not be available (e.g., when run as service)
+            if not shutdown_event.is_set():
+                daemon_log(f"stdin listener error (may be normal if running as service): {e}", "DEBUG")
+            break
+
+
+def _socket_accept_loop(socket_transport, executor, shutdown_event, client_threads):
     """
     Accept loop for Unix socket clients (runs in main thread).
     Spawns a handler thread for each connection.
     """
     while not shutdown_event.is_set():
-        log("Waiting for socket client connection...", "DEBUG")
+        daemon_log("Waiting for socket client connection...", "DEBUG")
         try:
             client_handler = socket_transport.accept_client(timeout=1.0)
             if client_handler is None:
                 continue  # Timeout, check shutdown_event
             
-            log("Socket client connected", "INFO")
+            daemon_log("Socket client connected", "DEBUG")
             
             t = threading.Thread(
                 target=_handle_client,
-                args=(client_handler, executor, shutdown_event, log, "socket"),
+                args=(client_handler, executor, shutdown_event, "socket"),
                 daemon=True,
                 name=f"socket_client_{len(client_threads)}"
             )
@@ -270,17 +304,17 @@ def _socket_accept_loop(socket_transport, executor, shutdown_event, client_threa
             raise
         except Exception as e:
             if not shutdown_event.is_set():
-                log(f"Error accepting socket client: {e}", "ERROR")
+                daemon_log(f"Error accepting socket client: {e}", "ERROR")
 
 
-def _create_socket_transport(socket_path, target_uid, target_gid, log):
+def _create_socket_transport(socket_path, target_uid, target_gid):
     """
     Create and initialize Unix socket transport.
     
     Returns:
         SocketServerTransport instance
     """
-    log(f"Creating socket server: {socket_path}", "INFO")
+    daemon_log(f"Creating socket server: {socket_path}", "DEBUG")
     return SocketServerTransport(
         socket_path=socket_path,
         uid=target_uid,
@@ -288,43 +322,58 @@ def _create_socket_transport(socket_path, target_uid, target_gid, log):
     )
 
 
-def _create_tcp_transport(port, log):
+def _create_tcp_transport(port, use_tls=True):
     """
     Create and initialize TCP transport for Agent Mode.
+    
+    Args:
+        port: TCP port to listen on
+        use_tls: Whether to use TLS encryption (default: True)
     
     Returns:
         TCPServerTransport instance, or None if creation fails
     """
     if not TCP_AVAILABLE:
-        log("Agent mode requested but ipc_tcp module not available", "ERROR")
+        daemon_log("Agent mode requested but ipc_tcp module not available", "ERROR")
         return None
     
     try:
-        transport = TCPServerTransport(host="0.0.0.0", port=port)
-        log(f"Agent Mode: TCP server listening on port {port}", "INFO")
+        transport = TCPServerTransport(host="0.0.0.0", port=port, use_tls=use_tls)
+        
+        # Check if TLS was successfully enabled (attribute renamed to tls_enabled)
+        if transport.tls_enabled:
+            daemon_log(f"Agent Mode: TCP server listening on port {port} (TLS ENABLED)", "INFO")
+        else:
+            if use_tls:
+                daemon_log(f"Agent Mode: TCP server listening on port {port} (NO TLS!)", "IMPORTANT")
+                daemon_log("WARNING: cryptography not installed. Agent running WITHOUT encryption!", "IMPORTANT") 
+                daemon_log("To enable TLS: uv sync && sudo .venv/bin/python src/main.py --daemon --agent ...", "IMPORTANT")
+            else:
+                daemon_log(f"Agent Mode: TCP server listening on port {port} (TLS DISABLED by user)", "IMPORTANT")
+        
         return transport
     except Exception as e:
-        log(f"Failed to start TCP server: {e}", "ERROR")
+        daemon_log(f"Failed to start TCP server: {e}", "ERROR")
         return None
 
 
-def _cleanup_transports(socket_transport, tcp_transport, log):
+def _cleanup_transports(socket_transport, tcp_transport):
     """Close all transports safely."""
     if socket_transport:
         socket_transport.close()
     if tcp_transport:
         try:
             tcp_transport.close()
-            log("TCP transport closed", "INFO")
+            daemon_log("TCP transport closed", "IMPORTANT")
         except Exception as e:
-            log(f"Error closing TCP transport: {e}", "ERROR")
+            daemon_log(f"Error closing TCP transport: {e}", "ERROR")
 
 
-def _wait_for_client_threads(client_threads, log):
+def _wait_for_client_threads(client_threads):
     """Wait for active client threads to finish (with timeout)."""
     active = [t for t in client_threads if t.is_alive()]
     if active:
-        log(f"Waiting for {len(active)} client threads to finish...", "INFO")
+        daemon_log(f"Waiting for {len(active)} client threads to finish...", "IMPORTANT")
         for t in active:
             t.join(timeout=5.0)
 
@@ -333,7 +382,7 @@ def _wait_for_client_threads(client_threads, log):
 # Server Mode Entry Point
 # =============================================================================
 
-def _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event, log):
+def _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event):
     """
     Run daemon in server mode (Unix socket and/or TCP).
     """
@@ -347,25 +396,33 @@ def _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event, 
     
     if args.listen_socket:
         socket_transport = _create_socket_transport(
-            args.listen_socket, target_uid, target_gid, log
+            args.listen_socket, target_uid, target_gid
         )
         modes.append(f"Socket: {args.listen_socket}")
     
     if args.agent:
-        tcp_transport = _create_tcp_transport(args.agent_port, log)
+        tcp_transport = _create_tcp_transport(args.agent_port, use_tls=not args.no_tls)
         if tcp_transport:
             modes.append(f"TCP: 0.0.0.0:{args.agent_port}")
     
     mode_desc = " + ".join(modes) if modes else "None"
     
-    log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} "
+    daemon_log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} "
         f"(PID: {os.getpid()}) [{mode_desc}]", "INFO")
-    log(f"ThreadPoolExecutor: max_workers={max_workers}", "INFO")
+    daemon_log(f"ThreadPoolExecutor: max_workers={max_workers}", "DEBUG")
     
-    # Ignore signals in server mode - daemon should persist
+    # Define SIGQUIT handler for graceful terminal shutdown
+    def _handle_sigquit(signum, frame):
+        daemon_log("Received SIGQUIT (Ctrl+\\) - shutting down gracefully...", "INFO")
+        shutdown_event.set()
+    
+    # Ignore SIGINT/SIGHUP in server mode - daemon should persist through WebUI restarts
     signal.signal(signal.SIGINT, signal.SIG_IGN)
     signal.signal(signal.SIGHUP, signal.SIG_IGN)
-    log("Server mode: SIGINT/SIGHUP ignored (use stop-daemon or shutdown command)", "INFO")
+    # But allow SIGQUIT for manual terminal shutdown
+    signal.signal(signal.SIGQUIT, _handle_sigquit)
+    daemon_log("Server mode: SIGINT (Ctrl+C) ignored.", "DEBUG")
+    daemon_log("To shutdown: type 'q' or 'quit' then Enter in terminal, or use --stop-daemon", "IMPORTANT")
     
     # Run accept loops
     with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="daemon_worker") as executor:
@@ -376,28 +433,38 @@ def _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event, 
             if tcp_transport:
                 tcp_thread = threading.Thread(
                     target=_tcp_accept_loop,
-                    args=(tcp_transport, executor, shutdown_event, client_threads, log),
+                    args=(tcp_transport, executor, shutdown_event, client_threads),
                     daemon=True,
                     name="tcp_accept"
                 )
                 tcp_thread.start()
-                log("TCP accept thread started", "INFO")
+                daemon_log("TCP accept thread started", "DEBUG")
+            
+            # Start stdin command listener thread for terminal shutdown
+            stdin_thread = threading.Thread(
+                target=_stdin_command_listener,
+                args=(shutdown_event,),
+                daemon=True,
+                name="stdin_listener"
+            )
+            stdin_thread.start()
+            daemon_log("Terminal command listener started (type 'q' to quit)", "DEBUG")
             
             # Run socket accept loop or wait for shutdown
             if socket_transport:
-                _socket_accept_loop(socket_transport, executor, shutdown_event, client_threads, log)
+                _socket_accept_loop(socket_transport, executor, shutdown_event, client_threads)
             else:
-                log("Running in TCP-only mode, waiting for shutdown signal...", "INFO")
+                daemon_log("Running in TCP-only mode, waiting for shutdown signal...", "DEBUG")
                 while not shutdown_event.is_set():
                     shutdown_event.wait(timeout=1.0)
             
-            _wait_for_client_threads(client_threads, log)
+            _wait_for_client_threads(client_threads)
             
         finally:
-            _cleanup_transports(socket_transport, tcp_transport, log)
+            _cleanup_transports(socket_transport, tcp_transport)
 
 
-def _run_pipe_mode(target_uid, target_gid, max_workers, shutdown_event, log):
+def _run_pipe_mode(target_uid, target_gid, max_workers, shutdown_event):
     """
     Run daemon in pipe mode (stdin/stdout for single client).
     
@@ -406,15 +473,14 @@ def _run_pipe_mode(target_uid, target_gid, max_workers, shutdown_event, log):
         target_gid: Group ID for permission context
         max_workers: ThreadPoolExecutor worker count
         shutdown_event: threading.Event for shutdown signaling
-        log: Logging function
     """
     from concurrent.futures import ThreadPoolExecutor
     
-    log("Using pipe transport (stdin/stdout)", "INFO")
+    daemon_log("Using pipe transport (stdin/stdout)", "DEBUG")
     transport = PipeServerTransport()
     transport_mode = "Pipe (stdin/stdout)"
     
-    log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
+    daemon_log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} (PID: {os.getpid()}) [{transport_mode}]", "INFO")
     
     with ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="daemon_worker") as executor:
         try:
@@ -437,10 +503,14 @@ def main():
     parser.add_argument('--listen-socket', type=str, nargs='?', const='', help="Unix socket path to create and listen on (if not provided, uses stdin/stdout pipes). If flag present without path, uses default from get_daemon_socket_path(uid)")
     parser.add_argument('--agent', action='store_true', help="Enable Agent Mode: Listen on TCP port for network connections (requires authentication)")
     parser.add_argument('--agent-port', type=int, default=5555, help="TCP port for Agent Mode (default: 5555)")
+    parser.add_argument('--no-tls', action='store_true', help="Disable TLS encryption for Agent Mode (not recommended for production)")
     parser.add_argument('--debug', action='store_true', help="Enable debug output to both terminal and log file")
     args = parser.parse_args()
     target_uid = args.uid
     target_gid = args.gid
+    
+    # Setup global debug mode for all modules (uses module-level import)
+    set_debug_mode(args.debug)
 
     # -----------------------------
     # --- Unified Logging Setup ---
@@ -478,42 +548,31 @@ def main():
         print(f"DAEMON: Log setup failed: {e}", file=original_stderr)
         log_path = "terminal fallback"
 
-    def log(msg, level="INFO"):
-        txt = f"DAEMON [{level}]: {msg}"
-        # Write to system stderr (handles routing to file and optional debug terminal)
-        print(txt, file=sys.stderr)
-        
-        # Critical override: Force terminal for errors if not already in debug mode
-        if not args.debug and level in ("ERROR", "CRITICAL") and sys.stderr != original_stderr:
-             try:
-                 print(txt, file=original_stderr)
-             except:
-                 pass
-
-    log(f"Logging to {log_path}" + (" + terminal" if args.debug else ""), "INFO")
-
+    # Configure unified logging with terminal output for error forcing
+    configure_terminal_output(original_stderr)
+    daemon_log(f"Logging to {log_path}" + (" + terminal" if args.debug else ""))
     # ---------------------
 
     # Handle default socket path if --listen-socket flag present without path
     if args.listen_socket == '':
         from paths import get_daemon_socket_path
         args.listen_socket = get_daemon_socket_path(target_uid)
-        log(f"Using default socket path: {args.listen_socket}", "INFO")
+        daemon_log(f"Using default socket path: {args.listen_socket}")
 
     # Initial checks with proper log levels
     if os.geteuid() != 0:
-        log("Must run as root", "CRITICAL")
+        daemon_log("Must run as root", "CRITICAL")
         sys.exit(1)
     if not zfs_manager_core.ZFS_CMD_PATH or not zfs_manager_core.ZPOOL_CMD_PATH:
-        log("zfs/zpool command not found", "CRITICAL")
+        daemon_log("zfs/zpool command not found", "CRITICAL")
         sys.exit(1)
     if target_uid < 0 or target_gid < 0:
-        log(f"Invalid UID ({target_uid}) or GID ({target_gid}) received", "CRITICAL")
+        daemon_log(f"Invalid UID ({target_uid}) or GID ({target_gid}) received", "CRITICAL")
         sys.exit(1)
 
     # Determine paths based on the target user UID
     daemon_log_file_path = get_daemon_log_file_path(target_uid)
-    log(f"Using log file path (for ZfsManagerCore): {daemon_log_file_path}", "INFO")
+    daemon_log(f"Using log file path (for ZfsManagerCore): {daemon_log_file_path}")
 
     # --- Ensure default credentials file exists (create if missing) ---
     # This is done by the daemon (root) as it has permissions
@@ -522,9 +581,9 @@ def main():
     # Daemon (root) creates it with ownership set to target_uid (WebUI user)
     # This fixes permissions issues when running from source
     if ensure_flask_secret_key(target_uid, target_gid):
-         log("Flask secret key verified/created", "INFO")
+         daemon_log("Flask secret key verified/created")
     else:
-         log("Failed to ensure Flask secret key!", "ERROR")
+         daemon_log("Failed to ensure Flask secret key!", "ERROR")
     # --- End Flask Key Check ---
 
 
@@ -539,18 +598,18 @@ def main():
     
     try:
         if use_server_mode:
-            _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event, log)
+            _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event)
         else:
-            _run_pipe_mode(target_uid, target_gid, max_workers, shutdown_event, log)
+            _run_pipe_mode(target_uid, target_gid, max_workers, shutdown_event)
         
     except KeyboardInterrupt:
         shutdown_event.set()
-        log("Interrupted by user (Ctrl+C), shutting down...", "WARNING")
+        daemon_log("Interrupted by user (Ctrl+C), shutting down...", "WARNING")
     except Exception as e:
-        log(f"Failed to setup transport or fatal error: {e}", "CRITICAL")
+        daemon_log(f"Failed to setup transport or fatal error: {e}", "CRITICAL")
         sys.exit(1)
     finally:
-        log("Exiting main function", "INFO")
+        daemon_log("Exiting main function")
 
 
 if __name__ == "__main__":
