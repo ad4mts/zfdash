@@ -116,6 +116,32 @@
           <!-- Right side of Navbar -->
           <div class="d-flex align-items-center ms-auto">
             <span class="navbar-text me-3" id="status-indicator">Idle</span>
+            <!-- Connection Indicator -->
+            <div class="nav-item dropdown me-3" id="connection-indicator">
+              <a class="nav-link dropdown-toggle d-flex align-items-center text-white px-2 py-1 rounded" href="#"
+                id="connectionDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"
+                style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
+                <span id="connection-status-icon" class="me-2">
+                  <i class="bi bi-pc-display text-success"></i>
+                </span>
+                <span id="connection-status-text" class="small">Local</span>
+              </a>
+              <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="connectionDropdown">
+                <li>
+                  <div class="dropdown-item-text text-muted small" id="connection-details">
+                    <i class="bi bi-info-circle me-1"></i> Connected to local daemon
+                  </div>
+                </li>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li>
+                  <a class="dropdown-item" href="/control-center">
+                    <i class="bi bi-hdd-network me-2"></i>Control Center
+                  </a>
+                </li>
+              </ul>
+            </div>
             <!-- User Info / Logout -->
             <div class="nav-item dropdown" id="user-menu">
               <a class="nav-link dropdown-toggle text-white" href="#" id="userDropdown" role="button"
@@ -563,6 +589,23 @@
         <div class="modal-footer" id="confirmModalFooter">
           <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
           <button type="button" class="btn btn-primary" id="confirmModalConfirmBtn">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Input Modal (dedicated for text input prompts - can stack over #actionModal without conflicts) -->
+  <div class="modal fade" id="inputModal" tabindex="-1" aria-labelledby="inputModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="inputModalLabel">Input</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body" id="inputModalBody"></div>
+        <div class="modal-footer" id="inputModalFooter">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="inputModalConfirmBtn">OK</button>
         </div>
       </div>
     </div>
