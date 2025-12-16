@@ -31,6 +31,9 @@ try:
     from models import ZfsObject, Pool, Dataset, Snapshot
     # Import version info from single source of truth
     from version import get_version_info
+    # Import control center components
+    from control_center_manager import ControlCenterManager
+    from control_center_routes import control_center_bp, init_control_center_routes
 except ImportError as e:
     # Use basic print here as logger might not be configured yet
     print(f"WEB_UI: FATAL: Could not import required ZFS modules or config: {e}", file=sys.stderr)
@@ -139,6 +142,28 @@ app.secret_key = flask_key
 # --- *** IMPORTANT: Secret Key for Sessions *** ---
 
 # ---End Defining app-----------------------------
+
+# --- *** Control Center Initialization *** ---
+# Initialize control center manager
+try:
+    from paths import USER_CONFIG_DIR
+    cc_config_path = os.path.join(str(USER_CONFIG_DIR), 'remote_agents.json')
+    control_center_manager = ControlCenterManager(cc_config_path)
+    control_center_manager.load_connections()
+    print(f"CONTROL_CENTER: Initialized with storage at {cc_config_path}", file=sys.stderr)
+except Exception as e:
+    print(f"CONTROL_CENTER: Warning - Failed to initialize control center: {e}", file=sys.stderr)
+    control_center_manager = None
+
+# Register control center blueprint
+if control_center_manager:
+    try:
+        init_control_center_routes(control_center_manager)
+        app.register_blueprint(control_center_bp, url_prefix='/api/cc')
+        print("CONTROL_CENTER: API routes registered at /api/cc", file=sys.stderr)
+    except Exception as e:
+        print(f"CONTROL_CENTER: Warning - Failed to register routes: {e}", file=sys.stderr)
+# --- *** End Control Center Initialization *** ---
 
 # --- *** Authentication Setup (Flask-Login) *** ---
 login_manager = LoginManager()
@@ -320,7 +345,21 @@ def _to_dict_recursive(obj):
 
 # --- Helper Function (Modified) ---
 def _get_zfs_client() -> ZfsManagerClient:
-    """Helper to get the ZFS client instance stored in the app context."""
+    """
+    Helper to get the ZFS client instance - either local or remote.
+    
+    Returns the control center's active remote client if in remote mode,
+    otherwise returns the local client from app context.
+    """
+    # Check if in control center remote mode
+    if control_center_manager and session.get('cc_mode') == 'remote':
+        remote_client = control_center_manager.get_active_client()
+        if remote_client:
+            return remote_client
+        # Fall through to local if remote client not available
+        app.logger.warning("Remote mode active but no remote client available, using local")
+    
+    # Return local client
     client = getattr(app, 'zfs_client', None)
     if client is None:
         app.logger.error("ZFS Manager Client not found in Flask app context!")
@@ -614,6 +653,15 @@ def index():
     # Renders index.html ONLY if user is authenticated by Flask-Login.
     # If not authenticated, Flask-Login redirects to login_manager.login_view ('/login')
     return render_template('index.html')
+
+@app.route('/control-center')
+@login_required
+def control_center_page():
+    """Render the control center page for managing remote agent connections."""
+    if not control_center_manager:
+        flash('Control Center is not available.', 'warning')
+        return redirect(url_for('index'))
+    return render_template('control_center.html')
 
 @app.route('/api/auth/status')
 def auth_status():
