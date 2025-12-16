@@ -3,26 +3,62 @@ TLS Certificate Manager for ZfDash TCP Transport
 
 Handles automatic generation and management of self-signed TLS certificates
 for encrypting TCP agent connections.
+
+Certificate generation uses a fallback chain:
+1. Try 'cryptography' library (best API, if installed)
+2. Fall back to 'openssl' CLI (available on most systems)
+3. If neither available, TLS is disabled with a warning
 """
 
 import os
 import sys
 import json
 import hashlib
+import subprocess
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Tuple, Optional
-import ipaddress
-
-# Import cryptography components
-from cryptography import x509
-from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
-from cryptography.x509.oid import NameOID
 
 # Debug logging (verbose messages only appear with --debug)
-from debug_logging import log_debug
+# daemon_log with IMPORTANT level shows to users by default
+from debug_logging import log_debug, daemon_log
 
+# Cross-platform executable finder
+from paths import find_executable
+
+# =============================================================================
+# Cryptography availability detection (lazy import)
+# =============================================================================
+
+CRYPTOGRAPHY_AVAILABLE = None  # Set on first use
+OPENSSL_CLI_PATH = None  # Cached path to openssl binary
+
+
+def _check_cryptography() -> bool:
+    """Check if cryptography library is available."""
+    global CRYPTOGRAPHY_AVAILABLE
+    if CRYPTOGRAPHY_AVAILABLE is None:
+        try:
+            from cryptography import x509
+            from cryptography.hazmat.primitives import hashes, serialization
+            from cryptography.hazmat.primitives.asymmetric import rsa
+            CRYPTOGRAPHY_AVAILABLE = True
+        except ImportError:
+            CRYPTOGRAPHY_AVAILABLE = False
+    return CRYPTOGRAPHY_AVAILABLE
+
+
+def _find_openssl() -> Optional[str]:
+    """Find openssl CLI binary using cross-platform search."""
+    global OPENSSL_CLI_PATH
+    if OPENSSL_CLI_PATH is None:
+        OPENSSL_CLI_PATH = find_executable('openssl')
+    return OPENSSL_CLI_PATH
+
+
+# =============================================================================
+# Certificate Generation - Multi-Fallback
+# =============================================================================
 
 def ensure_server_certificate(cert_dir: Path) -> Tuple[Path, Path]:
     """
@@ -33,6 +69,9 @@ def ensure_server_certificate(cert_dir: Path) -> Tuple[Path, Path]:
         
     Returns:
         Tuple of (cert_path, key_path)
+        
+    Raises:
+        RuntimeError: If certificate cannot be generated (no crypto available)
     """
     cert_dir.mkdir(parents=True, exist_ok=True)
     
@@ -42,22 +81,53 @@ def ensure_server_certificate(cert_dir: Path) -> Tuple[Path, Path]:
     if cert_file.exists() and key_file.exists():
         log_debug("TLS", f"Using existing certificate: {cert_file}")
         return cert_file, key_file
+    #ensure daemon logs this
+    daemon_log("Generating new self-signed TLS certificate...", "INFO")
     
-    print(f"TLS: Generating new self-signed certificate...", file=sys.stderr)  # Important - always show
-    generate_self_signed_cert(cert_file, key_file)
-    log_debug("TLS", f"Certificate generated: {cert_file}")
+    # Try cryptography library first
+    if _check_cryptography():
+        daemon_log("Using 'cryptography' library for TLS cert generation", "IMPORTANT")
+        _generate_cert_cryptography(cert_file, key_file)
+        daemon_log(f"TLS certificate generated: {cert_file}", "IMPORTANT")
+        return cert_file, key_file
     
-    return cert_file, key_file
+    # Fall back to openssl CLI
+    openssl_path = _find_openssl()
+    if openssl_path:
+        daemon_log(f"'cryptography' not available, using openssl CLI: {openssl_path}", "IMPORTANT")
+        if _generate_cert_openssl(cert_file, key_file, openssl_path):
+            daemon_log(f"TLS certificate generated: {cert_file}", "IMPORTANT")
+            return cert_file, key_file
+        else:
+            daemon_log("openssl CLI failed to generate certificate", "ERROR")
+            raise RuntimeError("Failed to generate certificate with openssl CLI")
+    
+    # No method available
+    raise RuntimeError(
+        "Cannot generate TLS certificate: neither 'cryptography' library nor 'openssl' CLI found.\n"
+        "Options:\n"
+        "  1. Install cryptography: pip install cryptography\n"
+        "  2. Install OpenSSL: apt install openssl / brew install openssl\n"
+        "  3. Manually create certs and place at:\n"
+        f"     {cert_file}\n"
+        f"     {key_file}\n"
+        "  4. Run agent without TLS: --no-tls (not recommended)"
+    )
 
 
-def generate_self_signed_cert(cert_path: Path, key_path: Path):
+def _generate_cert_cryptography(cert_path: Path, key_path: Path):
     """
-    Generate self-signed certificate valid for 10 years.
+    Generate self-signed certificate using cryptography library.
+    Valid for 10 years.
+    """
+    # Import here to avoid top-level import failure
+    from cryptography import x509
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.x509.oid import NameOID
+    from datetime import timedelta
+    import ipaddress
     
-    Args:
-        cert_path: Path to save certificate
-        key_path: Path to save private key
-    """
     # Generate private key
     private_key = rsa.generate_private_key(
         public_exponent=65537,
@@ -106,13 +176,81 @@ def generate_self_signed_cert(cert_path: Path, key_path: Path):
     os.chmod(key_path, 0o600)  # Private key: read/write owner only
     os.chmod(cert_path, 0o644)  # Certificate: readable by all
     
-    log_debug("TLS", f"Certificate saved to {cert_path}")
-    log_debug("TLS", f"Private key saved to {key_path} (permissions: 600)")
+    log_debug("TLS", f"Certificate generated with cryptography: {cert_path}")
 
+
+def _generate_cert_openssl(cert_path: Path, key_path: Path, openssl_path: str) -> bool:
+    """
+    Generate self-signed certificate using openssl CLI.
+    Valid for 10 years (3650 days).
+    
+    Returns:
+        True if successful, False on error
+    """
+    # OpenSSL command for self-signed cert with SAN extension
+    # Using -addext for subject alternative names (requires openssl 1.1.1+)
+    cmd = [
+        openssl_path, 'req',
+        '-x509',                         # Self-signed certificate
+        '-newkey', 'rsa:2048',           # Generate new RSA 2048-bit key
+        '-keyout', str(key_path),        # Output private key
+        '-out', str(cert_path),          # Output certificate
+        '-days', '3650',                 # Valid for 10 years
+        '-nodes',                        # No passphrase on key
+        '-subj', '/CN=ZfDash Agent/O=ZfDash',  # Subject name
+    ]
+    
+    # Try to add SAN extension (may fail on older openssl)
+    cmd_with_san = cmd + [
+        '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1,IP:::1'
+    ]
+    
+    try:
+        # First try with SAN extension
+        result = subprocess.run(
+            cmd_with_san,
+            capture_output=True,
+            text=True,
+            timeout=30
+        )
+        
+        if result.returncode != 0:
+            # SAN might not be supported, try without
+            log_debug("TLS", "openssl -addext failed, trying without SAN extension")
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30
+            )
+        
+        if result.returncode != 0:
+            print(f"TLS: openssl command failed: {result.stderr}", file=sys.stderr)
+            return False
+        
+        # Set permissions
+        os.chmod(key_path, 0o600)
+        os.chmod(cert_path, 0o644)
+        
+        log_debug("TLS", f"Certificate generated with openssl CLI: {cert_path}")
+        return True
+        
+    except subprocess.TimeoutExpired:
+        print("TLS: openssl command timed out", file=sys.stderr)
+        return False
+    except Exception as e:
+        print(f"TLS: Error running openssl: {e}", file=sys.stderr)
+        return False
+
+
+# =============================================================================
+# Certificate Fingerprinting (stdlib only - no cryptography needed)
+# =============================================================================
 
 def get_certificate_fingerprint(cert_path: Path) -> str:
     """
     Get SHA256 fingerprint of certificate for verification.
+    Uses openssl CLI if cryptography not available.
     
     Args:
         cert_path: Path to certificate file
@@ -120,17 +258,43 @@ def get_certificate_fingerprint(cert_path: Path) -> str:
     Returns:
         Hex-encoded SHA256 fingerprint
     """
+    if _check_cryptography():
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes
+        
+        with open(cert_path, 'rb') as f:
+            cert = x509.load_pem_x509_certificate(f.read())
+        return cert.fingerprint(hashes.SHA256()).hex()
+    
+    # Fallback: use openssl CLI
+    openssl_path = _find_openssl()
+    if openssl_path:
+        try:
+            result = subprocess.run(
+                [openssl_path, 'x509', '-in', str(cert_path), '-noout', '-fingerprint', '-sha256'],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                # Output format: "SHA256 Fingerprint=XX:XX:XX..."
+                fp_line = result.stdout.strip()
+                if '=' in fp_line:
+                    fp = fp_line.split('=', 1)[1].replace(':', '').lower()
+                    return fp
+        except Exception as e:
+            log_debug("TLS", f"openssl fingerprint failed: {e}")
+    
+    # Last resort: hash the DER portion (less accurate but works)
     with open(cert_path, 'rb') as f:
         cert_data = f.read()
-        cert = x509.load_pem_x509_certificate(cert_data)
-    
-    fingerprint = cert.fingerprint(hashes.SHA256())
-    return fingerprint.hex()
+    return hashlib.sha256(cert_data).hexdigest()
 
 
 def get_certificate_fingerprint_from_der(cert_der: bytes) -> str:
     """
     Get SHA256 fingerprint from DER-encoded certificate.
+    This is stdlib-only, no external dependencies needed.
     
     Args:
         cert_der: DER-encoded certificate bytes
@@ -141,6 +305,10 @@ def get_certificate_fingerprint_from_der(cert_der: bytes) -> str:
     fingerprint = hashlib.sha256(cert_der).digest()
     return fingerprint.hex()
 
+
+# =============================================================================
+# Trust-on-First-Use (TOFU) Certificate Store
+# =============================================================================
 
 def load_trusted_certificates(config_dir: Path) -> dict:
     """

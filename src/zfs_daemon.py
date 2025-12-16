@@ -342,12 +342,14 @@ def _create_tcp_transport(port, use_tls=True):
         
         # Check if TLS was successfully enabled (attribute renamed to tls_enabled)
         if transport.tls_enabled:
-            daemon_log(f"Agent Mode: TCP server listening on port {port} (TLS ENABLED)", "INFO")
+            daemon_log(f"TLS is enabled and required for this agent. use --no-tls to disable it (not recommended)", "IMPORTANT")
+            daemon_log(f"Agent Mode: TCP server listening on port {port} (TLS ENABLED)", "IMPORTANT")
         else:
             if use_tls:
+                daemon_log("WARNING: Agent running WITHOUT encryption!", "IMPORTANT") 
+                daemon_log("To enable TLS: install cryptography: (uv sync) then use (sudo .venv/bin/python src/main.py --agent..)", "IMPORTANT")
+                daemon_log("OR Install openssl on your system", "IMPORTANT")
                 daemon_log(f"Agent Mode: TCP server listening on port {port} (NO TLS!)", "IMPORTANT")
-                daemon_log("WARNING: cryptography not installed. Agent running WITHOUT encryption!", "IMPORTANT") 
-                daemon_log("To enable TLS: uv sync && sudo .venv/bin/python src/main.py --daemon --agent ...", "IMPORTANT")
             else:
                 daemon_log(f"Agent Mode: TCP server listening on port {port} (TLS DISABLED by user)", "IMPORTANT")
         
