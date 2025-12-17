@@ -555,3 +555,38 @@ def authenticate_server(sock: socket.socket, password_info: dict) -> bool:
         return False
     finally:
         sock.settimeout(None)
+
+
+
+
+# =============================================================================
+# SSL Pre-warming (fixes uv bundled OpenSSL first-connection failures)
+# =============================================================================
+
+def _prewarm_ssl_module() -> None:
+    """
+    Pre-warm the SSL module to force OpenSSL lazy initialization.
+    
+    This prevents "_ssl.c:3103" errors on first TLS handshake that occur
+    with uv's bundled Python due to OpenSSL lazy initialization.
+    Retries on failure as first attempt often fails.
+    """
+    import time
+    for _ in range(10):
+        try:
+            ctx = ssl.create_default_context()
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+            ctx.get_ciphers()
+            ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER).get_ciphers()
+            return  # Success
+        except Exception:
+            time.sleep(0.1)
+
+
+def start_ssl_prewarm() -> None:
+    """Start SSL prewarm in a background daemon thread (non-blocking)."""
+    import threading
+    threading.Thread(target=_prewarm_ssl_module, daemon=True, name="SSLPrewarm").start()
+
+
