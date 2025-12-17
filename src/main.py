@@ -15,6 +15,7 @@ from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicatio
 import constants
 from paths import IS_FROZEN
 
+
 # Globals for cleanup
 _cleanup_done = False
 _zfs_client: Optional['ZfsManagerClient'] = None
@@ -287,6 +288,10 @@ if __name__ == "__main__":
         sys.exit(0)
 
     elif args.web or not (args.web or args.daemon):
+        # Pre-warm SSL module in background (fixes uv bundled OpenSSL first-connection failures)
+        from ipc_security import start_ssl_prewarm
+        start_ssl_prewarm()
+        
         # --- Web UI or GUI Mode --- (Both need a daemon)
         mode = "Web UI" if args.web else "GUI"
         
