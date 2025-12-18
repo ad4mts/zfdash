@@ -125,7 +125,7 @@ if __name__ == "__main__":
     else:
         prog_name = "uv run src/main.py"
         # For daemon commands that need root, use venv Python (sudo ignores venv activation)
-        prog_name_root = ".venv/bin/python src/main.py"
+        prog_name_root = "python src/main.py"
 
     parser = argparse.ArgumentParser(
         usage=usage_str,
@@ -139,11 +139,13 @@ if __name__ == "__main__":
             f"    {prog_name} --web --socket\n\n"
             f"  Connect to existing socket daemon (error if not running):\n"
             f"    {prog_name} --web --connect-socket\n\n"
+            f"  Launch agent (run as root):\n"
+            f"    sudo {prog_name_root} --agent\n\n"
             f"  Launch daemon in background and exit:\n"
             f"    {prog_name} --launch-daemon\n\n"
             f"  Stop a running socket daemon:\n"
             f"    {prog_name} --stop-daemon\n\n"
-            f"  Start daemon manually (run as root with venv Python):\n"
+            f"  Start daemon manually (run as root):\n"
             f"    sudo {prog_name_root} --daemon --uid $(id -u) --gid $(id -g) --listen-socket\n\n"
             f"  Start Agent Mode daemon (TCP server with TLS):\n"
             f"    sudo {prog_name_root} --daemon --uid $(id -u) --gid $(id -g) --agent\n"
@@ -175,11 +177,13 @@ if __name__ == "__main__":
         'Options for running the privileged background daemon. Controls running as a daemon, '
         'the target UID/GID for operations, and socket listening path.'
     )
-    daemon_group.add_argument('--daemon', action='store_true', help='Run the background daemon process (requires --uid and --gid).')
-    daemon_group.add_argument('--uid', type=int, help='Target user ID for daemon operations (required with --daemon).')
-    daemon_group.add_argument('--gid', type=int, help='Target group ID for daemon operations (required with --daemon).')
+    daemon_group.add_argument('--daemon', action='store_true', help='Run the background daemon process.')
+    daemon_group.add_argument('--agent', action='store_true', help='Run Agent Mode (TCP server for network connections).')
+    daemon_group.add_argument('--uid', type=int, help='Target user ID for daemon operations (inferred from sudo if not provided).')
+    daemon_group.add_argument('--gid', type=int, help='Target group ID for daemon operations (inferred from sudo if not provided).')
     daemon_group.add_argument('--listen-socket', type=str, metavar='PATH', nargs='?', const='',
                               help='Create and listen on a Unix socket (daemon server mode). If PATH not specified, uses default from get_daemon_socket_path(uid).')
+    daemon_group.add_argument('--no-tls', action='store_true', help='Disable TLS encryption for Agent Mode (not recommended).')
 
 
     # Filter out platform-specific launcher arguments when frozen (for future macOS .app bundle support)
@@ -189,10 +193,10 @@ if __name__ == "__main__":
         main_args = [arg for arg in main_args if not arg.startswith('-psn_')]
 
     try:
-         # Use parse_known_args when in daemon mode to allow daemon-specific arguments
-         # (e.g., --listen-socket <path>) to pass through to zfs_daemon.main()
-         if '--daemon' in main_args:
-             args, unknown = parser.parse_known_args(args=main_args)
+         # Use parse_known_args when in daemon/agent mode to allow daemon-specific arguments
+         # to pass through to zfs_daemon.main()
+         if '--daemon' in main_args or '--agent' in main_args:
+              args, unknown = parser.parse_known_args(args=main_args)
          else:
              args = parser.parse_args(args=main_args)
     except SystemExit:
@@ -208,13 +212,12 @@ if __name__ == "__main__":
     zfs_manager_client: Optional[ZfsManagerClient] = None
     daemon_process = None
 
-    if args.daemon:
+    if args.daemon or args.agent:
         # --- Daemon Mode --- (Launched via privilege escalation, this handles its own args)
         # The daemon is now expected to be launched via privilege escalation (pkexec/doas/sudo) by daemon_utils.
         # This direct daemon launch logic is kept in case it's needed for debugging
         # but normal operation (GUI/Web) will launch it indirectly.
-        if args.uid is None or args.gid is None:
-            parser.error("--daemon requires --uid and --gid when run directly.")
+        # Note: --uid/--gid can be inferred from SUDO_UID/SUDO_GID by zfs_daemon if not provided.
 
         print("MAIN: Standalone Daemon mode requested.", file=sys.stderr)
         try:

@@ -498,18 +498,38 @@ def main():
     global target_uid, target_gid, daemon_log_file_path
 
     parser = argparse.ArgumentParser(description="ZFS GUI Background Daemon")
-    # These arguments are expected to be passed via privilege escalation (pkexec/doas/sudo) by daemon_utils.py
-    parser.add_argument('--uid', required=True, type=int, help="Real User ID of the GUI/WebUI process owner")
-    parser.add_argument('--gid', required=True, type=int, help="Real Group ID of the GUI/WebUI process owner")
+    # UID/GID: required for socket/pipe mode, optional for agent-only mode (inferred from sudo env)
+    parser.add_argument('--uid', type=int, help="Real User ID of the GUI/WebUI process owner")
+    parser.add_argument('--gid', type=int, help="Real Group ID of the GUI/WebUI process owner")
     parser.add_argument('--daemon', action='store_true', help="Flag indicating daemon mode (for main.py)")
     parser.add_argument('--listen-socket', type=str, nargs='?', const='', help="Unix socket path to create and listen on (if not provided, uses stdin/stdout pipes). If flag present without path, uses default from get_daemon_socket_path(uid)")
     parser.add_argument('--agent', action='store_true', help="Enable Agent Mode: Listen on TCP port for network connections (requires authentication)")
     parser.add_argument('--agent-port', type=int, default=5555, help="TCP port for Agent Mode (default: 5555)")
+    parser.add_argument('--agent-password-file', type=str, metavar='PATH', help="Path to file containing agent password (first line, for non-interactive setup)")
     parser.add_argument('--no-tls', action='store_true', help="Disable TLS encryption for Agent Mode (not recommended for production)")
     parser.add_argument('--debug', action='store_true', help="Enable debug output to both terminal and log file")
     args = parser.parse_args()
-    target_uid = args.uid
-    target_gid = args.gid
+    
+    # Infer UID/GID if not provided
+    if args.uid is None or args.gid is None:
+        # Agent-only mode (no --listen-socket): always use UID=0, GID=0 for consistency
+        if args.agent and not args.listen_socket:
+            target_uid = args.uid if args.uid is not None else 0
+            target_gid = args.gid if args.gid is not None else 0
+            daemon_log("Agent-only mode: using UID=0, GID=0 for consistency", "INFO")
+        # Try to get from sudo environment variables
+        elif os.environ.get('SUDO_UID') and os.environ.get('SUDO_GID'):
+            target_uid = int(os.environ['SUDO_UID']) if args.uid is None else args.uid
+            target_gid = int(os.environ['SUDO_GID']) if args.gid is None else args.gid
+            daemon_log(f"Inferred UID={target_uid}, GID={target_gid} from sudo environment", "INFO")
+        else:
+            # Socket/pipe mode requires explicit UID/GID
+            daemon_log("--uid and --gid required for socket/pipe mode", "ERROR")
+            daemon_log("Use: --daemon --uid $(id -u) --gid $(id -g)", "ERROR")
+            sys.exit(1)
+    else:
+        target_uid = args.uid
+        target_gid = args.gid
     
     # Setup global debug mode for all modules (uses module-level import)
     set_debug_mode(args.debug)
@@ -575,7 +595,70 @@ def main():
     # Determine paths based on the target user UID
     daemon_log_file_path = get_daemon_log_file_path(target_uid)
     daemon_log(f"Using log file path (for ZfsManagerCore): {daemon_log_file_path}")
-
+    
+    # --- Agent-Only Mode: Interactive Password Setup ---
+    # For agent-only mode (no --listen-socket), prompt for password if:
+    # 1. Password file provided via --agent-password-file, OR
+    # 2. Credentials file doesn't exist yet AND running interactively
+    if args.agent and not args.listen_socket:
+        import getpass
+        from paths import CREDENTIALS_FILE_PATH
+        
+        password_to_set = None
+        credentials_exist = os.path.exists(CREDENTIALS_FILE_PATH)
+        
+        # Option 1: Password from file (for non-interactive setups like systemd/Docker)
+        if args.agent_password_file:
+            try:
+                with open(args.agent_password_file, 'r') as f:
+                    password_to_set = f.readline().strip()
+                if password_to_set:
+                    daemon_log(f"Reading agent password from file: {args.agent_password_file}", "INFO")
+                else:
+                    daemon_log(f"Password file is empty: {args.agent_password_file}", "ERROR")
+                    sys.exit(1)
+            except IOError as e:
+                daemon_log(f"Cannot read password file '{args.agent_password_file}': {e}", "ERROR")
+                sys.exit(1)
+        
+        # Option 2: Interactive prompt ONLY if credentials don't exist yet
+        elif not credentials_exist and sys.stdin.isatty():
+            daemon_log("=" * 50, "IMPORTANT")
+            daemon_log("AGENT MODE - First Time Password Setup", "IMPORTANT")
+            daemon_log("=" * 50, "IMPORTANT")
+            daemon_log("No credentials found. Set an agent password.", "IMPORTANT")
+            
+            try:
+                pw1 = getpass.getpass("New agent password: ")
+                if pw1:
+                    pw2 = getpass.getpass("Confirm password: ")
+                    if pw1 != pw2:
+                        daemon_log("Passwords do not match!", "ERROR")
+                        sys.exit(1)
+                    password_to_set = pw1
+                else:
+                    daemon_log("No password entered - using default 'admin' credentials", "WARNING")
+            except (EOFError, KeyboardInterrupt):
+                daemon_log("Password setup cancelled", "INFO")
+                sys.exit(0)
+        elif credentials_exist:
+            daemon_log(f"Using existing credentials from: {CREDENTIALS_FILE_PATH}", "INFO")
+        
+        # Save the new password if provided
+        if password_to_set:
+            # Create default credentials first (so admin user exists to update)
+            create_default_credentials_if_missing()
+            # Verify credentials file was created
+            if not os.path.exists(CREDENTIALS_FILE_PATH):
+                daemon_log(f"Failed to create credentials file at: {CREDENTIALS_FILE_PATH}", "ERROR")
+                daemon_log("Check that directory exists and is writable", "ERROR")
+                sys.exit(1)
+            if update_user_password("admin", password_to_set):
+                daemon_log(f"Agent password saved to: {CREDENTIALS_FILE_PATH}", "IMPORTANT")
+            else:
+                daemon_log("Failed to save agent password!", "ERROR")
+                sys.exit(1)
+    
     # --- Ensure default credentials file exists (create if missing) ---
     # This is done by the daemon (root) as it has permissions
     create_default_credentials_if_missing()
