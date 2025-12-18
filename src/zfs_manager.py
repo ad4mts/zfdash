@@ -57,6 +57,9 @@ class ZfsClientCommunicationError(Exception):
     """Represents an error in the client-daemon communication itself."""
     pass
 
+class RemoteAgentDisconnectedError(ZfsClientCommunicationError):
+    """Raised when the remote agent connection is lost."""
+
 # --- ZFS Manager Client Class ---
 class ZfsManagerClient:
     def __init__(self, daemon_process: subprocess.Popen, transport: LineBufferedTransport, owns_daemon: bool = True):

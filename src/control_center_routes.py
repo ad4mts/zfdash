@@ -163,7 +163,7 @@ def switch_agent(alias):
     if not alias:
         return jsonify({'success': False, 'error': 'Alias is required'}), 400
     
-    success, message = _cc_manager.switch_active_agent(alias, session)
+    success, message = _cc_manager.switch_active(alias, session)
     
     if success:
         return jsonify({'success': True, 'message': message})
@@ -178,11 +178,16 @@ def list_agents():
         return jsonify({'success': False, 'error': 'Control center not initialized'}), 500
     
     try:
-        connections = _cc_manager.list_connections()
+        # Validate active connection (single source of truth - auto-clears dead connections)
+        is_healthy, active_alias = _cc_manager.is_healthy_or_clear()
         
-        # Add current mode info
-        current_mode = session.get('cc_mode', 'local')
-        active_alias = session.get('cc_active_alias')
+        # Clear session if remote died
+        if session.get('cc_mode') == 'remote' and not active_alias:
+            session.pop('cc_mode', None)
+            session.pop('cc_active_alias', None)
+        
+        connections = _cc_manager.list_connections()
+        current_mode = 'remote' if active_alias else 'local'
         
         return jsonify({
             'success': True,

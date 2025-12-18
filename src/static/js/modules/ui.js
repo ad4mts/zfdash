@@ -567,9 +567,15 @@ export function showInputModal(title, htmlMessage, defaultValue = '', placeholde
  * Creates a full-page overlay blocking the UI when daemon connection is lost.
  * @param {string} message - Error message to display
  * @param {Function} onReconnect - Callback function when Reconnect button is clicked
+ * @param {object} options - title, showDaemonHelp, showSwitchAgentButton
  */
 export function showDaemonDisconnectedOverlay(message, onReconnect = null, options = {}) {
-    const { title = 'Daemon Connection Lost', showDaemonHelp = true } = options;
+    const {
+        title = 'Daemon Connection Lost',
+        showDaemonHelp = true,
+        showSwitchAgentButton = false,
+        reconnectButtonText = 'Reconnect'
+    } = options;
 
     // Check if overlay already exists - update message if so
     const existingOverlay = document.getElementById('daemon-disconnected-overlay');
@@ -613,6 +619,17 @@ export function showDaemonDisconnectedOverlay(message, onReconnect = null, optio
                     Click <strong style="color: #6a64e8;">Reconnect</strong> to try again.
                 </p>`;
 
+    // Switch Agent button for remote disconnections
+    const switchAgentBtn = showSwitchAgentButton
+        ? `<a href="/control-center" class="btn flex-fill py-2" 
+               style="background: #f0f0f5; border-radius: 8px; color: #555; font-size: 0.95rem; text-decoration: none;">
+               <i class="bi bi-hdd-network-fill me-1"></i>Switch Agent
+           </a>`
+        : `<button type="button" class="btn flex-fill py-2" onclick="location.reload()"
+                style="background: #f0f0f5; border-radius: 8px; color: #555; font-size: 0.95rem;">
+               <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+           </button>`;
+
     overlay.innerHTML = `
         <div class="card border-0" style="width: 440px; max-width: 95vw; margin: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.3); border-radius: 12px; overflow: hidden;">
             <div class="py-3 px-4" style="background: linear-gradient(135deg, #6a64e8 0%, #5752d6 100%);">
@@ -630,12 +647,9 @@ export function showDaemonDisconnectedOverlay(message, onReconnect = null, optio
                 <div class="d-flex gap-2">
                     <button type="button" class="btn flex-fill text-white py-2" id="daemon-reconnect-btn" 
                             style="background: #6a64e8; border-radius: 8px; font-weight: 500; font-size: 0.95rem;">
-                        <i class="bi bi-arrow-repeat me-1"></i>Reconnect
+                        <i class="bi bi-arrow-repeat me-1"></i>${reconnectButtonText}
                     </button>
-                    <button type="button" class="btn flex-fill py-2" onclick="location.reload()"
-                            style="background: #f0f0f5; border-radius: 8px; color: #555; font-size: 0.95rem;">
-                        <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-                    </button>
+                    ${switchAgentBtn}
                 </div>
             </div>
         </div>
@@ -648,10 +662,10 @@ export function showDaemonDisconnectedOverlay(message, onReconnect = null, optio
     if (reconnectBtn && onReconnect) {
         reconnectBtn.addEventListener('click', async () => {
             reconnectBtn.disabled = true;
-            reconnectBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Reconnecting...';
+            reconnectBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Connecting...';
             await onReconnect();
             reconnectBtn.disabled = false;
-            reconnectBtn.innerHTML = '<i class="bi bi-arrow-repeat me-1"></i>Reconnect';
+            reconnectBtn.innerHTML = `<i class="bi bi-arrow-repeat me-1"></i>${reconnectButtonText}`;
         });
     }
 }

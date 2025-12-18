@@ -86,7 +86,7 @@ class ControlCenterManager:
         """
         self.connections: Dict[str, AgentConnection] = {}
         self.storage_path = storage_path
-        self.active_connection: Optional[str] = None  # Active agent alias
+        self.active_alias: Optional[str] = None  # Currently active remote alias
         
     def add_connection(self, alias: str, host: str, port: int, use_tls: bool = True) -> Tuple[bool, str]:
         """
@@ -150,8 +150,8 @@ class ControlCenterManager:
             log_debug("CC_MANAGER", f"Could not clear trusted certificate: {e}")
         
         # Clear active connection if this was it
-        if self.active_connection == alias:
-            self.active_connection = None
+        if self.active_alias == alias:
+            self.active_alias = None
         
         del self.connections[alias]
         self.save_connections()
@@ -264,14 +264,14 @@ class ControlCenterManager:
             conn.connected = False
             
             # Clear active if this was it
-            if self.active_connection == alias:
-                self.active_connection = None
+            if self.active_alias == alias:
+                self.active_alias = None
             
             return True, f"Disconnected from '{alias}'"
         except Exception as e:
             return False, f"Error disconnecting: {e}"
     
-    def switch_active_agent(self, alias: str, session: Dict) -> Tuple[bool, str]:
+    def switch_active(self, alias: str, session: Dict) -> Tuple[bool, str]:
         """
         Switch the active agent connection.
         
@@ -283,7 +283,7 @@ class ControlCenterManager:
             Tuple of (success, message)
         """
         if alias == 'local':
-            self.active_connection = None
+            self.active_alias = None
             session['cc_mode'] = 'local'
             return True, "Switched to local daemon"
         
@@ -295,11 +295,53 @@ class ControlCenterManager:
         if not conn.connected:
             return False, f"Agent '{alias}' is not connected. Please connect first."
         
-        self.active_connection = alias
+        self.active_alias = alias
         session['cc_mode'] = 'remote'
         session['cc_active_alias'] = alias
         
         return True, f"Switched to remote agent '{alias}'"
+    
+    def is_healthy_or_clear(self) -> Tuple[bool, Optional[str]]:
+        """
+        Get active agent status, clearing stale state if connection died.
+        
+        This is the SINGLE SOURCE OF TRUTH for connection state.
+        If the active agent's TCP connection is dead, clears the state.
+        
+        Returns:
+            Tuple of (is_healthy, active_alias or None)
+        """
+        if not self.active_alias:
+            return False, None
+        
+        if self.active_alias not in self.connections:
+            # Orphaned active_alias reference
+            self.active_alias = None
+            return False, None
+        
+        conn = self.connections[self.active_alias]
+        
+        if not conn.connected or not conn.client:
+            # Not connected
+            self.active_alias = None
+            return False, None
+        
+        # Check actual TCP connection health
+        try:
+            if conn.client.is_connection_healthy():
+                return True, self.active_alias
+        except Exception as e:
+            log_debug("CC_MANAGER", f"Health check exception for '{self.active_alias}': {e}")
+        
+        # Connection is unhealthy - clear state
+        log_info("CC_MANAGER", f"Clearing stale connection for '{self.active_alias}' (TCP unhealthy)")
+        alias = self.active_alias
+        conn.connected = False
+        conn.client = None
+        conn.last_error = "Connection lost"
+        self.active_alias = None
+        
+        return False, None
     
     def get_active_client(self) -> Optional[ZfsManagerClient]:
         """
@@ -308,8 +350,8 @@ class ControlCenterManager:
         Returns:
             ZfsManagerClient instance or None if no remote agent is active
         """
-        if self.active_connection and self.active_connection in self.connections:
-            conn = self.connections[self.active_connection]
+        if self.active_alias and self.active_alias in self.connections:
+            conn = self.connections[self.active_alias]
             if conn.connected and conn.client:
                 return conn.client
         return None
@@ -318,19 +360,38 @@ class ControlCenterManager:
         """
         Get list of all connections with their status.
         
+        Validates TCP health of each connected agent (not just active one).
+        
         Returns:
             List of connection info dictionaries
         """
         result = []
         for alias, conn in self.connections.items():
+            # Validate actual TCP health for connected agents
+            is_healthy = False
+            if conn.connected and conn.client:
+                try:
+                    is_healthy = conn.client.is_connection_healthy()
+                except Exception:
+                    is_healthy = False
+                
+                # Update connection state if dead
+                if not is_healthy:
+                    log_info("CC_MANAGER", f"Connection '{alias}' found dead during list")
+                    conn.connected = False
+                    conn.last_error = "Connection lost"
+                    # Clear active if this was the active agent
+                    if alias == self.active_alias:
+                        self.active_alias = None
+            
             result.append({
                 'alias': alias,
                 'host': conn.host,
                 'port': conn.port,
                 'use_tls': conn.use_tls,
-                'connected': conn.connected,
+                'connected': conn.connected and is_healthy,  # Use live health check
                 'tls_active': conn.tls_active,
-                'active': alias == self.active_connection,
+                'active': alias == self.active_alias,
                 'last_connected': conn.last_connected,
                 'last_error': conn.last_error
             })
