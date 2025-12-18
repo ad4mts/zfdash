@@ -20,7 +20,7 @@ import hmac # Import hmac for compare_digest
 # Assume zfs_manager and its error class are importable
 try:
     # Import the client class and error types
-    from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError
+    from zfs_manager import ZfsManagerClient, ZfsCommandError, ZfsClientCommunicationError, RemoteAgentDisconnectedError
     # Import config_manager to get credential path and hashing constants
     import config_manager
     from config_manager import PASSWORD_INFO_KEY, \
@@ -41,6 +41,7 @@ except ImportError as e:
     # Define dummies
     class ZfsCommandError(Exception): pass
     class ZfsClientCommunicationError(Exception): pass
+    class RemoteAgentDisconnectedError(ZfsClientCommunicationError): pass
     class MockZFSManagerClient:
         def __getattr__(self, name):
             def method(*args, **kwargs):
@@ -350,16 +351,30 @@ def _get_zfs_client() -> ZfsManagerClient:
     
     Returns the control center's active remote client if in remote mode,
     otherwise returns the local client from app context.
-    """
-    # Check if in control center remote mode
-    if control_center_manager and session.get('cc_mode') == 'remote':
-        remote_client = control_center_manager.get_active_client()
-        if remote_client:
-            return remote_client
-        # Fall through to local if remote client not available
-        app.logger.warning("Remote mode active but no remote client available, using local")
     
-    # Return local client
+    IMPORTANT: Does NOT silently fall back to local when remote dies.
+    This prevents accidental ZFS operations on wrong storage.
+    """
+    # Check if session says we should be in remote mode
+    if control_center_manager and session.get('cc_mode') == 'remote':
+        # Validate remote connection (single source of truth)
+        is_healthy, active_alias = control_center_manager.is_healthy_or_clear()
+        
+        if active_alias:
+            # Remote is healthy - use it
+            client = control_center_manager.get_active_client()
+            if client:
+                return client
+        
+        # Remote died! Clear session but DON'T silently use local
+        session.pop('cc_mode', None)
+        session.pop('cc_active_alias', None)
+        app.logger.warning("Remote agent disconnected")
+        
+        # Raise specific error - api_health catches this for remote_died flag
+        raise RemoteAgentDisconnectedError("Remote agent disconnected")
+    
+    # Local mode - return local client
     client = getattr(app, 'zfs_client', None)
     if client is None:
         app.logger.error("ZFS Manager Client not found in Flask app context!")
@@ -679,6 +694,7 @@ def api_health():
     
     Used by the frontend to poll for daemon disconnection in socket mode.
     Returns connection status and error message if unhealthy.
+    Also detects remote agent disconnections.
     """
     try:
         zfs_client = _get_zfs_client()
@@ -702,6 +718,24 @@ def api_health():
             message=error or "Daemon connection healthy",
             owns_daemon=owns_daemon
         )
+    except RemoteAgentDisconnectedError:
+        # Remote agent disconnected - return remote_died flag
+        return jsonify(
+            status="error",
+            healthy=False,
+            message="Remote agent connection lost",
+            owns_daemon=False,
+            remote_died=True
+        )
+    except ZfsClientCommunicationError as e:
+        # Other communication error (local daemon etc)
+        app.logger.error(f"Health check error: {e}")
+        return jsonify(
+            status="error",
+            healthy=False,
+            message=str(e),
+            owns_daemon=True
+        )
     except Exception as e:
         app.logger.error(f"Health check error: {e}")
         return jsonify(
@@ -717,21 +751,33 @@ def api_reconnect():
     """
     Attempt to reconnect to the daemon.
     
-    Only works in socket mode (owns_daemon=False).
-    Returns success/failure status with message.
+    Clears any stale remote mode and reconnects to local daemon.
     """
     try:
-        zfs_client = _get_zfs_client()
+        # Clear session remote mode (manager state auto-cleared by is_healthy_or_clear)
+        if session.get('cc_mode') == 'remote':
+            session.pop('cc_mode', None)
+            session.pop('cc_active_alias', None)
+            app.logger.info("Cleared remote mode during reconnect")
+        
+        # Get LOCAL client for reconnection
+        local_client = getattr(app, 'zfs_client', None)
+        if not local_client:
+            return jsonify(
+                status="error",
+                success=False,
+                message="Local client not available"
+            )
         
         # Check if reconnect method exists
-        if not hasattr(zfs_client, 'reconnect'):
+        if not hasattr(local_client, 'reconnect'):
             return jsonify(
                 status="error",
                 success=False,
                 message="Reconnect not available (old client version)"
             )
         
-        success, message = zfs_client.reconnect()
+        success, message = local_client.reconnect()
         
         return jsonify(
             status="success" if success else "error",

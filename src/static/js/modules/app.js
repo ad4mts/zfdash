@@ -104,11 +104,34 @@ async function doHealthCheck() {
 
         const data = await response.json();
 
-        // Only show overlay if not in pipe mode (owns_daemon=false) when unhealthy
+        // Check for remote agent death
+        if (data.remote_died) {
+            daemonDisconnected = true;
+            stopHealthCheck();
+            showDaemonDisconnectedOverlay(
+                data.message || 'Remote agent connection lost.',
+                handleReconnect,
+                {
+                    title: 'Remote Agent Disconnected',
+                    showDaemonHelp: false,
+                    showSwitchAgentButton: true,
+                    reconnectButtonText: 'Connect Local'  // Clarify what Reconnect does
+                }
+            );
+            // Don't auto-reconnect for remote - let user decide
+            updateConnectionIndicator();  // Update navbar to show Local
+            return false;
+        }
+
+        // Only show overlay if not in pipe mode (owns_daemon=false) when local is unhealthy
         if (!data.healthy && !data.owns_daemon) {
             daemonDisconnected = true;
             stopHealthCheck();
-            showDaemonDisconnectedOverlay(data.message || 'Daemon connection lost', handleReconnect);
+            showDaemonDisconnectedOverlay(
+                data.message || 'Daemon connection lost',
+                handleReconnect,
+                { showSwitchAgentButton: true }  // Allow switching to remote agent
+            );
             startAutoReconnect();  // Start auto-reconnect loop
             return false;
         }
@@ -175,6 +198,7 @@ function startAutoReconnect() {
                 showSuccess('Reconnected', 'Successfully reconnected to the daemon.');
                 startHealthCheck();
                 await fetchAndRenderData();
+                updateConnectionIndicator();  // Update navbar
             }
         } catch (error) {
             // Silently continue trying
@@ -217,6 +241,7 @@ async function handleReconnect() {
             showSuccess('Reconnected', 'Successfully reconnected to the daemon.');
             startHealthCheck();  // Restart health monitoring
             await fetchAndRenderData();  // Refresh all data
+            updateConnectionIndicator();  // Update navbar
         } else {
             // Reconnect failed - update message in overlay
             updateDaemonDisconnectedMessage(data.message || 'Reconnect failed. Is the daemon running?');
@@ -406,6 +431,7 @@ async function fetchAndRenderData() {
         updateActionStates();
     } finally {
         setLoadingState(false);
+        updateConnectionIndicator();  // Update navbar after each data fetch
     }
 }
 
