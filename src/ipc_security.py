@@ -336,6 +336,7 @@ def negotiate_tls_client(sock: socket.socket, tls_supported: bool,
             # Upgrade to TLS
             log_debug("SECURITY", "Upgrading to TLS...")
             ssl_context = ssl.create_default_context()
+            ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2  # Enforce TLS 1.2+
             ssl_context.check_hostname = False
             ssl_context.verify_mode = ssl.CERT_NONE  # We do TOFU separately
             
@@ -575,6 +576,7 @@ def _prewarm_ssl_module() -> None:
     for _ in range(10):
         try:
             ctx = ssl.create_default_context()
+            ctx.minimum_version = ssl.TLSVersion.TLSv1_2  # Enforce TLS 1.2+
             ctx.check_hostname = False
             ctx.verify_mode = ssl.CERT_NONE
             ctx.get_ciphers()

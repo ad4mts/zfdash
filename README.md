@@ -1,8 +1,10 @@
 # ZfDash - Modern ZFS Management GUI & Web UI Interface
 
-[![Version](https://img.shields.io/badge/version-1.9.3--beta-blue)](https://github.com/ad4mts/zfdash/releases)
+[![Version](https://img.shields.io/badge/version-1.9.6--beta-blue)](https://github.com/ad4mts/zfdash/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20FreeBSD-lightgrey)](https://github.com/ad4mts/zfdash)
+
+> 🆕 **New in v1.9.6:** Manage remote ZfDash agents with the new **Agent Mode** — connect to multiple ZFS hosts from a single Control Center!
 
 **A powerful, user-friendly ZFS pool, dataset, and snapshot management tool with both Desktop GUI and Web UI interfaces.**
 
@@ -30,6 +32,7 @@ curl -sSL https://raw.githubusercontent.com/ad4mts/zfdash/main/get-zfdash.sh | b
 * [⚙️ Requirements](#️-requirements)
 * [🚀 Installation & Running](#-installation--running)
 * [🐳 Docker Usage](#-docker-usage)
+* [🔗 Agent Mode](#-agent-mode)
 * [💡 Usage Tutorial](#-usage-tutorial)
 * [🗺️ Roadmap](#️-roadmap)
 * [🤝 Contributing](#-contributing)
@@ -170,6 +173,7 @@ This command starts the container and uses Docker **named volumes** (`zfdash_con
 ```bash
 sudo docker run -d --name zfdash \
   --privileged \
+  --network=host \
   --device=/dev/zfs:/dev/zfs \
   -v zfdash_config:/root/.config/ZfDash \
   -v zfdash_data:/opt/zfdash/data \
@@ -229,6 +233,36 @@ This configuration is suitable for **trusted local networks** and **home lab set
 *   **Common Tasks:** Select an object in the tree, then use the right pane tabs or top bar/menu buttons. Examples: Check Pool Status/Properties tabs for health/usage. Use the Snapshots tab to create/delete/rollback/clone. Use the top bar/menu to create datasets. Use the Encryption tab to manage keys.
 *   **Remember:** Destructive actions are irreversible. Double-check selections & keep backups!
 
+## 🔗 Agent Mode
+
+Agent Mode allows you to manage ZFS on remote hosts from a single ZfDash Control Center. Run an agent on each remote machine, then connect to them through the Web UI.
+
+### Running a ZfDash Agent
+
+**If ZfDash is installed:**
+```bash
+sudo zfdash --agent
+```
+
+**Running from source (no dependencies > uses openssl & UDP discovery):**
+```bash
+sudo python src/main.py --agent
+```
+
+**Full setup from source (+ cryptography & mDNS support):**
+```bash
+git clone https://github.com/ad4mts/zfdash.git
+cd zfdash
+uv sync
+sudo .venv/bin/python src/main.py --agent
+```
+
+**Notes:**
+- The agent listens on port **5555** by default with **TLS enabled**.
+- On first run (or if no credentials exist), you'll be prompted to set an admin password; otherwise it uses the existing Web UI password of the Agent's system.
+- Open the **Control Center** from the navbar dropdown in the Web UI to discover and connect to agents.
+- Network discovery finds agents automatically via UDP broadcast (always) and mDNS (if available for the agent, see Full Setup).
+
 ## 🗺️ Roadmap
 
 ### ⚡ Daemon & Architecture Features
@@ -244,12 +278,13 @@ This configuration is suitable for **trusted local networks** and **home lab set
 - [x] **Three-Button Confirmations**: Clearer safety dialogs for critical actions.
 - [x] **Smart Filter Toggle**: "Show All Devices" option for advanced users.
 
-### 🌐 Agent Mode & Remote Management (In Progress)
+### 🌐 Agent Mode & Remote Management
 - [x] **TCP Transport**: Secure TCP communication foundation.
+- [x] **TLS Encryption**: STARTTLS negotiation for secure agent connections.
 - [x] **Authentication**: Challenge-Response handshake with credentials.
-- [ ] **Web UI "Control Center"**: Interface to manage remote agents.
-- [ ] **Agent Discovery**: Auto-discovery of agents on the local network.
-- [ ] **Multi-Server Context**: Seamlessly switch between local and remote ZFS servers.
+- [x] **Web UI "Control Center"**: Interface to manage remote agents.
+- [x] **Agent Discovery**: Auto-discovery of agents on the local network (UDP broadcast + mDNS).
+- [x] **Multi-Server Context**: Seamlessly switch between local and remote ZFS servers.
 
 ### 💾 Backup & Replication Features
 - [ ] **ZFS Send/Receive**: Core functionality for data replication.

@@ -246,3 +246,87 @@ def update_tls():
         return jsonify({'success': True, 'message': message})
     else:
         return jsonify({'success': False, 'error': message}), 400
+
+
+@control_center_bp.route('/update', methods=['POST'])
+def update_agent():
+    """Update an existing agent connection."""
+    if not _cc_manager:
+        return jsonify({'success': False, 'error': 'Control center not initialized'}), 500
+    
+    data = request.get_json()
+    if not data:
+        return jsonify({'success': False, 'error': 'No data provided'}), 400
+    
+    old_alias = data.get('old_alias', '').strip()
+    new_alias = data.get('alias', '').strip()
+    host = data.get('host', '').strip()
+    port = data.get('port')
+    use_tls = data.get('use_tls', True)
+    
+    if not old_alias:
+        return jsonify({'success': False, 'error': 'Original alias is required'}), 400
+    if not new_alias:
+        return jsonify({'success': False, 'error': 'Alias is required'}), 400
+    if not host:
+        return jsonify({'success': False, 'error': 'Host is required'}), 400
+    
+    try:
+        port = int(port)
+    except (TypeError, ValueError):
+        return jsonify({'success': False, 'error': 'Port must be a number'}), 400
+    
+    # Convert use_tls to bool if string
+    if isinstance(use_tls, str):
+        use_tls = use_tls.lower() in ('true', '1', 'yes')
+    
+    success, message = _cc_manager.update_connection(old_alias, new_alias, host, port, use_tls)
+    
+    if success:
+        # Clear session data for old alias if it changed
+        if old_alias != new_alias:
+            session.pop(f'cc_connected_{old_alias}', None)
+        return jsonify({'success': True, 'message': message})
+    else:
+        return jsonify({'success': False, 'error': message}), 400
+
+
+@control_center_bp.route('/discover', methods=['POST'])
+def discover_agents():
+    """
+    Scan network for available ZFS agents.
+    
+    Uses mDNS if zeroconf is available, and always tries UDP broadcast.
+    Returns list of discovered agents.
+    """
+    if not _cc_manager:
+        return jsonify({'success': False, 'error': 'Control center not initialized'}), 500
+    
+    try:
+        from discovery_scanner import discover_agents as scan_agents, is_mdns_available
+        from constants import DISCOVERY_TIMEOUT
+        
+        data = request.get_json() or {}
+        timeout = data.get('timeout', DISCOVERY_TIMEOUT)
+        
+        # Ensure timeout is reasonable
+        timeout = max(1.0, min(10.0, float(timeout)))
+        
+        agents = scan_agents(timeout)
+        
+        return jsonify({
+            'success': True,
+            'agents': agents,
+            'mdns_available': is_mdns_available(),
+            'count': len(agents)
+        })
+    except ImportError:
+        return jsonify({
+            'success': False,
+            'error': 'Discovery module not available'
+        }), 500
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Discovery failed: {str(e)}'
+        }), 500

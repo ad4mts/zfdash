@@ -1,4 +1,18 @@
 # ZfDash Changelog #always use same format
+## v1.9.6-beta
+*   **New: Agent Mode** - Manage ZFS on remote hosts from a single Control Center.
+*   **Feature:** Network discovery - automatically find ZFS agents on your network.
+*   **Feature:** TLS encryption with STARTTLS negotiation for secure remote connections.
+*   **Feature:** Control Center UI - add, connect, edit, and manage remote agents.
+*   **Feature:** Bulk agent import - discover and add multiple agents at once.
+*   **Improvement:** Navbar connection indicator shows active remote agent status.
+*   **Improvement:** Made cryptography library optional (falls back to OpenSSL CLI).
+*   **Improvement:** Pre-warm SSL context to prevent first-connection failures.
+*   **Improvement:** Graceful daemon shutdown via terminal (q/quit commands).
+*   **Fix:** Connection status uses single source of truth for proper disconnect detection.
+*   **Fix:** Removing an agent now clears its trusted certificate.
+*   **General:** Minor improvements and bug fixes.
+
 ## v1.9.3-beta
 *   **Critical Fix:** GUI/WebUI: Special VDEVs (logs, cache, spare, special, dedup) now correctly appear in pool tree view. Previously these were missing due to JSON/text parsing issues.
 *   **Fix:** GUI/WebUI: Remove VDEV button no longer activates on container nodes (logs, spares, etc.) - only on actual removable devices within them.

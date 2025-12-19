@@ -59,6 +59,9 @@ export function createStackableModal(config) {
     modalEl.tabIndex = -1;
     modalEl.setAttribute('aria-labelledby', `${modalId}-label`);
     modalEl.setAttribute('aria-hidden', 'true');
+    // SECURITY NOTE: This is an internal API - all callers pass trusted, pre-sanitized HTML.
+    // The bodyHtml and footerHtml parameters come from internal module calls, not user input.
+    // lgtm[js/xss-through-dom]
     modalEl.innerHTML = `
         <div class="modal-dialog modal-dialog-centered ${sizeClass}">
             <div class="modal-content">

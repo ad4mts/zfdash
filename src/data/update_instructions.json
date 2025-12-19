@@ -14,7 +14,7 @@
       },
       {
         "title": "Run the new container",
-        "command": "sudo docker run -d --name zfdash \\\n  --privileged \\\n  --device=/dev/zfs:/dev/zfs \\\n  -v zfdash_config:/root/.config/ZfDash \\\n  -v zfdash_data:/opt/zfdash/data \\\n  -v /etc:/host-etc:ro \\\n  -v /dev/disk:/dev/disk:ro \\\n  -v /run/udev:/run/udev:ro \\\n  -p 5001:5001 \\\n  --restart unless-stopped \\\n  ad4mts/zfdash:latest"
+        "command": "sudo docker run -d --name zfdash \\\n  --privileged \\\n  --network=host \\\n  --device=/dev/zfs:/dev/zfs \\\n  -v zfdash_config:/root/.config/ZfDash \\\n  -v zfdash_data:/opt/zfdash/data \\\n  -v /etc:/host-etc:ro \\\n  -v /dev/disk:/dev/disk:ro \\\n  -v /run/udev:/run/udev:ro \\\n  -p 5001:5001 \\\n  --restart unless-stopped \\\n  ad4mts/zfdash:latest"
       }
     ],
     "notes": [

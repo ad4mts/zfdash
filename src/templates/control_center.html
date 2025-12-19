@@ -42,7 +42,11 @@
       <a class="navbar-brand" href="/">
         <i class="bi bi-hdd-stack-fill"></i> ZfDash
       </a>
-      <div class="ms-auto">
+      <div class="ms-auto d-flex gap-2">
+        <button type="button" class="btn btn-sm btn-outline-info" data-bs-toggle="modal"
+          data-bs-target="#agentHelpModal">
+          <i class="bi bi-question-circle"></i> How to Run Agent
+        </button>
         <a href="/" class="btn btn-sm btn-outline-light">
           <i class="bi bi-arrow-left"></i> Back to Dashboard
         </a>
@@ -98,9 +102,13 @@
                   </label>
                 </div>
               </div>
-              <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100">
-                  <i class="bi bi-plus-lg"></i> Add Agent
+              <div class="col-md-2 d-flex align-items-end gap-2">
+                <button type="submit" class="btn btn-primary flex-grow-1">
+                  <i class="bi bi-plus-lg"></i> Add
+                </button>
+                <button type="button" class="btn btn-outline-secondary" id="discover-btn"
+                  title="Discover agents on network">
+                  <i class="bi bi-search"></i>
                 </button>
               </div>
             </form>
@@ -184,6 +192,146 @@
           <button type="button" class="btn btn-primary" id="password-submit-btn">
             Connect
           </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Discovery Modal -->
+  <div class="modal fade" id="discoveryModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-broadcast me-2"></i>Discover Agents
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <!-- Discovery Status -->
+          <div class="d-flex gap-3 mb-3 small text-muted">
+            <span><i class="bi bi-broadcast"></i> mDNS: <span id="mdns-status">checking...</span></span>
+            <span><i class="bi bi-wifi"></i> UDP Broadcast: <span class="text-success">always enabled</span></span>
+          </div>
+
+          <!-- Scanning Indicator -->
+          <div id="discovery-scanning" class="text-center py-4">
+            <div class="spinner-border text-primary" role="status"></div>
+            <p class="mt-2 mb-0">Scanning network...</p>
+          </div>
+
+          <!-- Discovery Results -->
+          <div id="discovery-results" style="display: none;">
+            <!-- Select All Header -->
+            <div class="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+              <div class="form-check">
+                <input type="checkbox" class="form-check-input" id="select-all-agents">
+                <label class="form-check-label fw-bold" for="select-all-agents">Select All</label>
+              </div>
+              <small class="text-muted"><span id="selected-count">0</span> selected</small>
+            </div>
+            <div id="discovered-agents-list">
+              <!-- Agent cards inserted here by JavaScript -->
+            </div>
+          </div>
+
+          <!-- No Results -->
+          <div id="discovery-empty" class="text-center text-muted py-4" style="display: none;">
+            <i class="bi bi-inbox display-4"></i>
+            <p class="mt-2 mb-0">No agents found on the network.</p>
+            <p class="small">Make sure agents are running and accessible.</p>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-success me-auto" id="add-selected-btn" disabled>
+            <i class="bi bi-plus-lg"></i> Add Selected (<span id="add-selected-count">0</span>)
+          </button>
+          <button type="button" class="btn btn-outline-primary" id="rescan-btn">
+            <i class="bi bi-arrow-clockwise"></i> Rescan
+          </button>
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Edit Agent Modal -->
+  <div class="modal fade" id="editAgentModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">
+            <i class="bi bi-pencil me-2"></i>Edit Agent
+          </h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <form id="edit-agent-form">
+            <input type="hidden" id="edit-old-alias">
+            <div class="mb-3">
+              <label for="edit-alias" class="form-label">Alias</label>
+              <input type="text" class="form-control" id="edit-alias" required>
+            </div>
+            <div class="mb-3">
+              <label for="edit-host" class="form-label">Host</label>
+              <input type="text" class="form-control" id="edit-host" required>
+            </div>
+            <div class="mb-3">
+              <label for="edit-port" class="form-label">Port</label>
+              <input type="number" class="form-control" id="edit-port" required>
+            </div>
+            <div class="form-check mb-3">
+              <input type="checkbox" class="form-check-input" id="edit-use-tls">
+              <label class="form-check-label" for="edit-use-tls">
+                <i class="bi bi-shield-lock"></i> Use TLS
+              </label>
+            </div>
+          </form>
+          <div id="edit-error" class="alert alert-danger" style="display: none;"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" id="edit-save-btn">
+            <i class="bi bi-check-lg"></i> Save Changes
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Agent Help Modal -->
+  <div class="modal fade" id="agentHelpModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+      <div class="modal-content">
+        <div class="modal-header bg-info text-white">
+          <h5 class="modal-title">
+            <i class="bi bi-question-circle me-2"></i>How to Run a ZfDash Agent
+          </h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p>To manage a remote host, run a ZfDash agent on that machine:</p>
+
+          <h6 class="mt-4"><i class="bi bi-box-seam me-2"></i>If ZfDash is installed:</h6>
+          <pre class="bg-dark text-light p-3 rounded"><code>sudo zfdash --agent</code></pre>
+
+          <h6 class="mt-4"><i class="bi bi-code-slash me-2"></i>Running from source:</h6>
+          <pre class="bg-dark text-light p-3 rounded"><code>sudo python src/main.py --agent</code></pre>
+
+          <h6 class="mt-4"><i class="bi bi-terminal me-2"></i>Full setup from source:</h6>
+          <pre class="bg-dark text-light p-3 rounded"><code>git clone https://github.com/ad4mts/zfdash.git
+cd zfdash
+uv sync
+sudo .venv/bin/python src/main.py --agent</code></pre>
+
+          <div class="alert alert-info mt-4 mb-0">
+            <i class="bi bi-info-circle me-2"></i>
+            <strong>Note:</strong> The agent listens on port 5555 by default with TLS enabled.
+            On first run, you'll be prompted to set an admin password.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
         </div>
       </div>
     </div>

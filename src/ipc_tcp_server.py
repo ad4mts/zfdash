@@ -215,6 +215,7 @@ class TCPServerTransport:
         
         # Create SSL context
         self.ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        self.ssl_context.minimum_version = ssl.TLSVersion.TLSv1_2  # Enforce TLS 1.2+
         self.ssl_context.load_cert_chain(
             certfile=str(cert_path),
             keyfile=str(key_path)
