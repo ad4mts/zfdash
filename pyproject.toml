@@ -1,6 +1,6 @@
 [project]
 name = "zfdash"
-version = "1.9.3-beta"
+version = "1.9.6-beta"
 description = "A modern graphical interface for managing ZFS storage pools, datasets, snapshots, and encryption."
 readme = "README.md"
 license = { text = "GPL-3.0" }
@@ -53,6 +53,10 @@ dependencies = [
     # Cryptography library for TLS certificate generation
     # 41.0+: Stable API for x509 certificate generation
     "cryptography>=41.0.0",
+    
+    # Network discovery (mDNS/Bonjour support)
+    # Used for agent discovery on local network
+    "zeroconf>=0.80.0",
 ]
 
 [project.urls]

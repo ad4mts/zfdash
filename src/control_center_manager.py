@@ -397,6 +397,68 @@ class ControlCenterManager:
             })
         return result
     
+    def update_connection(self, old_alias: str, new_alias: str, host: str, port: int, use_tls: bool) -> Tuple[bool, str]:
+        """
+        Update an existing agent connection.
+        
+        Args:
+            old_alias: Current alias of connection to update
+            new_alias: New alias (can be same as old)
+            host: New host
+            port: New port
+            use_tls: New TLS preference
+            
+        Returns:
+            Tuple of (success, message)
+        """
+        if old_alias not in self.connections:
+            return False, f"Connection '{old_alias}' not found"
+        
+        # Validate new values
+        if not new_alias or not new_alias.strip():
+            return False, "Alias cannot be empty"
+        
+        if not host or not host.strip():
+            return False, "Host cannot be empty"
+        
+        if not isinstance(port, int) or port < 1 or port > 65535:
+            return False, f"Invalid port number: {port}"
+        
+        # Check if new alias conflicts with existing (different) connection
+        if new_alias != old_alias and new_alias in self.connections:
+            return False, f"Connection with alias '{new_alias}' already exists"
+        
+        conn = self.connections[old_alias]
+        
+        # Disconnect if currently connected (settings change requires reconnect)
+        if conn.connected and conn.client:
+            try:
+                conn.client.close()
+            except Exception:
+                pass
+            conn.client = None
+            conn.connected = False
+            conn.tls_active = False
+        
+        # Clear active if this was active
+        if self.active_alias == old_alias:
+            self.active_alias = None
+        
+        # Update connection properties
+        conn.alias = new_alias.strip()
+        conn.host = host.strip()
+        conn.port = port
+        conn.use_tls = use_tls
+        conn.last_error = None
+        
+        # If alias changed, update the dict key
+        if new_alias != old_alias:
+            del self.connections[old_alias]
+            self.connections[new_alias] = conn
+        
+        self.save_connections()
+        return True, f"Agent '{new_alias}' updated successfully"
+    
     def update_tls(self, alias: str, use_tls: bool) -> Tuple[bool, str]:
         """
         Update TLS preference for an agent.

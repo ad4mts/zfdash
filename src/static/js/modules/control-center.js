@@ -13,7 +13,10 @@ let agents = [];
 let currentMode = 'local';
 let activeAlias = null;
 let passwordModal = null;
+let discoveryModal = null;
+let editAgentModal = null;
 let pendingConnectAlias = null;
+let isScanning = false;
 
 /**
  * Initialize the control center
@@ -21,10 +24,20 @@ let pendingConnectAlias = null;
 async function init() {
     console.log('Control Center: Initializing...');
 
-    // Initialize Bootstrap modal
-    const modalEl = document.getElementById('passwordModal');
-    if (modalEl) {
-        passwordModal = new bootstrap.Modal(modalEl);
+    // Initialize Bootstrap modals
+    const passwordModalEl = document.getElementById('passwordModal');
+    if (passwordModalEl) {
+        passwordModal = new bootstrap.Modal(passwordModalEl);
+    }
+
+    const discoveryModalEl = document.getElementById('discoveryModal');
+    if (discoveryModalEl) {
+        discoveryModal = new bootstrap.Modal(discoveryModalEl);
+    }
+
+    const editAgentModalEl = document.getElementById('editAgentModal');
+    if (editAgentModalEl) {
+        editAgentModal = new bootstrap.Modal(editAgentModalEl);
     }
 
     // Set up event listeners
@@ -62,6 +75,45 @@ function setupEventListeners() {
     const switchLocalBtn = document.getElementById('switch-local-btn');
     if (switchLocalBtn) {
         switchLocalBtn.addEventListener('click', () => handleSwitchAgent('local'));
+    }
+
+    // Discovery button
+    const discoverBtn = document.getElementById('discover-btn');
+    if (discoverBtn) {
+        discoverBtn.addEventListener('click', handleDiscoverAgents);
+    }
+
+    // Rescan button
+    const rescanBtn = document.getElementById('rescan-btn');
+    if (rescanBtn) {
+        rescanBtn.addEventListener('click', performDiscoveryScan);
+    }
+
+    // Select All checkbox
+    const selectAllCheckbox = document.getElementById('select-all-agents');
+    if (selectAllCheckbox) {
+        selectAllCheckbox.addEventListener('change', handleSelectAllAgents);
+    }
+
+    // Add Selected button
+    const addSelectedBtn = document.getElementById('add-selected-btn');
+    if (addSelectedBtn) {
+        addSelectedBtn.addEventListener('click', handleAddSelectedAgents);
+    }
+
+    // Edit Save button
+    const editSaveBtn = document.getElementById('edit-save-btn');
+    if (editSaveBtn) {
+        editSaveBtn.addEventListener('click', handleSaveEdit);
+    }
+
+    // Edit form submit
+    const editForm = document.getElementById('edit-agent-form');
+    if (editForm) {
+        editForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleSaveEdit();
+        });
     }
 }
 
@@ -491,8 +543,8 @@ function createAgentCard(agent) {
             <button class="btn btn-success btn-sm me-1" data-action="connect" data-alias="${agent.alias}">
                 <i class="bi bi-plug-fill"></i> Connect
             </button>
-            <button class="btn btn-outline-secondary btn-sm me-1" data-action="toggle-tls" data-alias="${agent.alias}" title="Toggle TLS">
-                <i class="bi bi-${agent.use_tls ? 'shield-lock' : 'shield-slash'}"></i>
+            <button class="btn btn-outline-secondary btn-sm me-1" data-action="edit" data-alias="${agent.alias}" title="Edit agent">
+                <i class="bi bi-pencil"></i>
             </button>
         `;
 
@@ -550,12 +602,100 @@ function attachAgentCardListeners() {
                 case 'remove':
                     handleRemoveAgent(alias);
                     break;
-                case 'toggle-tls':
-                    handleToggleTls(alias);
+                case 'edit':
+                    handleEditAgent(alias);
                     break;
             }
         });
     });
+}
+
+/**
+ * Handle edit agent button click
+ */
+function handleEditAgent(alias) {
+    const agent = agents.find(a => a.alias === alias);
+    if (!agent) {
+        showError('Agent not found');
+        return;
+    }
+
+    // Get form elements
+    const oldAliasField = document.getElementById('edit-old-alias');
+    const aliasField = document.getElementById('edit-alias');
+    const hostField = document.getElementById('edit-host');
+    const portField = document.getElementById('edit-port');
+    const tlsField = document.getElementById('edit-use-tls');
+
+    // Check if modal elements exist (might be cached page without new modal)
+    if (!oldAliasField || !aliasField || !hostField || !portField || !tlsField) {
+        showError('Edit modal not found. Please refresh the page (Ctrl+Shift+R).');
+        return;
+    }
+
+    // Populate edit form
+    oldAliasField.value = agent.alias;
+    aliasField.value = agent.alias;
+    hostField.value = agent.host;
+    portField.value = agent.port;
+    tlsField.checked = agent.use_tls;
+
+    // Clear any previous error
+    const errorDiv = document.getElementById('edit-error');
+    if (errorDiv) errorDiv.style.display = 'none';
+
+    // Show modal
+    if (editAgentModal) {
+        editAgentModal.show();
+    }
+}
+
+/**
+ * Handle save edit button click
+ */
+async function handleSaveEdit() {
+    const oldAlias = document.getElementById('edit-old-alias').value;
+    const newAlias = document.getElementById('edit-alias').value.trim();
+    const host = document.getElementById('edit-host').value.trim();
+    const port = parseInt(document.getElementById('edit-port').value);
+    const useTls = document.getElementById('edit-use-tls').checked;
+    const errorDiv = document.getElementById('edit-error');
+    const saveBtn = document.getElementById('edit-save-btn');
+
+    if (!newAlias || !host || !port) {
+        errorDiv.textContent = 'All fields are required';
+        errorDiv.style.display = 'block';
+        return;
+    }
+
+    // Disable button and show loading
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Saving...';
+    }
+
+    try {
+        const result = await api.updateAgent(oldAlias, newAlias, host, port, useTls);
+
+        if (result.success) {
+            if (editAgentModal) editAgentModal.hide();
+            showSuccess(result.message || 'Agent updated successfully');
+            await refreshAgentsList();
+        } else {
+            errorDiv.textContent = result.error || 'Failed to update agent';
+            errorDiv.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Error updating agent:', error);
+        errorDiv.textContent = 'Network error while updating agent';
+        errorDiv.style.display = 'block';
+    } finally {
+        // Reset button
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<i class="bi bi-check-lg"></i> Save Changes';
+        }
+    }
 }
 
 /**
@@ -575,6 +715,302 @@ function updateModeIndicator() {
         if (localCard) localCard.classList.remove('active');
         if (switchLocalBtn) switchLocalBtn.disabled = false;
     }
+}
+
+
+/**
+ * Handle discover agents button click
+ */
+function handleDiscoverAgents() {
+    if (discoveryModal) {
+        // Reset modal state
+        document.getElementById('discovery-scanning').style.display = 'block';
+        document.getElementById('discovery-results').style.display = 'none';
+        document.getElementById('discovery-empty').style.display = 'none';
+        document.getElementById('mdns-status').textContent = 'checking...';
+        document.getElementById('mdns-status').className = '';
+
+        discoveryModal.show();
+        performDiscoveryScan();
+    }
+}
+
+/**
+ * Perform network discovery scan
+ */
+async function performDiscoveryScan() {
+    if (isScanning) return;
+    isScanning = true;
+
+    const scanningDiv = document.getElementById('discovery-scanning');
+    const resultsDiv = document.getElementById('discovery-results');
+    const emptyDiv = document.getElementById('discovery-empty');
+    const rescanBtn = document.getElementById('rescan-btn');
+
+    // Show scanning state
+    scanningDiv.style.display = 'block';
+    resultsDiv.style.display = 'none';
+    emptyDiv.style.display = 'none';
+    if (rescanBtn) rescanBtn.disabled = true;
+
+    try {
+        const result = await api.discoverAgents(3);
+
+        // Update mDNS status
+        const mdnsStatus = document.getElementById('mdns-status');
+        if (result.mdns_available) {
+            mdnsStatus.textContent = 'available';
+            mdnsStatus.className = 'text-success';
+        } else {
+            mdnsStatus.textContent = 'not available';
+            mdnsStatus.className = 'text-warning';
+        }
+
+        if (result.success && result.agents && result.agents.length > 0) {
+            renderDiscoveredAgents(result.agents);
+            scanningDiv.style.display = 'none';
+            resultsDiv.style.display = 'block';
+        } else {
+            scanningDiv.style.display = 'none';
+            emptyDiv.style.display = 'block';
+        }
+    } catch (error) {
+        console.error('Discovery error:', error);
+        showError('Failed to discover agents');
+        scanningDiv.style.display = 'none';
+        emptyDiv.style.display = 'block';
+    } finally {
+        isScanning = false;
+        if (rescanBtn) rescanBtn.disabled = false;
+    }
+}
+
+/**
+ * Render discovered agents in the modal
+ */
+function renderDiscoveredAgents(discoveredAgents) {
+    const container = document.getElementById('discovered-agents-list');
+    if (!container) return;
+
+    // Reset select all checkbox
+    const selectAllCheckbox = document.getElementById('select-all-agents');
+    if (selectAllCheckbox) selectAllCheckbox.checked = false;
+
+    // Track which agents can be selected (not already configured)
+    const selectableAgents = discoveredAgents.filter(a => !isAgentConfigured(a.host, a.port));
+
+    container.innerHTML = discoveredAgents.map((agent, index) => {
+        const isConfigured = isAgentConfigured(agent.host, agent.port);
+        const tlsBadge = agent.tls
+            ? '<span class="badge bg-success ms-2"><i class="bi bi-shield-lock"></i> TLS</span>'
+            : '<span class="badge bg-warning ms-2"><i class="bi bi-shield-slash"></i> No TLS</span>';
+        const sourceBadge = agent.source === 'mdns'
+            ? '<span class="badge bg-info ms-1">mDNS</span>'
+            : '<span class="badge bg-secondary ms-1">UDP</span>';
+
+        // Checkbox for selection (only for unconfigured agents)
+        const checkbox = isConfigured
+            ? ''
+            : `<input type="checkbox" class="form-check-input me-3 agent-select-checkbox" 
+                 data-host="${escapeHtml(agent.host)}" 
+                 data-port="${agent.port}" 
+                 data-hostname="${escapeHtml(agent.hostname)}" 
+                 data-tls="${agent.tls}">`;
+
+        const actionButton = isConfigured
+            ? '<span class="badge bg-secondary"><i class="bi bi-check"></i> Configured</span>'
+            : `<button class="btn btn-outline-primary btn-sm" data-discover-action="add" 
+                 data-host="${escapeHtml(agent.host)}" 
+                 data-port="${agent.port}" 
+                 data-hostname="${escapeHtml(agent.hostname)}" 
+                 data-tls="${agent.tls}" title="Fill form with this agent">
+                 <i class="bi bi-pencil"></i>
+               </button>`;
+
+        return `
+            <div class="card mb-2${isConfigured ? ' opacity-50' : ''}">
+                <div class="card-body py-2">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex align-items-center">
+                            ${checkbox}
+                            <div>
+                                <strong><i class="bi bi-hdd-network me-2"></i>${escapeHtml(agent.hostname)}</strong>
+                                ${tlsBadge}${sourceBadge}
+                                <div class="small text-muted">${escapeHtml(agent.host)}:${agent.port}</div>
+                            </div>
+                        </div>
+                        <div>${actionButton}</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Attach listeners for add buttons (fills form)
+    container.querySelectorAll('[data-discover-action="add"]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const target = e.currentTarget;
+            handleAddDiscoveredAgent({
+                host: target.dataset.host,
+                port: parseInt(target.dataset.port),
+                hostname: target.dataset.hostname,
+                tls: target.dataset.tls === 'true'
+            });
+        });
+    });
+
+    // Attach listeners for checkboxes
+    container.querySelectorAll('.agent-select-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateSelectionCount);
+    });
+
+    // Update selection count
+    updateSelectionCount();
+}
+
+/**
+ * Update the selection count display and button state
+ */
+function updateSelectionCount() {
+    const checkboxes = document.querySelectorAll('.agent-select-checkbox');
+    const checkedCount = document.querySelectorAll('.agent-select-checkbox:checked').length;
+
+    // Update count displays
+    const selectedCountEl = document.getElementById('selected-count');
+    const addSelectedCountEl = document.getElementById('add-selected-count');
+    if (selectedCountEl) selectedCountEl.textContent = checkedCount;
+    if (addSelectedCountEl) addSelectedCountEl.textContent = checkedCount;
+
+    // Update Add Selected button state
+    const addSelectedBtn = document.getElementById('add-selected-btn');
+    if (addSelectedBtn) {
+        addSelectedBtn.disabled = checkedCount === 0;
+    }
+
+    // Update Select All checkbox state
+    const selectAllCheckbox = document.getElementById('select-all-agents');
+    if (selectAllCheckbox && checkboxes.length > 0) {
+        selectAllCheckbox.checked = checkedCount === checkboxes.length;
+        selectAllCheckbox.indeterminate = checkedCount > 0 && checkedCount < checkboxes.length;
+    }
+}
+
+/**
+ * Handle Select All checkbox
+ */
+function handleSelectAllAgents(e) {
+    const isChecked = e.target.checked;
+    document.querySelectorAll('.agent-select-checkbox').forEach(cb => {
+        cb.checked = isChecked;
+    });
+    updateSelectionCount();
+}
+
+/**
+ * Handle Add Selected button - adds all selected agents directly
+ */
+async function handleAddSelectedAgents() {
+    const selectedCheckboxes = document.querySelectorAll('.agent-select-checkbox:checked');
+    if (selectedCheckboxes.length === 0) return;
+
+    const addSelectedBtn = document.getElementById('add-selected-btn');
+    if (addSelectedBtn) {
+        addSelectedBtn.disabled = true;
+        addSelectedBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Adding...';
+    }
+
+    let successCount = 0;
+    let errorCount = 0;
+
+    // Track used aliases to handle duplicates during this batch
+    const usedAliases = new Set(agents.map(a => a.alias.toLowerCase()));
+
+    for (const cb of selectedCheckboxes) {
+        const agent = {
+            host: cb.dataset.host,
+            port: parseInt(cb.dataset.port),
+            hostname: cb.dataset.hostname,
+            tls: cb.dataset.tls === 'true'
+        };
+
+        // Generate unique alias (handle duplicate hostnames)
+        let alias = agent.hostname;
+        let counter = 1;
+        while (usedAliases.has(alias.toLowerCase())) {
+            counter++;
+            alias = `${agent.hostname}-${counter}`;
+        }
+        usedAliases.add(alias.toLowerCase());
+
+        try {
+            const result = await api.addAgent(alias, agent.host, agent.port, agent.tls);
+            if (result.success) {
+                successCount++;
+            } else {
+                errorCount++;
+                console.error(`Failed to add ${alias}: ${result.error}`);
+            }
+        } catch (error) {
+            errorCount++;
+            console.error(`Error adding ${alias}:`, error);
+        }
+    }
+
+    // Update button
+    if (addSelectedBtn) {
+        addSelectedBtn.innerHTML = '<i class="bi bi-plus-lg"></i> Add Selected (<span id="add-selected-count">0</span>)';
+    }
+
+    // Refresh agents list
+    await refreshAgentsList();
+
+    // Re-run discovery to update the modal
+    await performDiscoveryScan();
+
+    // Show result message
+    if (successCount > 0 && errorCount === 0) {
+        showSuccess(`Added ${successCount} agent${successCount > 1 ? 's' : ''} successfully`);
+    } else if (successCount > 0 && errorCount > 0) {
+        showSuccess(`Added ${successCount} agent${successCount > 1 ? 's' : ''}, ${errorCount} failed`);
+    } else if (errorCount > 0) {
+        showError(`Failed to add ${errorCount} agent${errorCount > 1 ? 's' : ''}`);
+    }
+}
+
+/**
+ * Check if an agent is already configured
+ */
+function isAgentConfigured(host, port) {
+    return agents.some(a => a.host === host && a.port === port);
+}
+
+/**
+ * Handle adding a discovered agent (fills form and closes modal)
+ */
+function handleAddDiscoveredAgent(agent) {
+    // Fill the add agent form
+    const aliasField = document.getElementById('agent-alias');
+    const hostField = document.getElementById('agent-host');
+    const portField = document.getElementById('agent-port');
+    const tlsField = document.getElementById('agent-use-tls');
+
+    if (aliasField) aliasField.value = agent.hostname;
+    if (hostField) hostField.value = agent.host;
+    if (portField) portField.value = agent.port;
+    if (tlsField) tlsField.checked = agent.tls;
+
+    // Close modal
+    if (discoveryModal) {
+        discoveryModal.hide();
+    }
+
+    // Focus on alias field so user can edit if needed
+    if (aliasField) {
+        aliasField.focus();
+        aliasField.select();
+    }
+
+    showSuccess(`Form filled with ${agent.hostname}. Click "Add" to save.`);
 }
 
 

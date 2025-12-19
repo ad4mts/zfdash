@@ -4,7 +4,7 @@ Single source of truth for ZfDash version and app information.
 All other components should import from this module.
 """
 
-__version__ = "1.9.3-beta"
+__version__ = "1.9.6-beta"
 __app_name__ = "ZfDash"
 __app_description__ = "A modern graphical interface for managing ZFS storage pools, datasets, snapshots, and encryption."
 __author__ = "Ayham(ad4mts) and Contributors"

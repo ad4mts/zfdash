@@ -90,4 +90,10 @@ TLS_ERROR_REQUIRED = "TLS_REQUIRED"              # Server requires TLS, client d
 TLS_ERROR_UNAVAILABLE = "TLS_UNAVAILABLE"        # Client wants TLS, server doesn't have it
 TLS_ERROR_PROTOCOL_MISMATCH = "PROTOCOL_MISMATCH"  # Protocol version mismatch
 
+# --- Network Discovery ---
+DISCOVERY_PORT = 5554                  # UDP port for broadcast discovery
+DISCOVERY_MAGIC = "ZFDASH_DISCOVER"    # Discovery request identifier
+MDNS_SERVICE_TYPE = "_zfdash._tcp.local."  # mDNS service type
+DISCOVERY_TIMEOUT = 3.0                # Discovery scan timeout (seconds)
+
 # --- END OF FILE constants.py ---

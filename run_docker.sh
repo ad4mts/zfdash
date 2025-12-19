@@ -25,6 +25,7 @@ echo "--- Running new container: $CONTAINER_NAME ---"
 # Run the new container matching the README command
 sudo docker run -d --name "$CONTAINER_NAME" \
   --privileged \
+  --network=host \
   --device=/dev/zfs:/dev/zfs \
   -v zfdash_config:/root/.config/ZfDash \
   -v zfdash_data:/opt/zfdash/data \

@@ -20,6 +20,13 @@ try:
 except ImportError:
     TCP_AVAILABLE = False
 
+# Discovery responder for network discovery (UDP + optional mDNS)
+try:
+    from discovery_responder import start_discovery_responder, DiscoveryResponder
+    DISCOVERY_AVAILABLE = True
+except ImportError:
+    DISCOVERY_AVAILABLE = False
+
 # Assuming zfs_manager_core is in the same directory or PYTHONPATH
 import zfs_manager_core
 from zfs_manager_core import ZfsCommandError
@@ -407,6 +414,19 @@ def _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event):
         if tcp_transport:
             modes.append(f"TCP: 0.0.0.0:{args.agent_port}")
     
+    # Start discovery responder for agent mode (UDP broadcast + optional mDNS)
+    discovery_responder = None
+    if tcp_transport and DISCOVERY_AVAILABLE:
+        try:
+            tls_enabled = tcp_transport.tls_enabled if hasattr(tcp_transport, 'tls_enabled') else False
+            discovery_responder = start_discovery_responder(
+                agent_port=args.agent_port,
+                tls_enabled=tls_enabled
+            )
+            modes.append("Discovery")
+        except Exception as e:
+            daemon_log(f"Failed to start discovery responder: {e}", "WARNING")
+    
     mode_desc = " + ".join(modes) if modes else "None"
     
     daemon_log(f"Starting ZFS GUI Daemon for UID={target_uid}, GID={target_gid} "
@@ -463,6 +483,13 @@ def _run_server_mode(args, target_uid, target_gid, max_workers, shutdown_event):
             _wait_for_client_threads(client_threads)
             
         finally:
+            # Stop discovery responder if running
+            if discovery_responder:
+                try:
+                    discovery_responder.stop()
+                    daemon_log("Discovery responder stopped", "DEBUG")
+                except Exception as e:
+                    daemon_log(f"Error stopping discovery responder: {e}", "ERROR")
             _cleanup_transports(socket_transport, tcp_transport)
 
 
