@@ -113,6 +113,24 @@ class TCPClientHandler:
     def get_address(self) -> tuple:
         """Return client address (host, port)."""
         return self.client_address
+    
+    def prepare_for_binary(self) -> None:
+        """
+        Prepare for binary streaming by flushing and closing the text file object.
+        After calling this, only use get_socket() for raw binary I/O.
+        """
+        if self.client_file:
+            try:
+                self.client_file.flush()
+            except Exception:
+                pass
+            # Don't close - just flush. Closing the file would close the socket.
+            # We'll use the socket directly from now on.
+            self._binary_mode = True
+    
+    def get_socket(self) -> socket.socket:
+        """Return underlying socket for raw streaming (used by backup operations)."""
+        return self.client_socket
 
 
 # =============================================================================

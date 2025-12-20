@@ -31,6 +31,77 @@
     .status-badge {
       min-width: 90px;
     }
+
+    /* Vault Status Card Styles */
+    #vault-status-card {
+      transition: all 0.3s ease;
+      background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+    }
+
+    #vault-status-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+    }
+
+    .vault-icon-wrapper {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.3s ease;
+    }
+
+    /* Vault States */
+    #vault-status-card.vault-unlocked {
+      background: linear-gradient(135deg, #d1e7dd 0%, #f8f9fa 100%);
+    }
+
+    #vault-status-card.vault-unlocked .vault-icon-wrapper {
+      background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+      color: white;
+    }
+
+    #vault-status-card.vault-locked {
+      background: linear-gradient(135deg, #fff3cd 0%, #f8f9fa 100%);
+    }
+
+    #vault-status-card.vault-locked .vault-icon-wrapper {
+      background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+      color: white;
+    }
+
+    #vault-status-card.vault-unavailable {
+      background: linear-gradient(135deg, #e9ecef 0%, #f8f9fa 100%);
+    }
+
+    #vault-status-card.vault-unavailable .vault-icon-wrapper {
+      background: linear-gradient(135deg, #6c757d 0%, #adb5bd 100%);
+      color: white;
+    }
+
+    #vault-action-btn {
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    #vault-action-btn.btn-lock {
+      background: linear-gradient(135deg, #ffc107 0%, #fd7e14 100%);
+      border: none;
+      color: white;
+    }
+
+    #vault-action-btn.btn-unlock {
+      background: linear-gradient(135deg, #198754 0%, #20c997 100%);
+      border: none;
+      color: white;
+    }
+
+    #vault-action-btn:hover {
+      transform: scale(1.05);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+    }
   </style>
 </head>
 
@@ -65,10 +136,29 @@
 
     <!-- Current Mode Indicator -->
     <div class="row mb-3">
-      <div class="col">
-        <div class="alert alert-info d-flex align-items-center">
+      <div class="col-md-8">
+        <div class="alert alert-info d-flex align-items-center mb-0">
           <i class="bi bi-info-circle me-2"></i>
           <span>Current Mode: <strong id="current-mode-text">Local Daemon</strong></span>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <!-- Vault Status Card -->
+        <div class="card h-100 border-0 shadow-sm" id="vault-status-card">
+          <div class="card-body d-flex align-items-center justify-content-between py-2 px-3">
+            <div class="d-flex align-items-center">
+              <div class="vault-icon-wrapper me-3" id="vault-icon-wrapper">
+                <i class="bi bi-safe2 fs-4" id="vault-icon"></i>
+              </div>
+              <div>
+                <div class="fw-semibold small" id="vault-status-text">Checking...</div>
+                <div class="text-muted small" id="vault-status-detail">Credential Vault</div>
+              </div>
+            </div>
+            <button class="btn btn-sm" id="vault-action-btn" style="display: none;">
+              <i class="bi bi-lock"></i>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -178,7 +268,19 @@
           <form id="password-form">
             <div class="mb-3">
               <label for="agent-password" class="form-label">Password</label>
-              <input type="password" class="form-control" id="agent-password" required autofocus>
+              <div class="input-group">
+                <input type="password" class="form-control" id="agent-password" required autofocus>
+                <span class="input-group-text text-success" id="password-saved-indicator" style="display: none;"
+                  title="Loaded from vault">
+                  <i class="bi bi-key-fill"></i>
+                </span>
+              </div>
+            </div>
+            <div class="form-check mb-2" id="save-password-group">
+              <input type="checkbox" class="form-check-input" id="save-password-checkbox">
+              <label class="form-check-label small" for="save-password-checkbox">
+                <i class="bi bi-safe"></i> Save password to vault
+              </label>
             </div>
           </form>
           <div id="password-status" class="alert alert-info align-items-center" style="display: none;">

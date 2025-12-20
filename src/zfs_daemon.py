@@ -30,6 +30,8 @@ except ImportError:
 # Assuming zfs_manager_core is in the same directory or PYTHONPATH
 import zfs_manager_core
 from zfs_manager_core import ZfsCommandError
+# Backup command handlers
+from backup_commands import BACKUP_COMMAND_MAP
 # Import config_manager for password functions and credential management
 try:
     import config_manager
@@ -99,6 +101,11 @@ def _execute_command_task(transport, request_data, uid, shutdown_event):
                         response = {"status": "error", "error": "Password update failed. Check daemon logs."}
                 except Exception as e:
                     response = {"status": "error", "error": f"Password change error: {e}", "details": traceback.format_exc()}
+
+        elif command in BACKUP_COMMAND_MAP:
+            # Dispatch to backup command handler
+            handler = BACKUP_COMMAND_MAP[command]
+            response = handler(kwargs)
 
         elif command in zfs_manager_core.COMMAND_MAP:
             func = zfs_manager_core.COMMAND_MAP[command]
@@ -173,6 +180,7 @@ def run_command_loop(transport, executor, shutdown_event):
                     break
 
                 # Submit command to shared thread pool (non-blocking)
+                # All backup commands now go through the thread pool like normal commands
                 future = executor.submit(_execute_command_task, transport, request, target_uid, shutdown_event)
                 futures.append(future)
                 
@@ -286,7 +294,7 @@ def _socket_accept_loop(socket_transport, executor, shutdown_event, client_threa
     Spawns a handler thread for each connection.
     """
     while not shutdown_event.is_set():
-        daemon_log("Waiting for socket client connection...", "DEBUG")
+        #daemon_log("Waiting for socket client connection...", "DEBUG")
         try:
             client_handler = socket_transport.accept_client(timeout=1.0)
             if client_handler is None:

@@ -23,7 +23,7 @@ ZFS_DATASET_PROPS = [
 # Used for 'zfs list -t snapshot -o ...'
 ZFS_SNAPSHOT_PROPS = [
     'name', 'used', 'referenced', 'creation', 'defer_destroy', 'userrefs',
-    'logicalused', 'logicalreferenced'
+    'logicalused', 'logicalreferenced', 'guid'
 ]
 
 # Custom Properties for UI Editing
@@ -95,5 +95,10 @@ DISCOVERY_PORT = 5554                  # UDP port for broadcast discovery
 DISCOVERY_MAGIC = "ZFDASH_DISCOVER"    # Discovery request identifier
 MDNS_SERVICE_TYPE = "_zfdash._tcp.local."  # mDNS service type
 DISCOVERY_TIMEOUT = 3.0                # Discovery scan timeout (seconds)
+
+# --- Backup Data Channel ---
+DATA_CHANNEL_ACCEPT_TIMEOUT = 60.0     # Time to wait for sender to connect (seconds)
+DATA_CHANNEL_STREAMING_TIMEOUT = 300.0 # Time to wait for data during transfer (seconds) - detects dead sender/receiver
+RESUME_TOKEN_PENDING = "__PENDING_FETCH__"  # Marker stored when token fetch fails - UI offers manual fetch
 
 # --- END OF FILE constants.py ---

@@ -53,6 +53,7 @@ import dom, { initDomElements } from './dom-elements.js';
 
 import { setLoadingState, updateStatus, showModal, hideModal, showErrorAlert, showConfirmModal, showTripleChoiceModal, showDaemonDisconnectedOverlay, hideDaemonDisconnectedOverlay, updateDaemonDisconnectedMessage } from './ui.js';
 import { showInfo, showSuccess, showError, showWarning } from './notifications.js';
+import * as connectionIndicator from './connection-indicator.js';
 
 // Health check state (for socket mode daemon disconnection detection)
 let healthCheckInterval = null;
@@ -277,7 +278,8 @@ import {
     handleCreateSnapshot,
     handleDeleteSnapshot,
     handleRollbackSnapshot,
-    handleCloneSnapshot
+    handleCloneSnapshot,
+    handleBackupSnapshot
 } from './snapshots.js';
 
 import {
@@ -437,60 +439,10 @@ async function fetchAndRenderData() {
 
 /**
  * Update the connection indicator in the navbar.
- * Fetches current connection status from Control Center API.
+ * Delegates to shared connection-indicator module.
  */
-async function updateConnectionIndicator() {
-    const iconEl = document.getElementById('connection-status-icon');
-    const textEl = document.getElementById('connection-status-text');
-    const detailsEl = document.getElementById('connection-details');
-
-    if (!iconEl || !textEl) return;
-
-    try {
-        const response = await fetch('/api/cc/list');
-        if (!response.ok) return;
-
-        const data = await response.json();
-        if (!data.success) return;
-
-        const isLocal = data.current_mode === 'local';
-        const activeAlias = data.active_alias;
-
-        // Find the active agent details if remote
-        let activeAgent = null;
-        if (!isLocal && activeAlias && data.connections) {
-            activeAgent = data.connections.find(c => c.alias === activeAlias && c.active);
-        }
-
-        if (isLocal) {
-            iconEl.innerHTML = '<i class="bi bi-pc-display text-success"></i>';
-            textEl.textContent = 'Local';
-            textEl.className = 'small text-success';
-            if (detailsEl) {
-                detailsEl.innerHTML = '<i class="bi bi-check-circle me-1 text-success"></i> Connected to local daemon';
-            }
-        } else if (activeAgent) {
-            const tlsIcon = activeAgent.tls_active
-                ? '<i class="bi bi-shield-lock-fill text-info ms-1" title="TLS encrypted"></i>'
-                : '';
-            iconEl.innerHTML = '<i class="bi bi-hdd-network text-info"></i>';
-            textEl.innerHTML = `${activeAgent.alias}${tlsIcon}`;
-            textEl.className = 'small text-info';
-            if (detailsEl) {
-                const tlsStatus = activeAgent.tls_active ? '🔒 Encrypted' : '⚠️ Not encrypted';
-                detailsEl.innerHTML = `
-                    <i class="bi bi-cloud me-1 text-info"></i> Remote: ${activeAgent.host}:${activeAgent.port}<br>
-                    <small class="text-muted">${tlsStatus}</small>
-                `;
-            }
-        } else {
-            iconEl.innerHTML = '<i class="bi bi-question-circle text-warning"></i>';
-            textEl.textContent = 'Unknown';
-            textEl.className = 'small text-warning';
-        }
-    } catch (error) {
-        console.warn('Failed to update connection indicator:', error);
-    }
+function updateConnectionIndicator() {
+    connectionIndicator.updateConnectionIndicator();
 }
 
 /**
@@ -663,7 +615,8 @@ document.addEventListener('DOMContentLoaded', () => {
         // callback we set up with setAuthCallbacks() above
         checkAuthStatus(fetchAndRenderData);
 
-        // STEP 9: Update connection indicator (shows local/remote in navbar)
+        // STEP 9: Initialize and update connection indicator (shows local/remote in navbar)
+        connectionIndicator.init(fetchAndRenderData);
         updateConnectionIndicator();
     })();
 
@@ -716,6 +669,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('delete-snapshot-button')?.addEventListener('click', handleDeleteSnapshot);
     document.getElementById('rollback-snapshot-button')?.addEventListener('click', handleRollbackSnapshot);
     document.getElementById('clone-snapshot-button')?.addEventListener('click', handleCloneSnapshot);
+    document.getElementById('backup-snapshot-button')?.addEventListener('click', handleBackupSnapshot);
 
     // --- Pool Edit Tab Buttons ---
     document.getElementById('attach-device-button')?.addEventListener('click', () =>

@@ -198,6 +198,12 @@ class TCPClientTransport(DaemonTransport):
         if self.tls_active:
             return "tls+tcp"
         return "tcp"
+    
+    def get_socket(self) -> socket.socket:
+        """Return underlying socket for raw streaming (used by backup operations)."""
+        if self.socket is None:
+            raise OSError("Socket not connected")
+        return self.socket
 
 
 # =============================================================================
@@ -226,5 +232,23 @@ def connect_to_agent(host: str, port: int, password: str,
         ConnectionError: If connection fails
         TimeoutError: If connection times out
     """
+    import json
+    
     tcp_transport = TCPClientTransport(host, port, password, timeout, use_tls)
-    return LineBufferedTransport(tcp_transport), tcp_transport.tls_active
+    transport = LineBufferedTransport(tcp_transport)
+    
+    # Wait for daemon "ready" signal (sent after authentication)
+    # This MUST be consumed before returning, otherwise the caller will
+    # read it as a response to their first command!
+    try:
+        ready_line = transport.receive_line()
+        if ready_line:
+            ready_msg = json.loads(ready_line.decode('utf-8'))
+            if ready_msg.get("status") != "ready":
+                log_debug("TCP_CLIENT", f"Unexpected ready signal: {ready_msg}")
+        log_debug("TCP_CLIENT", "Received daemon ready signal")
+    except Exception as e:
+        log_debug("TCP_CLIENT", f"Warning: Failed to read ready signal: {e}")
+        # Continue anyway - maybe won't be fatal
+    
+    return transport, tcp_transport.tls_active

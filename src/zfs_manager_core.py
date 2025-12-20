@@ -8,6 +8,7 @@ import shlex
 import json
 import datetime # For logging timestamp
 import stat # For setting log file permissions
+import socket  # For backup streaming
 from typing import List, Dict, Tuple, Optional, Any, Union
 import traceback # Added traceback import
 import utils # <-- Import utils here
@@ -1008,8 +1009,10 @@ def change_key(dataset_name: str, load_key_flag: bool = False, recursive: bool =
     print(f"DAEMON_CORE: change_key: Final command parts: {builder.build()}", file=sys.stderr)
     print(f"DAEMON_CORE: change_key: Final input_data: {'[hidden passphrase]' if passphrase_change_info else '[none]'}", file=sys.stderr)
 
+
     retcode, stdout, stderr = builder.run(_log_enabled=_log_enabled, _user_uid=_user_uid)
     if retcode != 0: raise ZfsCommandError(f"Failed to change key for '{dataset_name}'. Check logs/permissions.", builder.build(), stderr, retcode)
+
 
 
 # --- COMMAND_MAP ---
@@ -1060,8 +1063,8 @@ COMMAND_MAP = {
     "load_key": load_key,
     "unload_key": unload_key,
     "change_key": change_key,
-    # Add new actions here...
-    # "rename_pool": rename_pool, # Example for future
+    # Note: Backup commands (send_backup, receive_backup, etc.) are handled by
+    # BACKUP_COMMAND_MAP in backup_commands.py
 }
 
 # --- END OF FILE zfs_manager_core.py ---

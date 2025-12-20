@@ -111,8 +111,8 @@ while true; do
         # zfdash group already created/checked above
         SERVICE_GROUP="${ZFDASH_GROUP}"
         if ! id -u "${SERVICE_USER}" > /dev/null 2>&1; then
-            log_info "Creating system user '${SERVICE_USER}' (group: ${SERVICE_GROUP}, no shell, no home dir)..."
-            useradd --system -g "${SERVICE_GROUP}" -s /bin/false "${SERVICE_USER}" || exit_error "Failed to create user '${SERVICE_USER}'."
+            log_info "Creating system user '${SERVICE_USER}' (group: ${SERVICE_GROUP}, no shell, with home dir)..."
+            useradd --system -g "${SERVICE_GROUP}" -s /bin/false -m -d "/home/${SERVICE_USER}" "${SERVICE_USER}" || exit_error "Failed to create user '${SERVICE_USER}'."
             CREATE_ZFDASH_USER=true
         else
             log_info "System user '${SERVICE_USER}' already exists."

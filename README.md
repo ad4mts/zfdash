@@ -1,10 +1,10 @@
 # ZfDash - Modern ZFS Management GUI & Web UI Interface
 
-[![Version](https://img.shields.io/badge/version-1.9.6--beta-blue)](https://github.com/ad4mts/zfdash/releases)
+[![Version](https://img.shields.io/badge/version-2.0.0--beta-blue)](https://github.com/ad4mts/zfdash/releases)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Platform](https://img.shields.io/badge/platform-Linux%20%7C%20macOS%20%7C%20FreeBSD-lightgrey)](https://github.com/ad4mts/zfdash)
 
-> 🆕 **New in v1.9.6:** Manage remote ZfDash agents with the new **Agent Mode** — connect to multiple ZFS hosts from a single Control Center!
+> 🆕 **New in v2.0.0:** Full **Backup & Replication** system with Agent-to-Agent, Local, SSH, and File export modes — plus **Agent Mode** for multi-host ZFS management from a single Control Center!
 
 **A powerful, user-friendly ZFS pool, dataset, and snapshot management tool with both Desktop GUI and Web UI interfaces.**
 
@@ -47,7 +47,9 @@ curl -sSL https://raw.githubusercontent.com/ad4mts/zfdash/main/get-zfdash.sh | b
 *   📊 Pool Management: View status, Create (various vdevs), Destroy, Import, Export, Scrub, Clear errors, Edit structure (Add/Remove/Attach/Detach/Replace/etc.), Force option.
 *   🌳 Dataset/Volume Management: Tree view, Create/Destroy (recursive), Rename, View/Edit properties, Inherit, Promote, Mount/Unmount.
 *   📸 Snapshot Management: View, Create (recursive), Delete, Rollback, Clone.
+*   💾 Backup & Replication: Agent-to-Agent, Local, SSH, and File export with job tracking, resume support, and automatic incremental base detection.
 *   🔐 Encryption Support: Create encrypted datasets, View status, Manage keys (Load/Unload/Change).
+*   🔑 Password Vault: Securely store agent credentials with auto-lock on logout.
 *   📜 Utilities: Optional command logging.
 
 ## 📸 Screenshots
@@ -287,10 +289,12 @@ sudo .venv/bin/python src/main.py --agent
 - [x] **Multi-Server Context**: Seamlessly switch between local and remote ZFS servers.
 
 ### 💾 Backup & Replication Features
-- [ ] **ZFS Send/Receive**: Core functionality for data replication.
-- [ ] **Backup Job Manager**: UI for configuring schedule, source, and destination.
-- [ ] **Remote Replication**: Direct backup to other ZfDash agents.
-- [ ] **Progress Monitoring**: Real-time status of long-running transfer tasks.
+- [x] **ZFS Send/Receive**: Core functionality for data replication.
+- [x] **Backup Job Manager**: Jobs tab with status tracking, cancel, delete, and resume.
+- [x] **Remote Replication**: Direct backup to other ZfDash agents (Agent-to-Agent).
+- [x] **Progress Monitoring**: Real-time status of long-running transfer tasks.
+- [x] **Multi-Destination**: Local, SSH, and File export backup modes.
+- [x] **Incremental Backups**: Automatic incremental base detection via snapshot GUID.
 
 ## 🤝 Contributing
 

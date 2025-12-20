@@ -1,0 +1,1032 @@
+<!DOCTYPE html>
+<html lang="en" style="height: 100%;">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Backup - ZfDash Web UI</title>
+    <link rel="icon" type="image/png" href="/favicon.ico">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* Split layout */
+        .backup-container {
+            display: flex;
+            height: calc(100vh - 56px);
+        }
+
+        .tree-panel {
+            width: 400px;
+            min-width: 320px;
+            max-width: 500px;
+            border-right: 1px solid var(--bs-border-color);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .tree-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--bs-border-color);
+            background: var(--bs-body-bg);
+        }
+
+        .tree-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+
+        .backup-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .backup-panel-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        /* Tree styling (reused from main app) */
+        .tree-item {
+            padding: 0.35rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .tree-item:hover {
+            background-color: var(--bs-secondary-bg);
+        }
+
+        .tree-item.selected {
+            background-color: var(--bs-primary-bg-subtle);
+            border-left: 3px solid var(--bs-primary);
+        }
+
+        .tree-item-icon {
+            color: var(--bs-secondary);
+        }
+
+        .tree-item .bi-database {
+            color: #ffc107;
+        }
+
+        .tree-item .bi-folder {
+            color: #17a2b8;
+        }
+
+        .tree-item .bi-camera {
+            color: #28a745;
+        }
+
+        /* Tab styling */
+        .backup-tabs {
+            border-bottom: 1px solid var(--bs-border-color);
+            background: var(--bs-body-bg);
+        }
+
+        /* Placeholder for future tabs */
+        .tab-placeholder {
+            color: var(--bs-secondary);
+            cursor: not-allowed !important;
+        }
+    </style>
+</head>
+
+<body class="d-flex flex-column" style="height: 100vh;">
+
+    <!-- Navigation Bar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark flex-shrink-0">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-hdd-stack-fill"></i> ZfDash
+            </a>
+            <div class="ms-auto d-flex align-items-center gap-2">
+                <!-- Connection Indicator -->
+                <div class="nav-item dropdown" id="connection-indicator">
+                    <a class="nav-link dropdown-toggle d-flex align-items-center text-white px-2 py-1 rounded" href="#"
+                        id="connectionDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false"
+                        style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.2);">
+                        <span id="connection-status-icon" class="me-2">
+                            <i class="bi bi-pc-display text-success"></i>
+                        </span>
+                        <span id="connection-status-text" class="small">Local</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-dark dropdown-menu-end" aria-labelledby="connectionDropdown">
+                        <li>
+                            <div class="dropdown-item-text text-muted small" id="connection-details">
+                                <i class="bi bi-info-circle me-1"></i> Connected to local daemon
+                            </div>
+                        </li>
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li>
+                            <a class="dropdown-item d-flex align-items-center" href="#" id="quick-switch-toggle">
+                                <i class="bi bi-arrow-left-right me-2"></i>
+                                <span class="flex-grow-1">Quick Switch</span>
+                                <i class="bi bi-chevron-down qs-chevron" id="qs-chevron"></i>
+                            </a>
+                        </li>
+                        <div id="quick-switch-menu" class="qs-collapsed">
+                            <!-- Populated by JavaScript -->
+                        </div>
+                        <li>
+                            <hr class="dropdown-divider">
+                        </li>
+                        <li>
+                            <a class="dropdown-item" href="/control-center">
+                                <i class="bi bi-gear me-2"></i>Control Center
+                            </a>
+                        </li>
+                    </ul>
+                </div>
+                <a href="/" class="btn btn-sm btn-outline-light">
+                    <i class="bi bi-arrow-left"></i> Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Content - Split Layout -->
+    <div class="backup-container">
+
+        <!-- Left Panel: ZFS Tree -->
+        <div class="tree-panel" id="main-tree-panel">
+            <div class="tree-header">
+                <h6 class="mb-1"><i class="bi bi-diagram-3 me-2"></i>Select Source</h6>
+                <input type="text" class="form-control form-control-sm mb-2" id="backup-tree-search"
+                    placeholder="Search...">
+                <div class="form-check form-check-inline small">
+                    <input type="checkbox" class="form-check-input" id="backup-tree-show-datasets">
+                    <label class="form-check-label text-muted" for="backup-tree-show-datasets">
+                        Show datasets
+                    </label>
+                </div>
+            </div>
+            <div class="tree-content" id="backup-tree">
+                <!-- Tree items loaded by JavaScript -->
+                <div class="text-center text-muted py-4" id="tree-loading">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <p class="mt-2 mb-0 small">Loading datasets...</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Backup Tabs -->
+        <div class="backup-panel" id="main-backup-panel">
+            <!-- Tabs -->
+            <ul class="nav nav-tabs backup-tabs px-3 pt-2" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link active" id="agent-tab" data-bs-toggle="tab" data-bs-target="#agent-pane"
+                        type="button" role="tab">
+                        <i class="bi bi-hdd-network me-1"></i> Backup to Agent
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="a2a-tab" data-bs-toggle="tab" data-bs-target="#a2a-pane" type="button"
+                        role="tab">
+                        <i class="bi bi-arrow-left-right me-1"></i> Agent to Agent
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="local-tab" data-bs-toggle="tab" data-bs-target="#local-pane"
+                        type="button" role="tab">
+                        <i class="bi bi-hdd-stack me-1"></i> Local Replication
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="file-tab" data-bs-toggle="tab" data-bs-target="#file-pane"
+                        type="button" role="tab">
+                        <i class="bi bi-file-earmark-zip me-1"></i> Export to File
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="ssh-tab" data-bs-toggle="tab" data-bs-target="#ssh-pane" type="button"
+                        role="tab">
+                        <i class="bi bi-terminal me-1"></i> SSH Backup
+                    </button>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <button class="nav-link" id="jobs-tab" data-bs-toggle="tab" data-bs-target="#jobs-pane"
+                        type="button" role="tab">
+                        <i class="bi bi-list-task me-1"></i> Jobs
+                        <span class="badge bg-secondary ms-1" id="jobs-count-badge" style="display: none;">0</span>
+                    </button>
+                </li>
+            </ul>
+
+            <!-- Tab Content -->
+            <div class="tab-content backup-panel-content">
+                <!-- Agent Backup Tab -->
+                <div class="tab-pane fade show active" id="agent-pane" role="tabpanel">
+
+                    <!-- Selected Source Display -->
+                    <div class="alert alert-secondary mb-3" id="selected-source-alert">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-arrow-right-circle me-2"></i>
+                            <div>
+                                <span id="selected-source-text">No source selected - choose from tree</span>
+                                <span id="source-origin-badge" class="ms-2 badge bg-secondary"
+                                    style="display: none;"></span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Agent Destination Form -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-arrow-right-square me-2"></i>Destination Agent</h5>
+                        </div>
+                        <div class="card-body">
+                            <form id="backup-form">
+                                <div class="row g-3">
+                                    <div class="col-md-5">
+                                        <label for="dest-agent" class="form-label">Agent / Host</label>
+                                        <select class="form-select" id="dest-agent">
+                                            <option value="">-- Select or enter host --</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <label for="dest-port" class="form-label">Port</label>
+                                        <input type="number" class="form-control" id="dest-port" value="5555" required>
+                                    </div>
+                                    <div class="col-md-2 d-flex align-items-end">
+                                        <div class="form-check mb-2">
+                                            <input type="checkbox" class="form-check-input" id="dest-use-tls" checked>
+                                            <label class="form-check-label" for="dest-use-tls">
+                                                <i class="bi bi-shield-lock"></i> TLS
+                                            </label>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="dest-password" class="form-label">Password</label>
+                                        <div class="input-group">
+                                            <input type="password" class="form-control" id="dest-password"
+                                                placeholder="Agent password" required>
+                                            <span class="input-group-text" id="dest-password-saved"
+                                                style="display: none;" title="Saved password">
+                                                <i class="bi bi-key-fill text-success"></i>
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="row g-3 mt-1">
+                                    <div class="col-md-6">
+                                        <label for="dest-dataset" class="form-label">Destination Dataset</label>
+                                        <input type="text" class="form-control" id="dest-dataset"
+                                            placeholder="pool/backup/data" required>
+                                        <small class="text-muted">Target dataset name on destination</small>
+                                    </div>
+                                    <div class="col-md-6 d-flex align-items-center" style="padding-top: 1.5rem;">
+                                        <div class="form-check" id="dest-save-group">
+                                            <input type="checkbox" class="form-check-input" id="dest-save-password">
+                                            <label class="form-check-label small" for="dest-save-password">
+                                                <i class="bi bi-safe"></i> Save password to vault
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Incremental Backup Options -->
+                                <div class="card mt-3 bg-light">
+                                    <div class="card-body py-2">
+                                        <div class="form-check">
+                                            <input type="checkbox" class="form-check-input" id="dest-incremental">
+                                            <label class="form-check-label" for="dest-incremental">
+                                                <i class="bi bi-layers me-1"></i> Enable incremental backup
+                                            </label>
+                                        </div>
+                                        <div id="dest-incremental-options" style="display: none;" class="mt-2 ms-4">
+                                            <div class="d-flex align-items-center gap-2">
+                                                <select class="form-select form-select-sm" id="dest-incremental-base"
+                                                    style="max-width: 400px;">
+                                                    <option value="">-- Auto-detect (checking...) --</option>
+                                                </select>
+                                                <span class="badge bg-info" id="dest-incremental-status"
+                                                    style="display: none;">
+                                                    <i class="bi bi-check-circle"></i> Auto-detected
+                                                </span>
+                                            </div>
+                                            <small class="text-muted d-block mt-1">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                Base snapshot for incremental send (matched by GUID)
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4">
+                                    <button type="submit" class="btn btn-primary btn-lg" id="start-backup-btn" disabled>
+                                        <i class="bi bi-cloud-upload me-2"></i>Start Backup
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <!-- Backup Progress (hidden initially) -->
+                    <div class="card mt-3" id="backup-progress-card" style="display: none;">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="bi bi-hourglass-split me-2"></i>Backup Progress</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="progress mb-3" style="height: 25px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar"
+                                    style="width: 100%" id="backup-progress-bar">
+                                    Transferring...
+                                </div>
+                            </div>
+                            <div id="backup-status-text" class="text-muted">
+                                Connecting to destination agent...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Backup Result (hidden initially) -->
+                    <div class="alert mt-3" id="backup-result-alert" style="display: none;"></div>
+
+                </div>
+
+                <!-- Agent to Agent Tab -->
+                <div class="tab-pane fade" id="a2a-pane" role="tabpanel">
+                    <div class="text-center mb-4">
+                        <h4 class="fw-light"><i class="bi bi-server me-2"></i>Agent to Agent Backup</h4>
+                        <p class="text-muted">Transfer data directly between two remote agents</p>
+                    </div>
+
+                    <div class="row align-items-start g-4">
+                        <!-- Sender Agent Section -->
+                        <div class="col-md-5">
+                            <div class="card h-100 border-primary">
+                                <div class="card-header bg-primary text-white py-3">
+                                    <h5 class="mb-0"><i class="bi bi-cloud-upload me-2"></i>Source Agent</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Connection</label>
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text"><i class="bi bi-hdd-network"></i></span>
+                                            <select class="form-select" id="a2a-sender-agent">
+                                                <option value="">-- Select Agent --</option>
+                                            </select>
+                                        </div>
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <input type="number" class="form-control form-control-sm"
+                                                    id="a2a-sender-port" value="5555" title="Port">
+                                            </div>
+                                            <div class="col-md-8">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="password" class="form-control" id="a2a-sender-password"
+                                                        placeholder="Password">
+                                                    <span class="input-group-text" id="a2a-sender-saved"
+                                                        style="display: none;" title="Saved">
+                                                        <i class="bi bi-key-fill text-success"></i>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex justify-content-between mt-2">
+                                            <div class="form-check form-switch">
+                                                <input type="checkbox" class="form-check-input" id="a2a-sender-tls"
+                                                    checked>
+                                                <label class="form-check-label small" for="a2a-sender-tls">TLS</label>
+                                            </div>
+                                            <div class="form-check" id="a2a-sender-save-group">
+                                                <input type="checkbox" class="form-check-input" id="a2a-sender-save">
+                                                <label class="form-check-label small" for="a2a-sender-save">Save
+                                                    Pass</label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <hr>
+
+                                    <!-- Dataset Selection -->
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Source Dataset</label>
+
+                                        <!-- Selected Display -->
+                                        <div class="d-flex gap-2">
+                                            <div class="form-control bg-light text-truncate" id="a2a-source-display">
+                                                <span class="text-muted small">No dataset selected</span>
+                                            </div>
+                                            <button class="btn btn-outline-primary" id="a2a-browse-btn">
+                                                <i class="bi bi-folder2-open"></i>
+                                            </button>
+                                        </div>
+                                        <small class="text-muted d-block mt-1">Select the dataset or snapshot to
+                                            send</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Direction Indicator -->
+                        <div class="col-md-2 text-center align-self-center pt-5">
+                            <div class="display-6 text-muted mb-2">
+                                <i class="bi bi-arrow-right-circle-fill text-success"></i>
+                            </div>
+                            <div id="a2a-status-badge">
+                                <span class="badge bg-secondary">Ready</span>
+                            </div>
+                        </div>
+
+                        <!-- Receiver Agent Section -->
+                        <div class="col-md-5">
+                            <div class="card h-100 border-success">
+                                <div class="card-header bg-success text-white py-3">
+                                    <h5 class="mb-0"><i class="bi bi-cloud-download me-2"></i>Destination Agent</h5>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Connection</label>
+                                        <div class="input-group mb-2">
+                                            <span class="input-group-text"><i class="bi bi-hdd-network"></i></span>
+                                            <select class="form-select" id="a2a-receiver-agent">
+                                                <option value="">-- Select Agent --</option>
+                                            </select>
+                                        </div>
+                                        <div class="row g-2">
+                                            <div class="col-md-4">
+                                                <input type="number" class="form-control form-control-sm"
+                                                    id="a2a-receiver-port" value="5555" title="Port">
+                                            </div>
+                                            <div class="col-md-8">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="password" class="form-control"
+                                                        id="a2a-receiver-password" placeholder="Password">
+                                                    <span class="input-group-text" id="a2a-receiver-saved"
+                                                        style="display: none;" title="Saved">
+                                                        <i class="bi bi-key-fill text-success"></i>
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="d-flex justify-content-between mt-2">
+                                            <div class="form-check form-switch">
+                                                <input type="checkbox" class="form-check-input" id="a2a-receiver-tls"
+                                                    checked>
+                                                <label class="form-check-label small" for="a2a-receiver-tls">TLS</label>
+                                            </div>
+                                            <div class="form-check" id="a2a-receiver-save-group">
+                                                <input type="checkbox" class="form-check-input" id="a2a-receiver-save">
+                                                <label class="form-check-label small" for="a2a-receiver-save">Save
+                                                    Pass</label>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <hr>
+
+                                    <!-- Destination Path -->
+                                    <div class="mb-3">
+                                        <label class="form-label fw-bold">Destination Path</label>
+                                        <input type="text" class="form-control" id="a2a-dest-dataset"
+                                            placeholder="pool/backup/dataset">
+                                        <small class="text-muted d-block mt-1">Full path on destination (e.g.
+                                            tank/backups/mydata)</small>
+                                    </div>
+
+                                    <!-- Incremental Options -->
+                                    <div class="form-check mb-2">
+                                        <input type="checkbox" class="form-check-input" id="a2a-incremental">
+                                        <label class="form-check-label" for="a2a-incremental">
+                                            <i class="bi bi-layers me-1"></i> Incremental backup
+                                        </label>
+                                    </div>
+                                    <div id="a2a-incremental-options" style="display: none;">
+                                        <select class="form-select form-select-sm" id="a2a-incremental-base">
+                                            <option value="">-- Auto-detect (checking...) --</option>
+                                        </select>
+                                        <small class="text-muted d-block mt-1">
+                                            <i class="bi bi-info-circle me-1"></i> Base snapshot (GUID-matched)
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Area -->
+                    <div class="row mt-5">
+                        <div class="col-md-6 offset-md-3">
+                            <button class="btn btn-primary w-100 btn-lg shadow" id="a2a-start-backup-btn">
+                                <i class="bi bi-play-circle-fill me-2"></i>Start Transfer
+                            </button>
+
+                            <!-- Progress/Result -->
+                            <div class="card mt-4 shadow-sm" id="a2a-progress" style="display: none;">
+                                <div class="card-body">
+                                    <h6 class="card-title mb-3" id="a2a-progress-title">Transferring...</h6>
+                                    <div class="progress mb-2" style="height: 20px;">
+                                        <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                            role="progressbar" style="width: 100%"></div>
+                                    </div>
+                                    <p class="card-text small text-muted mb-0" id="a2a-progress-text">Initializing...
+                                    </p>
+                                </div>
+                            </div>
+
+                            <div class="alert mt-3" id="a2a-result" style="display: none;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Local Replication Tab -->
+                <div class="tab-pane fade" id="local-pane" role="tabpanel">
+                    <div class="text-center mb-4">
+                        <h4 class="fw-light"><i class="bi bi-hdd-stack me-2"></i>Local Pool Replication</h4>
+                        <p class="text-muted">Replicate data between pools on the connected system (local or remote)</p>
+                    </div>
+
+                    <div class="row g-4">
+                        <!-- Source Selection -->
+                        <div class="col-md-5">
+                            <div class="card h-100 border-primary">
+                                <div class="card-header bg-primary text-white py-2">
+                                    <h6 class="mb-0"><i class="bi bi-box-arrow-right me-2"></i>Source</h6>
+                                </div>
+                                <div class="card-body p-2">
+                                    <input type="text" class="form-control form-control-sm mb-2"
+                                        id="local-source-search" placeholder="Search...">
+                                    <div class="form-check form-check-inline small mb-2">
+                                        <input type="checkbox" class="form-check-input" id="local-source-show-datasets">
+                                        <label class="form-check-label text-muted" for="local-source-show-datasets">
+                                            Show datasets
+                                        </label>
+                                    </div>
+                                    <div style="height: 200px; overflow-y: auto;" id="local-source-tree">
+                                        <div class="text-center text-muted py-4">
+                                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                                            <p class="mt-2 mb-0 small">Loading...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-footer bg-light py-2">
+                                    <small class="text-muted" id="local-source-selection">No snapshot selected</small>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Arrow -->
+                        <div class="col-md-2 d-flex align-items-center justify-content-center">
+                            <div class="text-center">
+                                <i class="bi bi-arrow-right-circle-fill text-success" style="font-size: 2.5rem;"></i>
+                                <div class="mt-2 small text-muted">Replicate</div>
+                            </div>
+                        </div>
+
+                        <!-- Destination Selection -->
+                        <div class="col-md-5">
+                            <div class="card h-100 border-success">
+                                <div class="card-header bg-success text-white py-2">
+                                    <h6 class="mb-0"><i class="bi bi-box-arrow-in-right me-2"></i>Destination</h6>
+                                </div>
+                                <div class="card-body p-2">
+                                    <input type="text" class="form-control form-control-sm mb-2" id="local-dest-search"
+                                        placeholder="Search...">
+                                    <div class="form-check form-check-inline small mb-2">
+                                        <input type="checkbox" class="form-check-input" id="local-dest-show-datasets"
+                                            checked>
+                                        <label class="form-check-label text-muted" for="local-dest-show-datasets">
+                                            Show datasets
+                                        </label>
+                                    </div>
+                                    <div style="height: 200px; overflow-y: auto;" id="local-dest-tree">
+                                        <div class="text-center text-muted py-4">
+                                            <div class="spinner-border spinner-border-sm" role="status"></div>
+                                            <p class="mt-2 mb-0 small">Loading...</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="card-footer bg-light py-2">
+                                    <div class="input-group input-group-sm">
+                                        <span class="input-group-text">Path</span>
+                                        <input type="text" class="form-control" id="local-dest-dataset"
+                                            placeholder="pool/backup/dataset">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Options -->
+                    <div class="card mt-4">
+                        <div class="card-body py-3">
+                            <div class="row align-items-center">
+                                <div class="col-md-6">
+                                    <div class="form-check mb-2">
+                                        <input type="checkbox" class="form-check-input" id="local-incremental">
+                                        <label class="form-check-label" for="local-incremental">
+                                            <i class="bi bi-layers me-1"></i> Incremental backup
+                                        </label>
+                                    </div>
+                                    <div class="ms-4" id="local-incremental-options" style="display: none;">
+                                        <label class="form-label small text-muted mb-1">Base snapshot:</label>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <select class="form-select form-select-sm" id="local-incremental-base"
+                                                style="max-width: 400px;">
+                                                <option value="">-- Auto-detect (checking...) --</option>
+                                            </select>
+                                            <span class="badge bg-info" id="local-incremental-status"
+                                                style="display: none;">
+                                                <i class="bi bi-check-circle"></i> Auto-detected
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="form-check">
+                                        <input type="checkbox" class="form-check-input" id="local-force-rollback"
+                                            checked>
+                                        <label class="form-check-label" for="local-force-rollback">
+                                            <i class="bi bi-arrow-counterclockwise me-1"></i> Force rollback (-F)
+                                        </label>
+                                    </div>
+                                    <small class="text-muted ms-4">Rollback destination if modified</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action -->
+                    <div class="text-center mt-4">
+                        <button class="btn btn-primary btn-lg px-5" id="local-start-btn" disabled>
+                            <i class="bi bi-play-circle me-2"></i>Start Replication
+                        </button>
+                    </div>
+
+                    <!-- Progress/Result -->
+                    <div class="card mt-4" id="local-progress" style="display: none;">
+                        <div class="card-body">
+                            <h6 class="mb-3" id="local-progress-title">Replicating...</h6>
+                            <div class="progress mb-2" style="height: 20px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                    id="local-progress-bar" style="width: 100%"></div>
+                            </div>
+                            <p class="small text-muted mb-0" id="local-progress-text">Starting...</p>
+                        </div>
+                    </div>
+                    <div class="alert mt-3" id="local-result" style="display: none;"></div>
+                </div>
+
+                <!-- Export to File Tab -->
+                <div class="tab-pane fade" id="file-pane" role="tabpanel">
+                    <div class="text-center mb-4">
+                        <h4 class="fw-light"><i class="bi bi-file-earmark-zip me-2"></i>Export to File</h4>
+                        <p class="text-muted">Export snapshot to a file for offline backup or transfer</p>
+                    </div>
+
+                    <!-- Selected Source -->
+                    <div class="alert alert-secondary mb-4" id="file-source-alert">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-camera me-2"></i>
+                            <span id="file-source-text">Select a snapshot from the tree on the left</span>
+                        </div>
+                    </div>
+
+                    <div class="row g-4">
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-folder me-2"></i>Output File</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">File path</label>
+                                        <input type="text" class="form-control" id="file-output-path"
+                                            placeholder="/path/to/backup.zfs">
+                                        <small class="text-muted">Full path where the backup file will be saved</small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Compression</label>
+                                        <select class="form-select" id="file-compression">
+                                            <option value="none">None (raw ZFS stream)</option>
+                                            <option value="gzip">gzip (.gz)</option>
+                                            <option value="lz4">lz4 (.lz4) - Fast</option>
+                                            <option value="zstd">zstd (.zst) - Best ratio</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-layers me-2"></i>Incremental Options</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="form-check mb-3">
+                                        <input type="checkbox" class="form-check-input" id="file-incremental">
+                                        <label class="form-check-label" for="file-incremental">
+                                            Export incremental stream
+                                        </label>
+                                    </div>
+                                    <div id="file-incremental-options" style="display: none;">
+                                        <label class="form-label small text-muted">Base snapshot:</label>
+                                        <select class="form-select" id="file-incremental-base">
+                                            <option value="">-- Select base snapshot --</option>
+                                        </select>
+                                        <small class="text-muted mt-1 d-block">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Exports only changes since base snapshot
+                                        </small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action -->
+                    <div class="text-center mt-4">
+                        <button class="btn btn-primary btn-lg px-5" id="file-export-btn" disabled>
+                            <i class="bi bi-download me-2"></i>Start Export
+                        </button>
+                    </div>
+
+                    <!-- Progress/Result -->
+                    <div class="card mt-4" id="file-progress" style="display: none;">
+                        <div class="card-body">
+                            <h6 class="mb-3" id="file-progress-title">Exporting...</h6>
+                            <div class="progress mb-2" style="height: 20px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                    id="file-progress-bar" style="width: 100%"></div>
+                            </div>
+                            <p class="small text-muted mb-0" id="file-progress-text">Starting...</p>
+                        </div>
+                    </div>
+                    <div class="alert mt-3" id="file-result" style="display: none;"></div>
+                </div>
+
+                <!-- SSH Backup Tab -->
+                <div class="tab-pane fade" id="ssh-pane" role="tabpanel">
+                    <div class="text-center mb-4">
+                        <h4 class="fw-light"><i class="bi bi-terminal me-2"></i>SSH Backup</h4>
+                        <p class="text-muted">Send snapshot to a remote ZFS system via SSH</p>
+                    </div>
+
+                    <!-- Selected Source -->
+                    <div class="alert alert-secondary mb-4" id="ssh-source-alert">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-camera me-2"></i>
+                            <span id="ssh-source-text">Select a snapshot from the tree on the left</span>
+                        </div>
+                    </div>
+
+                    <div class="row g-4">
+                        <!-- SSH Connection -->
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-plug me-2"></i>SSH Connection</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row g-2 mb-3">
+                                        <div class="col-8">
+                                            <label class="form-label">Host</label>
+                                            <input type="text" class="form-control" id="ssh-host"
+                                                placeholder="192.168.1.100 or hostname">
+                                        </div>
+                                        <div class="col-4">
+                                            <label class="form-label">Port</label>
+                                            <input type="number" class="form-control" id="ssh-port" value="22">
+                                        </div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">Username</label>
+                                        <input type="text" class="form-control" id="ssh-user" value="root"
+                                            placeholder="root">
+                                        <small class="text-muted">
+                                            <i class="bi bi-info-circle me-1"></i>
+                                            Requires root to run ZFS commands on target
+                                        </small>
+                                    </div>
+
+                                    <!-- Auth Method Selector -->
+                                    <div class="mb-3">
+                                        <label class="form-label">Authentication</label>
+                                        <div class="btn-group w-100" role="group">
+                                            <input type="radio" class="btn-check" name="ssh-auth-method"
+                                                id="ssh-auth-password" value="password" checked>
+                                            <label class="btn btn-outline-primary" for="ssh-auth-password">
+                                                <i class="bi bi-key"></i> Password
+                                            </label>
+                                            <input type="radio" class="btn-check" name="ssh-auth-method"
+                                                id="ssh-auth-key" value="key">
+                                            <label class="btn btn-outline-primary" for="ssh-auth-key">
+                                                <i class="bi bi-file-earmark-lock"></i> SSH Key
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <!-- Password fields (shown by default) -->
+                                    <div id="ssh-password-fields">
+                                        <label class="form-label">Password</label>
+                                        <input type="password" class="form-control" id="ssh-password"
+                                            placeholder="Root password on target">
+                                        <small class="text-muted">
+                                            <i class="bi bi-exclamation-triangle me-1"></i>
+                                            Root SSH login must be enabled on target (PermitRootLogin yes)
+                                        </small>
+                                    </div>
+
+                                    <!-- SSH Key fields -->
+                                    <div id="ssh-key-fields" style="display: none;">
+                                        <div class="mb-2">
+                                            <label class="form-label">Key Path</label>
+                                            <input type="text" class="form-control" id="ssh-key-path"
+                                                placeholder="/root/.ssh/id_ed25519">
+                                            <small class="text-muted">
+                                                <i class="bi bi-info-circle me-1"></i>
+                                                Leave empty for root's default keys (/root/.ssh/id_*)
+                                            </small>
+                                        </div>
+                                        <div>
+                                            <label class="form-label">Key Passphrase</label>
+                                            <input type="password" class="form-control" id="ssh-key-passphrase"
+                                                placeholder="Optional - if key is encrypted">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Destination -->
+                        <div class="col-md-6">
+                            <div class="card h-100">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="bi bi-hdd me-2"></i>Destination</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="mb-3">
+                                        <label class="form-label">Destination dataset</label>
+                                        <input type="text" class="form-control" id="ssh-dest-dataset"
+                                            placeholder="tank/backup/dataset">
+                                        <small class="text-muted">Full path on remote system</small>
+                                    </div>
+
+                                    <hr>
+
+                                    <div class="form-check mb-2">
+                                        <input type="checkbox" class="form-check-input" id="ssh-incremental">
+                                        <label class="form-check-label" for="ssh-incremental">
+                                            <i class="bi bi-layers me-1"></i> Incremental backup
+                                        </label>
+                                    </div>
+                                    <div id="ssh-incremental-options" class="ms-4" style="display: none;">
+                                        <label class="form-label small text-muted mb-1">Base snapshot:</label>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <select class="form-select form-select-sm" id="ssh-incremental-base"
+                                                style="max-width: 400px;">
+                                                <option value="">-- Auto-detect (checking...) --</option>
+                                            </select>
+                                            <span class="badge bg-info" id="ssh-incremental-status"
+                                                style="display: none;">
+                                                <i class="bi bi-check-circle"></i> Auto-detected
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    <div class="form-check mt-3">
+                                        <input type="checkbox" class="form-check-input" id="ssh-force-rollback" checked>
+                                        <label class="form-check-label" for="ssh-force-rollback">
+                                            Force rollback (-F)
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action -->
+                    <div class="text-center mt-4">
+                        <button class="btn btn-primary btn-lg px-5" id="ssh-start-btn" disabled>
+                            <i class="bi bi-send me-2"></i>Start SSH Backup
+                        </button>
+                    </div>
+
+                    <!-- Progress/Result -->
+                    <div class="card mt-4" id="ssh-progress" style="display: none;">
+                        <div class="card-body">
+                            <h6 class="mb-3" id="ssh-progress-title">Transferring...</h6>
+                            <div class="progress mb-2" style="height: 20px;">
+                                <div class="progress-bar progress-bar-striped progress-bar-animated"
+                                    id="ssh-progress-bar" style="width: 100%"></div>
+                            </div>
+                            <p class="small text-muted mb-0" id="ssh-progress-text">Connecting...</p>
+                        </div>
+                    </div>
+                    <div class="alert mt-3" id="ssh-result" style="display: none;"></div>
+                </div>
+
+                <!-- Jobs Tab -->
+                <div class="tab-pane fade" id="jobs-pane" role="tabpanel">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Backup Jobs</h5>
+                        <div>
+                            <button class="btn btn-sm btn-outline-secondary me-2" id="refresh-jobs-btn">
+                                <i class="bi bi-arrow-clockwise"></i> Refresh
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" id="clear-completed-btn">
+                                <i class="bi bi-trash"></i> Clear Completed
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Jobs Table -->
+                    <div class="table-responsive">
+                        <table class="table table-hover" id="jobs-table">
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Direction</th>
+                                    <th>Source</th>
+                                    <th>Destination</th>
+                                    <th>Remote Agent</th>
+                                    <th>Status</th>
+                                    <th>Progress</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="jobs-tbody">
+                                <tr id="jobs-loading-row">
+                                    <td colspan="8" class="text-center text-muted py-4">
+                                        <div class="spinner-border spinner-border-sm" role="status"></div>
+                                        <span class="ms-2">Loading jobs...</span>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Empty state -->
+                    <div class="text-center text-muted py-5" id="jobs-empty-state" style="display: none;">
+                        <i class="bi bi-inbox" style="font-size: 3rem;"></i>
+                        <p class="mt-3">No backup jobs found</p>
+                        <small>Start a backup to see jobs here</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Remote Tree Modal -->
+    <div class="modal fade" id="remoteTreeModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-light">
+                    <h5 class="modal-title">
+                        <i class="bi bi-hdd-network me-2"></i>Select Source Dataset
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body p-0">
+                    <!-- Search and Options -->
+                    <div class="px-3 pt-3 pb-2 border-bottom bg-light">
+                        <input type="text" class="form-control form-control-sm mb-2" id="remote-tree-search"
+                            placeholder="Search...">
+                        <div class="form-check form-check-inline small">
+                            <input type="checkbox" class="form-check-input" id="remote-tree-show-datasets">
+                            <label class="form-check-label text-muted" for="remote-tree-show-datasets">
+                                Show datasets
+                            </label>
+                        </div>
+                    </div>
+                    <!-- Tree Container (Scrollable) -->
+                    <div class="p-3" style="min-height: 300px; max-height: 50vh; overflow-y: auto;"
+                        id="remote-tree-container">
+                        <div class="text-center py-5 text-muted">
+                            <div class="spinner-border text-primary mb-3" role="status"></div>
+                            <p>Connecting to remote agent...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer bg-light">
+                    <div class="me-auto text-muted small" id="remote-tree-status"></div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="remote-tree-select-btn" disabled>
+                        <i class="bi bi-check-lg me-1"></i> Select
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Backup Page App -->
+    <script type="module" src="{{ url_for('static', filename='js/modules/backup-page.js') }}"></script>
+</body>
+
+</html>

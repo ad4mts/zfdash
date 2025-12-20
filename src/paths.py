@@ -45,6 +45,7 @@ POLICY_PATH = str(RESOURCES_BASE_DIR / "data" / "policies" / "org.zfsgui.pkexec.
 # Persistent data paths (absolute, always at /opt/zfdash/data)
 CREDENTIALS_FILE_PATH = str(PERSISTENT_DATA_DIR / "credentials.json")
 FLASK_KEY_PERSISTENT_PATH = str(PERSISTENT_DATA_DIR / "flask_secret_key.txt")
+BACKUP_JOBS_FILE_PATH = str(PERSISTENT_DATA_DIR / "backup_jobs.json")
 
 # User configuration paths (per-user, in home directory)
 USER_CONFIG_DIR = Path.home() / ".config" / "ZfDash"
@@ -215,7 +216,7 @@ __all__ = [
     'RESOURCES_BASE_DIR', 'PERSISTENT_DATA_DIR',
     'TEMPLATES_DIR', 'STATIC_DIR',
     'ICON_PATH', 'POLICY_PATH',
-    'CREDENTIALS_FILE_PATH', 'FLASK_KEY_PERSISTENT_PATH',
+    'CREDENTIALS_FILE_PATH', 'FLASK_KEY_PERSISTENT_PATH', 'BACKUP_JOBS_FILE_PATH',
     'USER_CONFIG_DIR', 'USER_CONFIG_FILE_PATH',
     'DAEMON_SCRIPT_PATH', 'DAEMON_IS_SCRIPT', 'DAEMON_STDERR_FILENAME',
     'RUNTIME_FALLBACK_DIR',

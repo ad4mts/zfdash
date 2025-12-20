@@ -7,6 +7,7 @@
 import * as api from './control-center-api.js';
 import { showSuccess, showError } from './notifications.js';
 import { showConfirmModal } from './ui.js';
+import * as vault from './vault-ui.js';
 
 // State
 let agents = [];
@@ -43,8 +44,14 @@ async function init() {
     // Set up event listeners
     setupEventListeners();
 
+    // Set up vault status card
+    setupVaultStatus();
+
     // Load agents
     await refreshAgentsList();
+
+    // Update vault status
+    await updateVaultStatus();
 }
 
 /**
@@ -181,7 +188,7 @@ async function handleRemoveAgent(alias) {
 /**
  * Handle connect agent (shows password prompt)
  */
-function handleConnectAgent(alias) {
+async function handleConnectAgent(alias) {
     pendingConnectAlias = alias;
     const nameEl = document.getElementById('password-agent-name');
     if (nameEl) {
@@ -190,9 +197,18 @@ function handleConnectAgent(alias) {
 
     // Clear password field, error, and status
     const passwordField = document.getElementById('agent-password');
+    const savedIndicator = document.getElementById('password-saved-indicator');
+    const saveCheckbox = document.getElementById('save-password-checkbox');
+    const saveGroup = document.getElementById('save-password-group');
+
     if (passwordField) {
         passwordField.value = '';
+        passwordField.dataset.fromVault = 'false';
     }
+    if (savedIndicator) savedIndicator.style.display = 'none';
+    if (saveCheckbox) saveCheckbox.checked = false;
+    if (saveGroup) saveGroup.style.display = 'block';
+
     const errorDiv = document.getElementById('password-error');
     if (errorDiv) {
         errorDiv.style.display = 'none';
@@ -205,6 +221,15 @@ function handleConnectAgent(alias) {
     // Reset submit button state
     resetSubmitButton();
 
+    // Check vault for saved password
+    const savedPassword = await vault.getPassword(alias);
+    if (savedPassword && passwordField) {
+        passwordField.value = savedPassword;
+        passwordField.dataset.fromVault = 'true';
+        if (savedIndicator) savedIndicator.style.display = 'inline-block';
+        // Keep save checkbox visible so user can update a changed password
+    }
+
     if (passwordModal) {
         passwordModal.show();
 
@@ -212,6 +237,7 @@ function handleConnectAgent(alias) {
         setTimeout(() => {
             if (passwordField) {
                 passwordField.focus();
+                if (savedPassword) passwordField.select(); // Select for easy override
             }
         }, 300);
     }
@@ -245,6 +271,12 @@ async function handlePasswordSubmit() {
         hideConnectingStatus();
 
         if (result.success) {
+            // Save password to vault if checkbox checked
+            const saveCheckbox = document.getElementById('save-password-checkbox');
+            if (saveCheckbox?.checked && pendingConnectAlias) {
+                await vault.savePassword(pendingConnectAlias, password);
+            }
+
             if (passwordModal) {
                 passwordModal.hide();
             }
@@ -1085,9 +1117,116 @@ function escapeHtml(unsafe) {
         .replace(/'/g, "&#039;");
 }
 
+// ============== Vault Status Functions ==============
+
+/**
+ * Setup vault status card event listeners
+ */
+function setupVaultStatus() {
+    const actionBtn = document.getElementById('vault-action-btn');
+    if (actionBtn) {
+        actionBtn.addEventListener('click', handleVaultAction);
+    }
+}
+
+/**
+ * Update vault status display
+ */
+async function updateVaultStatus() {
+    const card = document.getElementById('vault-status-card');
+    const icon = document.getElementById('vault-icon');
+    const statusText = document.getElementById('vault-status-text');
+    const detailText = document.getElementById('vault-status-detail');
+    const actionBtn = document.getElementById('vault-action-btn');
+
+    if (!card) return;
+
+    try {
+        const status = await vault.getVaultStatus();
+
+        // Remove all state classes
+        card.classList.remove('vault-unlocked', 'vault-locked', 'vault-unavailable');
+        actionBtn.classList.remove('btn-lock', 'btn-unlock');
+
+        // Always keep the safe icon
+        icon.className = 'bi bi-safe2 fs-4';
+
+        if (!status.available) {
+            // Vault not available (no cryptography library)
+            card.classList.add('vault-unavailable');
+            statusText.textContent = 'Credential Vault';
+            detailText.textContent = 'Not available';
+            actionBtn.style.display = 'none';
+        } else if (!status.initialized) {
+            // Vault not created yet
+            card.classList.add('vault-locked');
+            statusText.textContent = 'Credential Vault';
+            detailText.textContent = 'Not created yet';
+            actionBtn.innerHTML = '<i class="bi bi-plus-lg"></i>';
+            actionBtn.classList.add('btn-unlock');
+            actionBtn.title = 'Create vault';
+            actionBtn.style.display = 'inline-flex';
+        } else if (status.unlocked) {
+            // Vault unlocked
+            card.classList.add('vault-unlocked');
+            statusText.textContent = 'Credential Vault';
+            detailText.innerHTML = '<i class="bi bi-unlock-fill text-success me-1"></i>Unlocked';
+            actionBtn.innerHTML = '<i class="bi bi-lock"></i>';
+            actionBtn.classList.add('btn-lock');
+            actionBtn.title = 'Lock vault';
+            actionBtn.style.display = 'inline-flex';
+        } else {
+            // Vault locked
+            card.classList.add('vault-locked');
+            statusText.textContent = 'Credential Vault';
+            detailText.innerHTML = '<i class="bi bi-lock-fill text-warning me-1"></i>Locked';
+            actionBtn.innerHTML = '<i class="bi bi-unlock"></i>';
+            actionBtn.classList.add('btn-unlock');
+            actionBtn.title = 'Unlock vault';
+            actionBtn.style.display = 'inline-flex';
+        }
+    } catch (error) {
+        console.error('Failed to get vault status:', error);
+        card.classList.add('vault-unavailable');
+        icon.className = 'bi bi-safe2 fs-4';
+        statusText.textContent = 'Credential Vault';
+        detailText.textContent = 'Error checking status';
+        actionBtn.style.display = 'none';
+    }
+}
+
+/**
+ * Handle vault action button click
+ */
+async function handleVaultAction() {
+    const actionBtn = document.getElementById('vault-action-btn');
+
+    if (actionBtn.classList.contains('btn-lock')) {
+        // Lock the vault
+        try {
+            actionBtn.disabled = true;
+            await fetch('/api/vault/lock', { method: 'POST' });
+            showSuccess('Vault locked');
+            await updateVaultStatus();
+        } catch (error) {
+            showError('Failed to lock vault');
+        } finally {
+            actionBtn.disabled = false;
+        }
+    } else {
+        // Unlock or create vault
+        const unlocked = await vault.ensureUnlocked();
+        if (unlocked) {
+            showSuccess('Vault unlocked');
+            await updateVaultStatus();
+        }
+    }
+}
+
 // Initialize when DOM is ready
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', init);
 } else {
     init();
 }
+

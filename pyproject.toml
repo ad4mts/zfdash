@@ -1,6 +1,6 @@
 [project]
 name = "zfdash"
-version = "1.9.6-beta"
+version = "2.0.0-beta"
 description = "A modern graphical interface for managing ZFS storage pools, datasets, snapshots, and encryption."
 readme = "README.md"
 license = { text = "GPL-3.0" }
@@ -57,6 +57,11 @@ dependencies = [
     # Network discovery (mDNS/Bonjour support)
     # Used for agent discovery on local network
     "zeroconf>=0.80.0",
+    
+    # SSH client library for SSH backup with password auth
+    # 2.7+: Python 3 support, stable SSHClient API
+    # Falls back to sshpass if paramiko not available
+    "paramiko>=2.7.0",
 ]
 
 [project.urls]

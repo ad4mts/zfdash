@@ -91,6 +91,19 @@
                       class="bi bi-arrow-up-circle me-2"></i>Promote Clone</button></li>
               </ul>
             </li>
+            <!-- Tools Menu -->
+            <li class="nav-item dropdown">
+              <a class="nav-link dropdown-toggle" href="#" id="toolsDropdown" role="button" data-bs-toggle="dropdown"
+                aria-expanded="false">
+                Tools
+              </a>
+              <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="toolsDropdown">
+                <li><a class="dropdown-item" href="/backup"><i class="bi bi-cloud-upload me-2"></i>Backup
+                    (Experimental)</a></li>
+                <li><a class="dropdown-item" href="/control-center"><i class="bi bi-hdd-network me-2"></i>Control
+                    Center</a></li>
+              </ul>
+            </li>
             <!-- Help Menu -->
             <li class="nav-item dropdown">
               <a class="nav-link dropdown-toggle" href="#" id="helpDropdown" role="button" data-bs-toggle="dropdown"
@@ -98,11 +111,6 @@
                 Help
               </a>
               <ul class="dropdown-menu dropdown-menu-dark" aria-labelledby="helpDropdown">
-                <li><a class="dropdown-item" href="/control-center"><i class="bi bi-hdd-network me-2"></i>Control
-                    Center</a></li>
-                <li>
-                  <hr class="dropdown-divider">
-                </li>
                 <li><button id="check-updates-button" class="dropdown-item" type="button"><i
                       class="bi bi-cloud-download me-2"></i>Check for Updates...</button></li>
                 <li>
@@ -136,8 +144,21 @@
                   <hr class="dropdown-divider">
                 </li>
                 <li>
+                  <a class="dropdown-item d-flex align-items-center" href="#" id="quick-switch-toggle">
+                    <i class="bi bi-arrow-left-right me-2"></i>
+                    <span class="flex-grow-1">Quick Switch</span>
+                    <i class="bi bi-chevron-down qs-chevron" id="qs-chevron"></i>
+                  </a>
+                </li>
+                <div id="quick-switch-menu" class="qs-collapsed">
+                  <!-- Populated by JavaScript -->
+                </div>
+                <li>
+                  <hr class="dropdown-divider">
+                </li>
+                <li>
                   <a class="dropdown-item" href="/control-center">
-                    <i class="bi bi-hdd-network me-2"></i>Control Center
+                    <i class="bi bi-gear me-2"></i>Control Center
                   </a>
                 </li>
               </ul>
@@ -396,8 +417,10 @@
                       class="bi bi-trash"></i> Delete</button>
                   <button id="rollback-snapshot-button" class="btn-app btn-app-warning btn-app-sm me-1" disabled><i
                       class="bi bi-arrow-counterclockwise"></i> Rollback</button>
-                  <button id="clone-snapshot-button" class="btn-app btn-app-info btn-app-sm" disabled><i
+                  <button id="clone-snapshot-button" class="btn-app btn-app-info btn-app-sm me-1" disabled><i
                       class="bi bi-copy"></i> Clone...</button>
+                  <button id="backup-snapshot-button" class="btn-app btn-app-primary btn-app-sm" disabled><i
+                      class="bi bi-cloud-upload"></i> Backup...</button>
                 </div>
               </div>
               <div class="table-responsive flex-grow-1 overflow-auto p-3">

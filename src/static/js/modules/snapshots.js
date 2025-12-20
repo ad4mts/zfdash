@@ -24,6 +24,7 @@ export function renderSnapshots(snapshots) {
     document.getElementById('delete-snapshot-button').disabled = true;
     document.getElementById('rollback-snapshot-button').disabled = true;
     document.getElementById('clone-snapshot-button').disabled = true;
+    document.getElementById('backup-snapshot-button').disabled = true;
     dom.snapshotsTableBody.dataset.selectedSnapshot = "";
 
     if (!snapshots || snapshots.length === 0) {
@@ -54,6 +55,7 @@ export function renderSnapshots(snapshots) {
             document.getElementById('delete-snapshot-button').disabled = false;
             document.getElementById('rollback-snapshot-button').disabled = false;
             document.getElementById('clone-snapshot-button').disabled = false;
+            document.getElementById('backup-snapshot-button').disabled = false;
 
             // Store selected snapshot name
             dom.snapshotsTableBody.dataset.selectedSnapshot = fullSnapName;
@@ -211,4 +213,18 @@ export async function handleCloneSnapshot() {
         {},
         `Cloning '${selectedSnapFullName}' to '${targetPath}' initiated.`
     );
+}
+
+/**
+ * Handle backup snapshot action - navigate to backup page with snapshot pre-selected
+ */
+export function handleBackupSnapshot() {
+    const selectedSnapFullName = dom.snapshotsTableBody?.dataset.selectedSnapshot;
+    if (!selectedSnapFullName) {
+        showWarning("Please select a snapshot from the table first.");
+        return;
+    }
+
+    // Navigate to backup page with source parameter
+    window.location.href = `/backup?source=${encodeURIComponent(selectedSnapFullName)}`;
 }

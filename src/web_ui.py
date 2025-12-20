@@ -166,6 +166,26 @@ if control_center_manager:
         print(f"CONTROL_CENTER: Warning - Failed to register routes: {e}", file=sys.stderr)
 # --- *** End Control Center Initialization *** ---
 
+# --- *** Backup Routes Initialization *** ---
+try:
+    from backup_routes import backup_bp, init_backup_routes
+    # Note: init_backup_routes will be called after _get_zfs_client is defined
+    app.register_blueprint(backup_bp, url_prefix='/api/backup')
+    print("BACKUP: API routes registered at /api/backup", file=sys.stderr)
+except Exception as e:
+    print(f"BACKUP: Warning - Failed to register routes: {e}", file=sys.stderr)
+    backup_bp = None
+# --- *** End Backup Routes Initialization *** ---
+
+# --- *** Credential Vault Routes Initialization *** ---
+try:
+    from credential_routes import credential_bp
+    app.register_blueprint(credential_bp, url_prefix='/api/vault')
+    print("VAULT: API routes registered at /api/vault", file=sys.stderr)
+except Exception as e:
+    print(f"VAULT: Warning - Failed to register routes: {e}", file=sys.stderr)
+# --- *** End Credential Vault Routes Initialization *** ---
+
 # --- *** Authentication Setup (Flask-Login) *** ---
 login_manager = LoginManager()
 login_manager.session_protection = "strong"
@@ -381,6 +401,13 @@ def _get_zfs_client() -> ZfsManagerClient:
         raise ZfsClientCommunicationError("ZFS Client not initialized.")
     return client
 
+# Initialize backup routes with client getter
+try:
+    from backup_routes import init_backup_routes
+    init_backup_routes(_get_zfs_client)
+except Exception as e:
+    print(f"BACKUP: Warning - Failed to initialize backup routes: {e}", file=sys.stderr)
+
 def _handle_zfs_call(func_name: str, *args, **kwargs):
     """Wraps zfs_manager calls using the client instance to handle errors and return JSON."""
     try:
@@ -456,6 +483,30 @@ def login():
         if user and user.check_password(password):
             login_user(user, remember=True) # Use remember=True
             app.logger.info(f"User '{username}' logged in successfully.")
+            
+            # --- Auto-create/unlock credential vault with login password ---
+            try:
+                from credential_vault import get_vault
+                vault = get_vault()
+                if vault.is_available():
+                    if not vault.is_initialized():
+                        # First time - create vault with login password
+                        success, msg = vault.create(password)
+                        if success:
+                            app.logger.info("Credential vault created on first login")
+                            session['vault_unlocked'] = True
+                    else:
+                        # Unlock vault with login password
+                        success, msg = vault.unlock(password)
+                        if success:
+                            session['vault_unlocked'] = True
+                        else:
+                            # Password mismatch - vault was created with different password
+                            app.logger.warning(f"Vault unlock failed: {msg}")
+            except Exception as e:
+                app.logger.warning(f"Vault auto-unlock failed: {e}")
+            # --- End vault auto-unlock ---
+            
             next_page = request.args.get('next')
             # --- Prevent redirecting to logout page --- 
             logout_url = url_for('logout')
@@ -479,6 +530,16 @@ def login():
 @login_required # Require login to logout
 def logout():
     user_name = current_user.username if current_user.is_authenticated else "Unknown"
+    
+    # Lock vault on logout
+    try:
+        from credential_vault import get_vault
+        vault = get_vault()
+        vault.lock()
+        session.pop('vault_unlocked', None)
+    except:
+        pass
+    
     logout_user()
     app.logger.info(f"User '{user_name}' logged out.")
     flash("You have been logged out successfully.", "success")
@@ -514,6 +575,24 @@ def change_password():
 
         if success:
             app.logger.info(f"User '{user.username}' password successfully changed by daemon.")
+            
+            # --- Update vault master password to stay in sync ---
+            try:
+                from credential_vault import get_vault
+                vault = get_vault()
+                if vault.is_available() and vault.is_initialized():
+                    # Ensure vault is unlocked (user provided current_password)
+                    if not vault.is_unlocked():
+                        vault.unlock(current_password)
+                    vault_success, vault_msg = vault.change_master_password(current_password, new_password)
+                    if vault_success:
+                        app.logger.info("Credential vault password updated to match new WebUI password")
+                    else:
+                        app.logger.warning(f"Failed to update vault password: {vault_msg}")
+            except Exception as e:
+                app.logger.warning(f"Vault password sync failed: {e}")
+            # --- End vault sync ---
+            
             # Force re-login for security and to update potential session data
             logout_user()
             # Return success, client-side JS should prompt for re-login maybe?
@@ -677,6 +756,12 @@ def control_center_page():
         flash('Control Center is not available.', 'warning')
         return redirect(url_for('index'))
     return render_template('control_center.html')
+
+@app.route('/backup')
+@login_required
+def backup_page():
+    """Render the backup page for ZFS send/receive operations."""
+    return render_template('backup.html')
 
 @app.route('/api/auth/status')
 def auth_status():
