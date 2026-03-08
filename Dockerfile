@@ -21,6 +21,7 @@ RUN echo "deb http://deb.debian.org/debian bookworm main contrib non-free-firmwa
     ca-certificates \
     curl \
     git \
+    openssh-client \
     zfsutils-linux \
     sudo && \
     # Remove baked-in hostid to prevent mismatches with host ZFS pools

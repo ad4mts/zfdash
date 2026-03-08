@@ -182,6 +182,7 @@ sudo docker run -d --name zfdash \
   -v /etc:/host-etc:ro \
   -v /dev/disk:/dev/disk:ro \
   -v /run/udev:/run/udev:ro \
+  -v ~/.ssh:/root/.ssh:ro \
   -p 5001:5001 \
   --restart unless-stopped \
   ad4mts/zfdash:latest

@@ -1,4 +1,30 @@
 # ZfDash Changelog #always use same format
+## v2.0.1
+*   **Fix:** Docker: SSH password backup no longer fails with "ssh not found" (paramiko doesn't need ssh binary).
+*   **Fix:** Docker: Added `openssh-client` to image and `~/.ssh` volume mount for SSH key-based backup.
+*   **Fix:** Backup error messages are now scrollable to prevent overflow on smaller screens.
+
+## v2.0.0-beta
+*   **Feature: Backup & Replication** - Full backup system with multiple destination types.
+*   **Feature:** Agent-to-Agent backup with TLS-secured data channel and resume support.
+*   **Feature:** Local replication (ZFS send/receive on the same host).
+*   **Feature:** SSH backup with password and key-based authentication via Paramiko.
+*   **Feature:** File export backup (ZFS send to file).
+*   **Feature:** Backup job tracking with status, cancel, delete, and resume capabilities.
+*   **Feature:** Automatic incremental base detection via snapshot GUID matching.
+*   **Feature:** Streaming timeout detection (300s) for dead sender/receiver recovery.
+*   **Feature:** Manual resume token fetch for failed transfers.
+*   **Feature:** Password vault - securely store agent credentials with auto-lock on logout.
+*   **Feature:** Vault status indicator in Control Center with lock/unlock controls.
+*   **Feature:** Quick Switch submenu for fast agent switching from navbar.
+*   **Feature:** Snapshot tab "Backup..." button redirects to backup page with pre-selected source.
+*   **Feature:** New "Tools" menu with Backup and Control Center links.
+*   **Improvement:** Unified BackupTreeView component for consistent source selection.
+*   **Improvement:** Backup page with tabbed UI (Agent, A2A, Local, File, SSH, Jobs).
+*   **Fix:** Agent install service now creates zfdash home directory to prevent permission errors.
+*   **Fix:** Sender jobs no longer get stuck in "streaming" when receiver fails.
+*   **Fix:** SSH incremental base detection with proper PATH and paramiko usage.
+
 ## v1.9.6-beta
 *   **New: Agent Mode** - Manage ZFS on remote hosts from a single Control Center.
 *   **Feature:** Network discovery - automatically find ZFS agents on your network.

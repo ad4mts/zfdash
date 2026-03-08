@@ -32,6 +32,7 @@ sudo docker run -d --name "$CONTAINER_NAME" \
   -v /etc:/host-etc:ro \
   -v /dev/disk:/dev/disk:ro \
   -v /run/udev:/run/udev:ro \
+  -v ~/.ssh:/root/.ssh:ro \
   -p 5001:5001 \
   --restart unless-stopped \
   "$IMAGE_NAME"

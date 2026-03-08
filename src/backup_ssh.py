@@ -190,10 +190,10 @@ class SSHBackup:
     
     def _validate_auth(self) -> Optional[Dict[str, Any]]:
         """Validate authentication method is available."""
-        if not shutil.which('ssh'):
-            return {"status": "error", "error": "ssh command not found"}
-        
         if self.auth_method == 'key':
+            # Key auth uses the ssh binary directly
+            if not shutil.which('ssh'):
+                return {"status": "error", "error": "ssh command not found. Install openssh-client."}
             # Validate key file if specified
             if self.ssh_key_path:
                 import os
@@ -204,9 +204,15 @@ class SSHBackup:
         elif self.auth_method == 'password':
             if not self.ssh_password:
                 return {"status": "error", "error": "SSH password required for password auth"}
-            if not HAS_PARAMIKO and not HAS_SSHPASS:
-                return {"status": "error", "error": "Password auth requires paramiko (pip install paramiko) or sshpass (dnf install sshpass)"}
-            return None
+            # Paramiko is pure Python - no ssh binary needed
+            if HAS_PARAMIKO:
+                return None
+            # sshpass fallback requires the ssh binary
+            if HAS_SSHPASS:
+                if not shutil.which('ssh'):
+                    return {"status": "error", "error": "ssh command not found. Install openssh-client."}
+                return None
+            return {"status": "error", "error": "Password auth requires paramiko (pip install paramiko) or sshpass (dnf install sshpass)"}
         
         return {"status": "error", "error": f"Unknown auth method: {self.auth_method}"}
     
