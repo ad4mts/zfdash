@@ -56,6 +56,7 @@ export async function apiCall(endpoint, method = 'GET', body = null) {
                     errorData.error = jsonErrorData.error || errorData.error;
                     errorData.details = jsonErrorData.details || errorData.details;
                     errorData.status = jsonErrorData.status || 'error';
+                    errorData.remote_died = Boolean(jsonErrorData.remote_died);
                 } catch (parseError) {
                     console.error(`API call to ${endpoint} failed with status ${statusCode}, but couldn't parse JSON error response:`, parseError);
                     errorData.details = "Failed to parse error response from server.";
@@ -92,7 +93,9 @@ export async function apiCall(endpoint, method = 'GET', body = null) {
     } catch (error) {
         if (error.message !== "UnauthorizedRedirect") {
             console.error(`API call to ${endpoint} failed:`, error);
-            if (error.data) {
+            if (error.data?.remote_died) {
+                window.dispatchEvent(new CustomEvent('zfdash:remote-died', { detail: error.data }));
+            } else if (error.data) {
                 showErrorAlert(`API Error: ${endpoint}`, `${error.message}\n\nDetails: ${error.details || 'None'}`);
             }
         }
