@@ -1,4 +1,10 @@
 # ZfDash Changelog #always use same format
+## v2.1.0-beta
+*   **Feature: SSH Remote Monitoring** - Connect to remote ZFS hosts via SSH without needing the ZfDash Agent installed.
+*   **Feature:** Read-only SSH monitoring mode for enhanced security.
+*   **Feature:** Allowed SSH actions whitelist for safe remote pool scrubbing and dataset mounting.
+*   **Fix:** SSH command execution now properly handles non-interactive shell PATH limitations on Fedora/RHEL.
+
 ## v2.0.1
 *   **Fix:** Docker: SSH password backup no longer fails with "ssh not found" (paramiko doesn't need ssh binary).
 *   **Fix:** Docker: Added `openssh-client` to image and `~/.ssh` volume mount for SSH key-based backup.
