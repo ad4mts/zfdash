@@ -43,6 +43,7 @@ async function init() {
 
     // Set up event listeners
     setupEventListeners();
+    handleConnectionTypeChange();
 
     // Set up vault status card
     setupVaultStatus();
@@ -63,6 +64,10 @@ function setupEventListeners() {
     if (addForm) {
         addForm.addEventListener('submit', handleAddAgent);
     }
+    document.getElementById('connection-type')?.addEventListener('change', handleConnectionTypeChange);
+    document.getElementById('edit-type')?.addEventListener('change', handleEditTypeChange);
+    document.getElementById('ssh-auth-method')?.addEventListener('change', handleSshAuthMethodChange);
+    document.getElementById('edit-auth-method')?.addEventListener('change', handleEditAuthMethodChange);
 
     // Password form
     const passwordForm = document.getElementById('password-form');
@@ -124,16 +129,72 @@ function setupEventListeners() {
     }
 }
 
+function handleConnectionTypeChange() {
+    const type = document.getElementById('connection-type')?.value || 'agent';
+    const isSsh = type === 'ssh';
+    document.querySelectorAll('.ssh-field').forEach(el => {
+        el.style.display = isSsh ? '' : 'none';
+    });
+    const tlsGroup = document.getElementById('agent-tls-group');
+    if (tlsGroup) tlsGroup.style.display = isSsh ? 'none' : '';
+    const portField = document.getElementById('agent-port');
+    if (portField) portField.value = isSsh ? '22' : '5555';
+    const discoverBtn = document.getElementById('discover-btn');
+    if (discoverBtn) discoverBtn.style.display = isSsh ? 'none' : '';
+    handleSshAuthMethodChange();
+}
+
+function handleEditTypeChange() {
+    const type = document.getElementById('edit-type')?.value || 'agent';
+    const isSsh = type === 'ssh';
+    document.querySelectorAll('.edit-ssh-field').forEach(el => {
+        el.style.display = isSsh ? '' : 'none';
+    });
+    const tlsField = document.getElementById('edit-use-tls');
+    const tlsWrapper = tlsField?.closest('.form-check');
+    if (tlsWrapper) tlsWrapper.style.display = isSsh ? 'none' : '';
+    const portField = document.getElementById('edit-port');
+    if (portField) {
+        const currentPort = parseInt(portField.value);
+        if (isSsh && (!currentPort || currentPort === 5555)) portField.value = '22';
+        if (!isSsh && (!currentPort || currentPort === 22)) portField.value = '5555';
+    }
+    handleEditAuthMethodChange();
+}
+
+function handleSshAuthMethodChange() {
+    const isSsh = (document.getElementById('connection-type')?.value || 'agent') === 'ssh';
+    const authMethod = document.getElementById('ssh-auth-method')?.value || 'password';
+    const keyPathField = document.getElementById('ssh-key-path');
+    const keyPathWrapper = keyPathField?.closest('.ssh-field');
+    if (keyPathWrapper) keyPathWrapper.style.display = isSsh && authMethod === 'key' ? '' : 'none';
+    if (keyPathField && authMethod !== 'key') keyPathField.value = '';
+}
+
+function handleEditAuthMethodChange() {
+    const isSsh = (document.getElementById('edit-type')?.value || 'agent') === 'ssh';
+    const authMethod = document.getElementById('edit-auth-method')?.value || 'password';
+    const keyPathField = document.getElementById('edit-ssh-key-path');
+    const keyPathWrapper = keyPathField?.closest('.edit-ssh-field');
+    if (keyPathWrapper) keyPathWrapper.style.display = isSsh && authMethod === 'key' ? '' : 'none';
+    if (keyPathField && authMethod !== 'key') keyPathField.value = '';
+}
+
 /**
  * Handle add agent form submission
  */
 async function handleAddAgent(e) {
     e.preventDefault();
 
+    const type = document.getElementById('connection-type')?.value || 'agent';
     const alias = document.getElementById('agent-alias').value.trim();
     const host = document.getElementById('agent-host').value.trim();
     const port = parseInt(document.getElementById('agent-port').value);
     const useTls = document.getElementById('agent-use-tls').checked;
+    const sshUser = document.getElementById('ssh-user')?.value.trim() || 'root';
+    const authMethod = document.getElementById('ssh-auth-method')?.value || 'password';
+    const sshKeyPath = authMethod === 'key' ? (document.getElementById('ssh-key-path')?.value.trim() || '') : '';
+    const allowSshActions = document.getElementById('ssh-allow-actions')?.checked || false;
 
     if (!alias || !host || !port) {
         showError('All fields are required');
@@ -141,13 +202,21 @@ async function handleAddAgent(e) {
     }
 
     try {
-        const result = await api.addAgent(alias, host, port, useTls);
+        const result = await api.addAgent(alias, host, port, useTls, {
+            type,
+            ssh_user: sshUser,
+            auth_method: authMethod,
+            ssh_key_path: sshKeyPath,
+            allow_ssh_actions: allowSshActions
+        });
 
         if (result.success) {
-            showSuccess(`Agent '${alias}' added successfully`);
+            showSuccess(`${type === 'ssh' ? 'SSH host' : 'Agent'} '${alias}' added successfully`);
             e.target.reset();
             // Re-check the TLS checkbox after form reset (it defaults to checked)
             document.getElementById('agent-use-tls').checked = true;
+            document.getElementById('connection-type').value = 'agent';
+            handleConnectionTypeChange();
             await refreshAgentsList();
         } else {
             showError(result.error || 'Failed to add agent');
@@ -190,10 +259,21 @@ async function handleRemoveAgent(alias) {
  */
 async function handleConnectAgent(alias) {
     pendingConnectAlias = alias;
+    const agent = agents.find(a => a.alias === alias);
+    const isSsh = agent?.type === 'ssh';
+    const isKeyAuth = isSsh && agent?.auth_method === 'key';
     const nameEl = document.getElementById('password-agent-name');
     if (nameEl) {
         nameEl.textContent = alias;
     }
+    const intro = document.getElementById('password-modal-intro');
+    if (intro) {
+        intro.innerHTML = isKeyAuth
+            ? `Connect to SSH host <strong>${escapeHtml(alias)}</strong>. Enter a key passphrase only if needed:`
+            : `Enter the ${isSsh ? 'SSH' : 'admin'} password for <strong>${escapeHtml(alias)}</strong>:`;
+    }
+    const label = document.getElementById('agent-password-label');
+    if (label) label.textContent = isKeyAuth ? 'Key passphrase (optional)' : 'Password';
 
     // Clear password field, error, and status
     const passwordField = document.getElementById('agent-password');
@@ -204,10 +284,11 @@ async function handleConnectAgent(alias) {
     if (passwordField) {
         passwordField.value = '';
         passwordField.dataset.fromVault = 'false';
+        passwordField.required = !isKeyAuth;
     }
     if (savedIndicator) savedIndicator.style.display = 'none';
     if (saveCheckbox) saveCheckbox.checked = false;
-    if (saveGroup) saveGroup.style.display = 'block';
+    if (saveGroup) saveGroup.style.display = isKeyAuth ? 'none' : 'block';
 
     const errorDiv = document.getElementById('password-error');
     if (errorDiv) {
@@ -222,7 +303,7 @@ async function handleConnectAgent(alias) {
     resetSubmitButton();
 
     // Check vault for saved password
-    const savedPassword = await vault.getPassword(alias);
+    const savedPassword = isKeyAuth ? null : await vault.getPassword(alias);
     if (savedPassword && passwordField) {
         passwordField.value = savedPassword;
         passwordField.dataset.fromVault = 'true';
@@ -250,8 +331,10 @@ async function handlePasswordSubmit() {
     const password = document.getElementById('agent-password').value;
     const errorDiv = document.getElementById('password-error');
     const statusDiv = document.getElementById('password-status');
+    const agent = agents.find(a => a.alias === pendingConnectAlias);
+    const passwordRequired = !agent || agent.type !== 'ssh' || agent.auth_method === 'password';
 
-    if (!password) {
+    if (passwordRequired && !password) {
         errorDiv.textContent = 'Password is required';
         errorDiv.style.display = 'block';
         return;
@@ -273,7 +356,7 @@ async function handlePasswordSubmit() {
         if (result.success) {
             // Save password to vault if checkbox checked
             const saveCheckbox = document.getElementById('save-password-checkbox');
-            if (saveCheckbox?.checked && pendingConnectAlias) {
+            if (saveCheckbox?.checked && pendingConnectAlias && password) {
                 await vault.savePassword(pendingConnectAlias, password);
             }
 
@@ -539,13 +622,18 @@ function renderAgentsList() {
  * Create agent card HTML
  */
 function createAgentCard(agent) {
+    const isSsh = agent.type === 'ssh';
     const statusBadge = agent.connected
         ? '<span class="badge bg-success status-badge">Connected</span>'
         : '<span class="badge bg-secondary status-badge">Disconnected</span>';
 
     // TLS preference/status badges
     let tlsBadge = '';
-    if (agent.connected) {
+    if (isSsh) {
+        tlsBadge = agent.allow_ssh_actions
+            ? '<span class="badge bg-warning status-badge ms-1" title="Limited SSH actions enabled">SSH Actions</span>'
+            : '<span class="badge bg-info status-badge ms-1" title="SSH read-only monitoring">SSH Read-only</span>';
+    } else if (agent.connected) {
         // Show actual connection TLS status
         tlsBadge = agent.tls_active
             ? '<span class="badge bg-info status-badge ms-1" title="Connection is encrypted">🔒 TLS</span>'
@@ -590,9 +678,10 @@ function createAgentCard(agent) {
                 <div class="row align-items-center">
                     <div class="col-md-4">
                         <h5 class="mb-1">
-                            <i class="bi bi-hdd-network me-2"></i>${escapeHtml(agent.alias)}
+                            <i class="bi ${isSsh ? 'bi-terminal' : 'bi-hdd-network'} me-2"></i>${escapeHtml(agent.alias)}
                         </h5>
-                        <small class="text-muted">${escapeHtml(agent.host)}:${agent.port}</small>
+                        <small class="text-muted">${isSsh ? `${escapeHtml(agent.ssh_user || 'root')}@` : ''}${escapeHtml(agent.host)}:${agent.port}</small>
+                        <span class="badge bg-light text-dark border ms-1">${isSsh ? 'SSH' : 'Agent'}</span>
                         <br>
                         <small class="text-muted">Last connected: ${lastConnected}</small>
                     </div>
@@ -658,9 +747,14 @@ function handleEditAgent(alias) {
     const hostField = document.getElementById('edit-host');
     const portField = document.getElementById('edit-port');
     const tlsField = document.getElementById('edit-use-tls');
+    const typeField = document.getElementById('edit-type');
+    const sshUserField = document.getElementById('edit-ssh-user');
+    const authMethodField = document.getElementById('edit-auth-method');
+    const keyPathField = document.getElementById('edit-ssh-key-path');
+    const allowActionsField = document.getElementById('edit-allow-ssh-actions');
 
     // Check if modal elements exist (might be cached page without new modal)
-    if (!oldAliasField || !aliasField || !hostField || !portField || !tlsField) {
+    if (!oldAliasField || !aliasField || !hostField || !portField || !tlsField || !typeField || !sshUserField || !authMethodField || !keyPathField || !allowActionsField) {
         showError('Edit modal not found. Please refresh the page (Ctrl+Shift+R).');
         return;
     }
@@ -671,6 +765,12 @@ function handleEditAgent(alias) {
     hostField.value = agent.host;
     portField.value = agent.port;
     tlsField.checked = agent.use_tls;
+    typeField.value = agent.type || 'agent';
+    sshUserField.value = agent.ssh_user || 'root';
+    authMethodField.value = agent.auth_method || 'password';
+    keyPathField.value = agent.ssh_key_path || '';
+    allowActionsField.checked = !!agent.allow_ssh_actions;
+    handleEditTypeChange();
 
     // Clear any previous error
     const errorDiv = document.getElementById('edit-error');
@@ -691,6 +791,11 @@ async function handleSaveEdit() {
     const host = document.getElementById('edit-host').value.trim();
     const port = parseInt(document.getElementById('edit-port').value);
     const useTls = document.getElementById('edit-use-tls').checked;
+    const type = document.getElementById('edit-type').value;
+    const sshUser = document.getElementById('edit-ssh-user').value.trim() || 'root';
+    const authMethod = document.getElementById('edit-auth-method').value;
+    const sshKeyPath = authMethod === 'key' ? document.getElementById('edit-ssh-key-path').value.trim() : '';
+    const allowSshActions = document.getElementById('edit-allow-ssh-actions').checked;
     const errorDiv = document.getElementById('edit-error');
     const saveBtn = document.getElementById('edit-save-btn');
 
@@ -707,7 +812,13 @@ async function handleSaveEdit() {
     }
 
     try {
-        const result = await api.updateAgent(oldAlias, newAlias, host, port, useTls);
+        const result = await api.updateAgent(oldAlias, newAlias, host, port, useTls, {
+            type,
+            ssh_user: sshUser,
+            auth_method: authMethod,
+            ssh_key_path: sshKeyPath,
+            allow_ssh_actions: allowSshActions
+        });
 
         if (result.success) {
             if (editAgentModal) editAgentModal.hide();
@@ -743,7 +854,8 @@ function updateModeIndicator() {
         if (localCard) localCard.classList.add('active');
         if (switchLocalBtn) switchLocalBtn.disabled = true;
     } else {
-        if (modeText) modeText.textContent = `Remote Agent: ${activeAlias}`;
+        const active = agents.find(a => a.alias === activeAlias);
+        if (modeText) modeText.textContent = `${active?.type === 'ssh' ? 'Remote SSH' : 'Remote Agent'}: ${activeAlias}`;
         if (localCard) localCard.classList.remove('active');
         if (switchLocalBtn) switchLocalBtn.disabled = false;
     }
@@ -1229,4 +1341,3 @@ if (document.readyState === 'loading') {
 } else {
     init();
 }
-

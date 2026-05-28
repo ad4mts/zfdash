@@ -377,6 +377,8 @@ def _get_zfs_client() -> ZfsManagerClient:
     """
     # Check if session says we should be in remote mode
     if control_center_manager and session.get('cc_mode') == 'remote':
+        control_center_manager.restore_active_from_session(session)
+
         # Validate remote connection (single source of truth)
         is_healthy, active_alias = control_center_manager.is_healthy_or_clear()
         
@@ -450,6 +452,14 @@ def _handle_zfs_call(func_name: str, *args, **kwargs):
                  data = result
             return jsonify(status="success", data=data)
 
+    except RemoteAgentDisconnectedError as e:
+        app.logger.warning(f"Remote connection lost while calling ZFS function '{func_name}': {e}")
+        return jsonify(
+            status="error",
+            error="Remote agent disconnected",
+            details="Reconnect the remote host in Control Center before loading remote ZFS data.",
+            remote_died=True
+        ), 409
     except (ZfsCommandError, ZfsClientCommunicationError, TimeoutError) as e:
         app.logger.error(f"Error calling ZFS function '{func_name}': {e}")
         app.logger.error(traceback.format_exc())

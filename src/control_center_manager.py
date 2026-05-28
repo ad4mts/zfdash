@@ -18,6 +18,7 @@ from datetime import datetime
 from ipc_tcp_client import connect_to_agent, TlsNegotiationError
 from ipc_tcp_auth import AuthError
 from zfs_manager import ZfsManagerClient
+from ssh_zfs_client import SshZfsManagerClient
 
 # TLS certificate trust management
 from tls_manager import remove_trusted_certificate
@@ -29,9 +30,20 @@ from debug_logging import log_debug, log_info, log_error, log_warning, log_criti
 
 
 class AgentConnection:
-    """Represents a remote ZFS agent connection."""
+    """Represents a remote ZFS connection."""
     
-    def __init__(self, alias: str, host: str, port: int, use_tls: bool = True):
+    def __init__(
+        self,
+        alias: str,
+        host: str,
+        port: int,
+        use_tls: bool = True,
+        connection_type: str = "agent",
+        ssh_user: str = "root",
+        auth_method: str = "password",
+        ssh_key_path: str = "",
+        allow_ssh_actions: bool = False,
+    ):
         """
         Initialize an agent connection.
         
@@ -45,7 +57,12 @@ class AgentConnection:
         self.host = host
         self.port = port
         self.use_tls = use_tls  # User preference for TLS
-        self.client: Optional[ZfsManagerClient] = None
+        self.connection_type = connection_type if connection_type in ("agent", "ssh") else "agent"
+        self.ssh_user = ssh_user or "root"
+        self.auth_method = auth_method if auth_method in ("password", "key") else "password"
+        self.ssh_key_path = ssh_key_path or ""
+        self.allow_ssh_actions = bool(allow_ssh_actions)
+        self.client: Optional[Any] = None
         self.connected = False
         self.tls_active = False  # True only if TLS handshake succeeded
         self.last_error: Optional[str] = None
@@ -58,17 +75,36 @@ class AgentConnection:
             'host': self.host,
             'port': self.port,
             'use_tls': self.use_tls,
+            'type': self.connection_type,
+            'ssh_user': self.ssh_user,
+            'ssh_port': self.port if self.connection_type == "ssh" else 22,
+            'auth_method': self.auth_method,
+            'ssh_key_path': self.ssh_key_path,
+            'allow_ssh_actions': self.allow_ssh_actions,
             'last_connected': self.last_connected
         }
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'AgentConnection':
         """Create connection from stored dictionary."""
+        connection_type = data.get('type', data.get('connection_type', 'agent'))
+        port = data.get('port')
+        if connection_type == "ssh":
+            port = data.get('ssh_port', port if port else 22)
+            # Legacy UI could save SSH hosts with the Agent default port.
+            if int(port) == 5555:
+                port = 22
+
         conn = cls(
             alias=data['alias'],
             host=data['host'],
-            port=data['port'],
-            use_tls=data.get('use_tls', True)  # Default True for backward compatibility
+            port=int(port),
+            use_tls=data.get('use_tls', True),  # Default True for backward compatibility
+            connection_type=connection_type,
+            ssh_user=data.get('ssh_user', 'root'),
+            auth_method=data.get('auth_method', 'password'),
+            ssh_key_path=data.get('ssh_key_path', ''),
+            allow_ssh_actions=data.get('allow_ssh_actions', False),
         )
         conn.last_connected = data.get('last_connected')
         return conn
@@ -88,7 +124,18 @@ class ControlCenterManager:
         self.storage_path = storage_path
         self.active_alias: Optional[str] = None  # Currently active remote alias
         
-    def add_connection(self, alias: str, host: str, port: int, use_tls: bool = True) -> Tuple[bool, str]:
+    def add_connection(
+        self,
+        alias: str,
+        host: str,
+        port: int,
+        use_tls: bool = True,
+        connection_type: str = "agent",
+        ssh_user: str = "root",
+        auth_method: str = "password",
+        ssh_key_path: str = "",
+        allow_ssh_actions: bool = False,
+    ) -> Tuple[bool, str]:
         """
         Add a new agent connection.
         
@@ -110,13 +157,30 @@ class ControlCenterManager:
         if not host or not host.strip():
             return False, "Host cannot be empty"
         
+        if connection_type not in ("agent", "ssh"):
+            return False, f"Invalid connection type: {connection_type}"
+
         if not isinstance(port, int) or port < 1 or port > 65535:
             return False, f"Invalid port number: {port}"
+
+        if connection_type == "ssh" and auth_method not in ("password", "key"):
+            return False, f"Invalid SSH auth method: {auth_method}"
         
         try:
-            self.connections[alias] = AgentConnection(alias, host, port, use_tls)
+            self.connections[alias] = AgentConnection(
+                alias,
+                host,
+                port,
+                use_tls,
+                connection_type=connection_type,
+                ssh_user=ssh_user,
+                auth_method=auth_method,
+                ssh_key_path=ssh_key_path,
+                allow_ssh_actions=allow_ssh_actions,
+            )
             self.save_connections()
-            return True, f"Agent '{alias}' added successfully"
+            label = "SSH host" if connection_type == "ssh" else "Agent"
+            return True, f"{label} '{alias}' added successfully"
         except Exception as e:
             return False, f"Failed to add connection: {e}"
     
@@ -184,21 +248,32 @@ class ControlCenterManager:
             conn.client = None
             conn.connected = False
         
-        # Use saved TLS preference
-        use_tls = conn.use_tls
-        
         try:
-            # Connect using TCP client transport
-            log_debug("CC_MANAGER", f"Connecting to {conn.host}:{conn.port} (TLS: {use_tls})...")
-            transport, tls_active = connect_to_agent(conn.host, conn.port, password, timeout=30.0, use_tls=use_tls)
-            
-            # Create ZfsManagerClient with the transport
-            # owns_daemon=False because this is an external agent
-            conn.client = ZfsManagerClient(
-                daemon_process=None,
-                transport=transport,
-                owns_daemon=False
-            )
+            if conn.connection_type == "ssh":
+                log_debug("CC_MANAGER", f"Connecting to SSH {conn.ssh_user}@{conn.host}:{conn.port}...")
+                conn.client = SshZfsManagerClient(
+                    conn.host,
+                    port=conn.port,
+                    username=conn.ssh_user,
+                    password=password or None,
+                    auth_method=conn.auth_method,
+                    key_path=conn.ssh_key_path or None,
+                    allow_actions=conn.allow_ssh_actions,
+                )
+                tls_active = False
+            else:
+                # Use saved TLS preference
+                use_tls = conn.use_tls
+                log_debug("CC_MANAGER", f"Connecting to {conn.host}:{conn.port} (TLS: {use_tls})...")
+                transport, tls_active = connect_to_agent(conn.host, conn.port, password, timeout=30.0, use_tls=use_tls)
+
+                # Create ZfsManagerClient with the transport
+                # owns_daemon=False because this is an external agent
+                conn.client = ZfsManagerClient(
+                    daemon_process=None,
+                    transport=transport,
+                    owns_daemon=False
+                )
             
             conn.connected = True
             conn.tls_active = tls_active
@@ -211,7 +286,10 @@ class ControlCenterManager:
             self.save_connections()
             
             # Return success with appropriate message
-            if tls_active:
+            if conn.connection_type == "ssh":
+                mode = "read/write actions enabled" if conn.allow_ssh_actions else "read-only"
+                return True, f"Connected to SSH host '{alias}' ({mode})", None
+            elif tls_active:
                 return True, f"Connected to '{alias}' (TLS encrypted)", None
             else:
                 return True, f"⚠️ Connected to '{alias}' WITHOUT encryption", None
@@ -300,6 +378,31 @@ class ControlCenterManager:
         session['cc_active_alias'] = alias
         
         return True, f"Switched to remote agent '{alias}'"
+
+    def restore_active_from_session(self, session: Dict) -> Optional[str]:
+        """
+        Restore active connection state from Flask session when the request
+        context still knows the selected remote but this manager instance does not.
+
+        This can happen after route reloads or other in-process state resets while
+        the SSH/agent client object is still alive in the connection record.
+        """
+        if self.active_alias:
+            return self.active_alias
+
+        if session.get('cc_mode') != 'remote':
+            return None
+
+        alias = session.get('cc_active_alias')
+        if not alias or alias not in self.connections:
+            return None
+
+        conn = self.connections[alias]
+        if not conn.connected or not conn.client:
+            return None
+
+        self.active_alias = alias
+        return alias
     
     def is_healthy_or_clear(self) -> Tuple[bool, Optional[str]]:
         """
@@ -389,6 +492,11 @@ class ControlCenterManager:
                 'host': conn.host,
                 'port': conn.port,
                 'use_tls': conn.use_tls,
+                'type': conn.connection_type,
+                'ssh_user': conn.ssh_user,
+                'auth_method': conn.auth_method,
+                'ssh_key_path': conn.ssh_key_path,
+                'allow_ssh_actions': conn.allow_ssh_actions,
                 'connected': conn.connected and is_healthy,  # Use live health check
                 'tls_active': conn.tls_active,
                 'active': alias == self.active_alias,
@@ -397,7 +505,19 @@ class ControlCenterManager:
             })
         return result
     
-    def update_connection(self, old_alias: str, new_alias: str, host: str, port: int, use_tls: bool) -> Tuple[bool, str]:
+    def update_connection(
+        self,
+        old_alias: str,
+        new_alias: str,
+        host: str,
+        port: int,
+        use_tls: bool,
+        connection_type: str = "agent",
+        ssh_user: str = "root",
+        auth_method: str = "password",
+        ssh_key_path: str = "",
+        allow_ssh_actions: bool = False,
+    ) -> Tuple[bool, str]:
         """
         Update an existing agent connection.
         
@@ -423,6 +543,12 @@ class ControlCenterManager:
         
         if not isinstance(port, int) or port < 1 or port > 65535:
             return False, f"Invalid port number: {port}"
+
+        if connection_type not in ("agent", "ssh"):
+            return False, f"Invalid connection type: {connection_type}"
+
+        if connection_type == "ssh" and auth_method not in ("password", "key"):
+            return False, f"Invalid SSH auth method: {auth_method}"
         
         # Check if new alias conflicts with existing (different) connection
         if new_alias != old_alias and new_alias in self.connections:
@@ -449,6 +575,11 @@ class ControlCenterManager:
         conn.host = host.strip()
         conn.port = port
         conn.use_tls = use_tls
+        conn.connection_type = connection_type
+        conn.ssh_user = ssh_user or "root"
+        conn.auth_method = auth_method if auth_method in ("password", "key") else "password"
+        conn.ssh_key_path = ssh_key_path or ""
+        conn.allow_ssh_actions = bool(allow_ssh_actions)
         conn.last_error = None
         
         # If alias changed, update the dict key

@@ -107,20 +107,7 @@ async function doHealthCheck() {
 
         // Check for remote agent death
         if (data.remote_died) {
-            daemonDisconnected = true;
-            stopHealthCheck();
-            showDaemonDisconnectedOverlay(
-                data.message || 'Remote agent connection lost.',
-                handleReconnect,
-                {
-                    title: 'Remote Agent Disconnected',
-                    showDaemonHelp: false,
-                    showSwitchAgentButton: true,
-                    reconnectButtonText: 'Connect Local'  // Clarify what Reconnect does
-                }
-            );
-            // Don't auto-reconnect for remote - let user decide
-            updateConnectionIndicator();  // Update navbar to show Local
+            handleRemoteDied(data.message || 'Remote agent connection lost.');
             return false;
         }
 
@@ -169,6 +156,28 @@ function stopHealthCheck() {
         healthCheckInterval = null;
     }
     healthCheckActive = false;
+}
+
+function handleRemoteDied(message = 'Remote agent connection lost.') {
+    if (daemonDisconnected) return;
+
+    daemonDisconnected = true;
+    stopHealthCheck();
+    hideModal();
+    showDaemonDisconnectedOverlay(
+        message,
+        null,
+        {
+            title: 'Remote Agent Disconnected',
+            showDaemonHelp: false,
+            showSwitchAgentButton: false,
+            reconnectButtonText: 'Open Control Center',
+            reconnectButtonIcon: 'bi-hdd-network-fill',
+            reconnectButtonHref: '/control-center',
+            helpText: 'Open Control Center, connect the SSH host again, then switch to it.'
+        }
+    );
+    updateConnectionIndicator();
 }
 
 /**
@@ -526,6 +535,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // CRITICAL: This enables fetchAndRenderData() to be called after successful authentication
     // Without this, the app will authenticate but never load data!
     setAuthCallbacks(fetchAndRenderData, clearSelection);
+
+    window.addEventListener('zfdash:remote-died', (event) => {
+        handleRemoteDied(event.detail?.details || event.detail?.error || 'Remote agent connection lost.');
+    });
 
     // STEP 6: Set up event listeners for UI interactions
     // --- Authentication Related Listeners ---

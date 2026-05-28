@@ -21,11 +21,11 @@ export async function listAgents() {
  * @param {boolean} useTls - Whether to use TLS (default: true)
  * @returns {Promise<Object>} Response with success status
  */
-export async function addAgent(alias, host, port, useTls = true) {
+export async function addAgent(alias, host, port, useTls = true, options = {}) {
     const response = await fetch('/api/cc/add', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ alias, host, port, use_tls: useTls })
+        body: JSON.stringify({ alias, host, port, use_tls: useTls, ...options })
     });
     return await response.json();
 }
@@ -50,7 +50,7 @@ export async function removeAgent(alias) {
  * @param {string} password - Admin password
  * @returns {Promise<Object>} Response with success status
  */
-export async function connectAgent(alias, password) {
+export async function connectAgent(alias, password = '') {
     const response = await fetch('/api/cc/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -134,7 +134,7 @@ export async function discoverAgents(timeout = 3) {
  * @param {boolean} useTls - New TLS setting
  * @returns {Promise<Object>} Response with success status
  */
-export async function updateAgent(oldAlias, newAlias, host, port, useTls) {
+export async function updateAgent(oldAlias, newAlias, host, port, useTls, options = {}) {
     const response = await fetch('/api/cc/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -143,7 +143,8 @@ export async function updateAgent(oldAlias, newAlias, host, port, useTls) {
             alias: newAlias,
             host,
             port,
-            use_tls: useTls
+            use_tls: useTls,
+            ...options
         })
     });
     return await response.json();

@@ -130,7 +130,7 @@
     <div class="row mb-4">
       <div class="col">
         <h2><i class="bi bi-hdd-network me-2"></i>Control Center</h2>
-        <p class="text-muted">Manage connections to remote ZFS daemons across your network.</p>
+        <p class="text-muted">Manage connections to remote ZFS hosts across your network.</p>
       </div>
     </div>
 
@@ -163,15 +163,22 @@
       </div>
     </div>
 
-    <!-- Add Agent Form -->
+    <!-- Add Remote Form -->
     <div class="row mb-4">
       <div class="col">
         <div class="card">
           <div class="card-header bg-primary text-white">
-            <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>Add Remote Agent</h5>
+            <h5 class="mb-0"><i class="bi bi-plus-circle me-2"></i>Add Remote Host</h5>
           </div>
           <div class="card-body">
             <form id="add-agent-form" class="row g-3">
+              <div class="col-md-2">
+                <label for="connection-type" class="form-label">Type</label>
+                <select class="form-select" id="connection-type">
+                  <option value="agent" selected>ZfDash Agent</option>
+                  <option value="ssh">SSH Host</option>
+                </select>
+              </div>
               <div class="col-md-3">
                 <label for="agent-alias" class="form-label">Alias</label>
                 <input type="text" class="form-control" id="agent-alias" placeholder="my-server" required>
@@ -184,11 +191,34 @@
                 <label for="agent-port" class="form-label">Port</label>
                 <input type="number" class="form-control" id="agent-port" value="5555" required>
               </div>
-              <div class="col-md-2 d-flex align-items-end">
+              <div class="col-md-2 d-flex align-items-end" id="agent-tls-group">
                 <div class="form-check mb-2">
                   <input type="checkbox" class="form-check-input" id="agent-use-tls" checked>
                   <label class="form-check-label" for="agent-use-tls">
                     <i class="bi bi-shield-lock"></i> Use TLS
+                  </label>
+                </div>
+              </div>
+              <div class="col-md-2 ssh-field" style="display: none;">
+                <label for="ssh-user" class="form-label">SSH User</label>
+                <input type="text" class="form-control" id="ssh-user" value="root">
+              </div>
+              <div class="col-md-2 ssh-field" style="display: none;">
+                <label for="ssh-auth-method" class="form-label">SSH Auth</label>
+                <select class="form-select" id="ssh-auth-method">
+                  <option value="key">SSH Key / Agent</option>
+                  <option value="password" selected>Password</option>
+                </select>
+              </div>
+              <div class="col-md-3 ssh-field" style="display: none;">
+                <label for="ssh-key-path" class="form-label">Key Path</label>
+                <input type="text" class="form-control" id="ssh-key-path" placeholder="/root/.ssh/id_rsa">
+              </div>
+              <div class="col-md-3 ssh-field" style="display: none;">
+                <div class="form-check mt-4 pt-2">
+                  <input type="checkbox" class="form-check-input" id="ssh-allow-actions">
+                  <label class="form-check-label" for="ssh-allow-actions">
+                    Allow limited SSH actions
                   </label>
                 </div>
               </div>
@@ -264,10 +294,10 @@
           <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
         </div>
         <div class="modal-body">
-          <p>Enter the admin password for <strong id="password-agent-name"></strong>:</p>
+          <p id="password-modal-intro">Enter the admin password for <strong id="password-agent-name"></strong>:</p>
           <form id="password-form">
             <div class="mb-3">
-              <label for="agent-password" class="form-label">Password</label>
+              <label for="agent-password" class="form-label" id="agent-password-label">Password</label>
               <div class="input-group">
                 <input type="password" class="form-control" id="agent-password" required autofocus>
                 <span class="input-group-text text-success" id="password-saved-indicator" style="display: none;"
@@ -285,7 +315,7 @@
           </form>
           <div id="password-status" class="alert alert-info align-items-center" style="display: none;">
             <span class="spinner-border spinner-border-sm me-2"></span>
-            Connecting to agent...
+            Connecting...
           </div>
           <div id="password-error" class="alert alert-danger" style="display: none;"></div>
         </div>
@@ -387,6 +417,37 @@
               <label class="form-check-label" for="edit-use-tls">
                 <i class="bi bi-shield-lock"></i> Use TLS
               </label>
+            </div>
+            <div class="mb-3">
+              <label for="edit-type" class="form-label">Type</label>
+              <select class="form-select" id="edit-type">
+                <option value="agent">ZfDash Agent</option>
+                <option value="ssh">SSH Host</option>
+              </select>
+            </div>
+            <div class="mb-3 edit-ssh-field" style="display: none;">
+              <label for="edit-ssh-user" class="form-label">SSH User</label>
+              <input type="text" class="form-control" id="edit-ssh-user">
+            </div>
+            <div class="mb-3 edit-ssh-field" style="display: none;">
+              <label for="edit-auth-method" class="form-label">SSH Auth</label>
+              <select class="form-select" id="edit-auth-method">
+                <option value="key">SSH Key / Agent</option>
+                <option value="password">Password</option>
+              </select>
+            </div>
+            <div class="mb-3 edit-ssh-field" style="display: none;">
+              <label for="edit-ssh-key-path" class="form-label">Key Path</label>
+              <input type="text" class="form-control" id="edit-ssh-key-path">
+            </div>
+            <div class="form-check mb-3 edit-ssh-field" style="display: none;">
+              <input type="checkbox" class="form-check-input" id="edit-allow-ssh-actions">
+              <label class="form-check-label" for="edit-allow-ssh-actions">
+                Allow limited SSH actions
+              </label>
+            </div>
+            <div class="alert alert-warning small edit-ssh-field" style="display: none;">
+              SSH hosts are read-only by default. Limited actions never include destroy, rollback, or receive.
             </div>
           </form>
           <div id="edit-error" class="alert alert-danger" style="display: none;"></div>

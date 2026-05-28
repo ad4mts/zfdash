@@ -9,6 +9,7 @@ This module provides REST API endpoints for managing remote ZFS agent connection
 """
 
 from flask import Blueprint, request, jsonify, session
+from flask_login import login_required
 from typing import Tuple
 
 # Create Blueprint
@@ -30,6 +31,7 @@ def init_control_center_routes(cc_manager):
 
 
 @control_center_bp.route('/add', methods=['POST'])
+@login_required
 def add_agent():
     """Add a new remote agent connection."""
     if not _cc_manager:
@@ -42,7 +44,12 @@ def add_agent():
     alias = data.get('alias', '').strip()
     host = data.get('host', '').strip()
     port = data.get('port')
+    connection_type = data.get('type', 'agent')
     use_tls = data.get('use_tls', True)  # Default to True if not specified
+    ssh_user = (data.get('ssh_user') or 'root').strip()
+    auth_method = data.get('auth_method', 'password')
+    ssh_key_path = (data.get('ssh_key_path') or '').strip()
+    allow_ssh_actions = data.get('allow_ssh_actions', False)
     
     if not alias:
         return jsonify({'success': False, 'error': 'Alias is required'}), 400
@@ -57,8 +64,20 @@ def add_agent():
     # Convert use_tls to bool if it's a string
     if isinstance(use_tls, str):
         use_tls = use_tls.lower() in ('true', '1', 'yes')
+    if isinstance(allow_ssh_actions, str):
+        allow_ssh_actions = allow_ssh_actions.lower() in ('true', '1', 'yes')
     
-    success, message = _cc_manager.add_connection(alias, host, port, use_tls)
+    success, message = _cc_manager.add_connection(
+        alias,
+        host,
+        port,
+        use_tls,
+        connection_type=connection_type,
+        ssh_user=ssh_user,
+        auth_method=auth_method,
+        ssh_key_path=ssh_key_path,
+        allow_ssh_actions=allow_ssh_actions,
+    )
     
     if success:
         return jsonify({'success': True, 'message': message})
@@ -67,6 +86,7 @@ def add_agent():
 
 
 @control_center_bp.route('/remove', methods=['POST'])
+@login_required
 def remove_agent():
     """Remove a remote agent connection."""
     if not _cc_manager:
@@ -91,6 +111,7 @@ def remove_agent():
 
 
 @control_center_bp.route('/connect', methods=['POST'])
+@login_required
 def connect_agent():
     """Connect to a remote agent (requires password)."""
     if not _cc_manager:
@@ -105,7 +126,8 @@ def connect_agent():
     
     if not alias:
         return jsonify({'success': False, 'error': 'Alias is required'}), 400
-    if not password:
+    conn = _cc_manager.connections.get(alias) if _cc_manager else None
+    if (not conn or conn.connection_type != 'ssh' or conn.auth_method == 'password') and not password:
         return jsonify({'success': False, 'error': 'Password is required'}), 400
     
     # Get agent's configured TLS setting for error response
@@ -130,6 +152,7 @@ def connect_agent():
 
 
 @control_center_bp.route('/disconnect', methods=['POST'])
+@login_required
 def disconnect_agent():
     """Disconnect from a remote agent."""
     if not _cc_manager:
@@ -154,6 +177,7 @@ def disconnect_agent():
 
 
 @control_center_bp.route('/switch/<alias>', methods=['POST'])
+@login_required
 def switch_agent(alias):
     """Switch to a different active agent (or 'local' for local daemon)."""
     if not _cc_manager:
@@ -172,12 +196,15 @@ def switch_agent(alias):
 
 
 @control_center_bp.route('/list', methods=['GET'])
+@login_required
 def list_agents():
     """List all configured remote agents with their status."""
     if not _cc_manager:
         return jsonify({'success': False, 'error': 'Control center not initialized'}), 500
     
     try:
+        _cc_manager.restore_active_from_session(session)
+
         # Validate active connection (single source of truth - auto-clears dead connections)
         is_healthy, active_alias = _cc_manager.is_healthy_or_clear()
         
@@ -200,6 +227,7 @@ def list_agents():
 
 
 @control_center_bp.route('/health/<alias>', methods=['GET'])
+@login_required
 def check_agent_health(alias):
     """Check if a specific agent connection is healthy."""
     if not _cc_manager:
@@ -219,6 +247,7 @@ def check_agent_health(alias):
 
 
 @control_center_bp.route('/update_tls', methods=['POST'])
+@login_required
 def update_tls():
     """Update TLS preference for an agent."""
     if not _cc_manager:
@@ -249,6 +278,7 @@ def update_tls():
 
 
 @control_center_bp.route('/update', methods=['POST'])
+@login_required
 def update_agent():
     """Update an existing agent connection."""
     if not _cc_manager:
@@ -262,7 +292,12 @@ def update_agent():
     new_alias = data.get('alias', '').strip()
     host = data.get('host', '').strip()
     port = data.get('port')
+    connection_type = data.get('type', 'agent')
     use_tls = data.get('use_tls', True)
+    ssh_user = (data.get('ssh_user') or 'root').strip()
+    auth_method = data.get('auth_method', 'password')
+    ssh_key_path = (data.get('ssh_key_path') or '').strip()
+    allow_ssh_actions = data.get('allow_ssh_actions', False)
     
     if not old_alias:
         return jsonify({'success': False, 'error': 'Original alias is required'}), 400
@@ -279,8 +314,21 @@ def update_agent():
     # Convert use_tls to bool if string
     if isinstance(use_tls, str):
         use_tls = use_tls.lower() in ('true', '1', 'yes')
+    if isinstance(allow_ssh_actions, str):
+        allow_ssh_actions = allow_ssh_actions.lower() in ('true', '1', 'yes')
     
-    success, message = _cc_manager.update_connection(old_alias, new_alias, host, port, use_tls)
+    success, message = _cc_manager.update_connection(
+        old_alias,
+        new_alias,
+        host,
+        port,
+        use_tls,
+        connection_type=connection_type,
+        ssh_user=ssh_user,
+        auth_method=auth_method,
+        ssh_key_path=ssh_key_path,
+        allow_ssh_actions=allow_ssh_actions,
+    )
     
     if success:
         # Clear session data for old alias if it changed
@@ -292,6 +340,7 @@ def update_agent():
 
 
 @control_center_bp.route('/discover', methods=['POST'])
+@login_required
 def discover_agents():
     """
     Scan network for available ZFS agents.
