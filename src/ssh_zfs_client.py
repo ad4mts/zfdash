@@ -121,9 +121,13 @@ class SshZfsManagerClient:
         if not self._client or not self.is_connection_healthy():
             self._connect()
 
+    # Non-interactive SSH shells often lack /usr/sbin in PATH (e.g. Fedora/RHEL),
+    # where zpool and zfs binaries typically live.
+    _PATH_PREFIX = 'export PATH="/usr/local/sbin:/usr/sbin:/sbin:$PATH"; '
+
     def _run_remote(self, argv: List[str], timeout: Optional[float] = None) -> Tuple[int, str, str]:
         self._ensure_connected()
-        command = shlex.join([str(part) for part in argv])
+        command = self._PATH_PREFIX + shlex.join([str(part) for part in argv])
         try:
             stdin, stdout, stderr = self._client.exec_command(
                 command,
@@ -143,7 +147,7 @@ class SshZfsManagerClient:
         self._ensure_connected()
         try:
             stdin, stdout, stderr = self._client.exec_command(
-                command,
+                self._PATH_PREFIX + command,
                 timeout=timeout or self.command_timeout,
             )
             rc = stdout.channel.recv_exit_status()
