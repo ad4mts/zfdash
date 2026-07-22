@@ -90,6 +90,7 @@ def send_to_agent():
         # Call daemon to perform backup
         result = client._send_request(
             'send_backup',
+            timeout=None,
             source_dataset=source_dataset,
             dest_host=dest_host,
             dest_port=dest_port,
@@ -423,6 +424,7 @@ def resume_backup():
         client = _zfs_client_getter()
         result = client._send_request(
             'resume_backup',
+            timeout=None,
             job_id=job_id,
             dest_password=dest_password,
             dest_host=data.get('dest_host'),
@@ -723,6 +725,7 @@ def agent_to_agent():
         # Tell sender to push to receiver
         result = client._send_request(
             'send_backup',
+            timeout=None,
             source_dataset=source_dataset,
             dest_host=dest_host,
             dest_port=dest_port,
@@ -1061,6 +1064,7 @@ def local_backup():
         client = _zfs_client_getter()
         result = client._send_request(
             'local_backup',
+            timeout=None,
             source_snapshot=source_snapshot,
             dest_dataset=dest_dataset,
             incremental_base=incremental_base,
@@ -1127,6 +1131,7 @@ def export_to_file():
         client = _zfs_client_getter()
         result = client._send_request(
             'export_to_file',
+            timeout=None,
             source_snapshot=source_snapshot,
             file_path=file_path,
             compression=compression,
@@ -1214,6 +1219,7 @@ def send_to_ssh():
         client = _zfs_client_getter()
         result = client._send_request(
             'send_ssh',
+            timeout=None,
             source_snapshot=source_snapshot,
             ssh_host=ssh_host,
             ssh_port=ssh_port,

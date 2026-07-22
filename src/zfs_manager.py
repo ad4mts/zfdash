@@ -200,8 +200,8 @@ class ZfsManagerClient:
                     print(f"MANAGER_CLIENT: Warning: Response queue full when notifying error for request_id {req_id}", file=sys.stderr)
             self.pending_requests.clear() # Clear pending requests after notification
 
-    def _send_request(self, command: str, *args, timeout: float = constants.CLIENT_REQUEST_TIMEOUT, **kwargs) -> Dict[str, Any]:
-        """Sends a command to the daemon and waits for a response."""
+    def _send_request(self, command: str, *args, timeout: Optional[float] = constants.CLIENT_REQUEST_TIMEOUT, **kwargs) -> Dict[str, Any]:
+        """Send a command to the daemon and wait for a response, indefinitely if timeout is None."""
         if self.shutdown_event.is_set() or self._communication_error:
             raise self._communication_error or ZfsClientCommunicationError("Client is shut down or in error state.")
 
